@@ -118,13 +118,19 @@ namespace SpotifyWPF.ViewModel.Page
 
             await Application.Current.Dispatcher.BeginInvoke((Action) (() => { Playlists.Clear(); }));
 
-            var firstPage = await _spotify.Api.Playlists.CurrentUsers();
-
-            await foreach (var playlist in _spotify.Api.Paginate(firstPage))
+            var page = await _spotify.Api.Playlists.CurrentUsers();
+            while (page != null)
             {
-                var playlistToAdd = playlist;
+                foreach (var playlist in page.Items)
+                {
+                    await Application.Current.Dispatcher.BeginInvoke((Action) (() => { Playlists.Add(playlist); }));
+                }
 
-                await Application.Current.Dispatcher.BeginInvoke((Action) (() => { Playlists.Add(playlistToAdd); }));
+                // Fetch next page if available
+                if (page.Next != null)
+                    page = await _spotify.Api.NextPage(page);
+                else
+                    break;
             }
 
             Status = "Ready";
@@ -134,18 +140,23 @@ namespace SpotifyWPF.ViewModel.Page
         {
             Status = "Loading tracks...";
 
-            Tracks.Clear();
+            await Application.Current.Dispatcher.BeginInvoke((Action) (() => { Tracks.Clear(); }));
 
-            var firstPage = await _spotify.Api.Playlists.GetItems(playlist.Id, new PlaylistGetItemsRequest
+            var req = new PlaylistGetItemsRequest { Limit = 100 };
+            var page = await _spotify.Api.Playlists.GetItems(playlist.Id, req);
+
+            while (page != null)
             {
-                Limit = 100
-            });
+                foreach (var item in page.Items)
+                {
+                    var mappedTrack = _mapper.Map<Track>(item);
+                    await Application.Current.Dispatcher.BeginInvoke((Action) (() => { Tracks.Add(mappedTrack); }));
+                }
 
-            await foreach (var item in _spotify.Api.Paginate(firstPage))
-            {
-                var mappedTrack = _mapper.Map<Track>(item);
-
-                await Application.Current.Dispatcher.BeginInvoke((Action) (() => { Tracks.Add(mappedTrack); }));
+                if (page.Next != null)
+                    page = await _spotify.Api.NextPage(page);
+                else
+                    break;
             }
 
             Status = "Ready";
