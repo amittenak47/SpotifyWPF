@@ -4,7 +4,7 @@ using SpotifyWPF.Service;
 
 namespace SpotifyWPF.ViewModel.Component
 {
-    public class PlaylistsDataGridViewModel : DataGridViewModelBase<SimplePlaylist>
+    public class PlaylistsDataGridViewModel : DataGridViewModelBase<FullPlaylist>
     {
         private readonly ISpotify _spotify;
 
@@ -13,7 +13,7 @@ namespace SpotifyWPF.ViewModel.Component
             _spotify = spotify;
         }
 
-        private protected override async Task<Paging<SimplePlaylist, SearchResponse>> FetchPageInternalAsync()
+        private protected override async Task<Paging<FullPlaylist, SearchResponse>> FetchPageInternalAsync()
         {
             var req = new SearchRequest(SearchRequest.Types.Playlist, Query)
             {
