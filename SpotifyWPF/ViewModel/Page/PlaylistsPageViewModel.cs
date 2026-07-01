@@ -35,11 +35,11 @@ namespace SpotifyWPF.ViewModel.Page
             _messageBoxService = messageBoxService;
 
             LoadPlaylistsCommand = new RelayCommand(async () => await LoadPlaylistsAsync());
-            LoadTracksCommand = new RelayCommand<SimplePlaylist>(async playlist => await LoadTracksAsync(playlist));
+            LoadTracksCommand = new RelayCommand<FullPlaylist>(async playlist => await LoadTracksAsync(playlist));
             DeletePlaylistsCommand = new RelayCommand<IList>(async playlists => await DeletePlaylistsAsync(playlists));
         }
 
-        public ObservableCollection<SimplePlaylist> Playlists { get; } = new ObservableCollection<SimplePlaylist>();
+        public ObservableCollection<FullPlaylist> Playlists { get; } = new ObservableCollection<FullPlaylist>();
 
         public ObservableCollection<Track> Tracks { get; } = new ObservableCollection<Track>();
 
@@ -71,7 +71,7 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
-        public RelayCommand<SimplePlaylist> LoadTracksCommand { get; }
+        public RelayCommand<FullPlaylist> LoadTracksCommand { get; }
 
         public RelayCommand<IList> DeletePlaylistsCommand { get; }
 
@@ -79,7 +79,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         public async Task DeletePlaylistsAsync(IList items)
         {
-            var playlists = items.Cast<SimplePlaylist>().ToList();
+            var playlists = items.Cast<FullPlaylist>().ToList();
 
             if (!playlists.Any()) return;
 
@@ -118,84 +118,37 @@ namespace SpotifyWPF.ViewModel.Page
 
             await Application.Current.Dispatcher.BeginInvoke((Action) (() => { Playlists.Clear(); }));
 
-            Paging<SimplePlaylist> playlists = null;
+            var firstPage = await _spotify.Api.Playlists.CurrentUsers();
 
-            do
+            await foreach (var playlist in _spotify.Api.Paginate(firstPage))
             {
-                playlists = playlists == null
-                    ? await _spotify.Api.Playlists.CurrentUsers()
-                    : await _spotify.Api.NextPage(playlists);
+                var playlistToAdd = playlist;
 
-                var playlistsToAdd = playlists;
-
-                await Application.Current.Dispatcher.BeginInvoke((Action) (() => { AddPlaylists(playlistsToAdd); }));
-
-            } while (!string.IsNullOrWhiteSpace(playlists.Next));
+                await Application.Current.Dispatcher.BeginInvoke((Action) (() => { Playlists.Add(playlistToAdd); }));
+            }
 
             Status = "Ready";
         }
 
-        private void AddPlaylists(IPaginatable<SimplePlaylist> playlists)
-        {
-            if (playlists.Items == null)
-            {
-                return;
-            }
-
-            foreach (var playlist in playlists.Items)
-            {
-                Playlists.Add(playlist);
-            }
-        }
-
-        public async Task LoadTracksAsync(SimplePlaylist playlist)
+        public async Task LoadTracksAsync(FullPlaylist playlist)
         {
             Status = "Loading tracks...";
 
             Tracks.Clear();
 
-            var tracks = await GetPlaylistTracksAsync(playlist.Id, 0);
-            var received = 0;
-
-            do
+            var firstPage = await _spotify.Api.Playlists.GetItems(playlist.Id, new PlaylistGetItemsRequest
             {
-                if (tracks.Items != null)
-                {
-                    received += tracks.Items.Count;
-                }
+                Limit = 100
+            });
 
-                var tracksToLoad = tracks;
+            await foreach (var item in _spotify.Api.Paginate(firstPage))
+            {
+                var mappedTrack = _mapper.Map<Track>(item);
 
-                await Application.Current.Dispatcher.BeginInvoke((Action) (() => { AddTracks(tracksToLoad); }));
-
-                if (received < tracks.Total) tracks = await GetPlaylistTracksAsync(playlist.Id, received);
-            } while (received < tracks.Total);
+                await Application.Current.Dispatcher.BeginInvoke((Action) (() => { Tracks.Add(mappedTrack); }));
+            }
 
             Status = "Ready";
-        }
-
-        private async Task<Paging<PlaylistTrack<IPlayableItem>>> GetPlaylistTracksAsync(string playlistId, int offset)
-        {
-            var req = new PlaylistGetItemsRequest()
-            {
-                Offset = offset,
-                Limit = 100
-            };
-
-            return await _spotify.Api.Playlists.GetItems(playlistId, req);
-        }
-
-        private void AddTracks(IPaginatable<PlaylistTrack<IPlayableItem>> tracks)
-        {
-            if (tracks.Items == null)
-            {
-                return;
-            }
-
-            foreach (var track in tracks.Items)
-            {
-                Tracks.Add(_mapper.Map<Track>(track));
-            }
         }
     }
 }

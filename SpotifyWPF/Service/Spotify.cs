@@ -19,6 +19,8 @@ namespace SpotifyWPF.Service
 
         private Action _loginSuccessAction;
 
+        private string _verifier;
+
         public ISpotifyClient Api { get; private set; }
 
         public Spotify(ISettingsProvider settingsProvider)
@@ -26,29 +28,35 @@ namespace SpotifyWPF.Service
             _settingsProvider = settingsProvider;
 
             _server = new EmbedIOAuthServer(
-                new Uri($"http://localhost:{_settingsProvider.SpotifyRedirectPort}"),
+                new Uri($"http://localhost:{_settingsProvider.SpotifyRedirectPort}/callback"),
                 int.Parse(_settingsProvider.SpotifyRedirectPort));
 
-            _server.ImplictGrantReceived += OnImplicitGrantReceived;
+            _server.AuthorizationCodeReceived += OnAuthorizationCodeReceived;
             _server.ErrorReceived += OnErrorReceived;
         }
 
         public async Task LoginAsync(Action onSuccess)
         {
+            var (verifier, challenge) = PKCEUtil.GenerateCodes();
+
+            _verifier = verifier;
+
             await _server.Start();
 
             _loginSuccessAction = onSuccess;
 
             var request = new LoginRequest(_server.BaseUri, _settingsProvider.SpotifyClientId,
-                LoginRequest.ResponseType.Token)
+                LoginRequest.ResponseType.Code)
             {
+                CodeChallengeMethod = "S256",
+                CodeChallenge = challenge,
                 Scope = new List<string>
                 {
                     Scopes.UserReadPrivate, Scopes.PlaylistModifyPrivate, Scopes.PlaylistModifyPublic,
                     Scopes.PlaylistReadCollaborative, Scopes.PlaylistReadPrivate
                 }
             };
-             
+
             BrowserUtil.Open(request.ToUri());
         }
 
@@ -57,12 +65,19 @@ namespace SpotifyWPF.Service
             await _server.Stop();
         }
 
-        private async Task OnImplicitGrantReceived(object arg1, ImplictGrantResponse arg2)
+        private async Task OnAuthorizationCodeReceived(object sender, AuthorizationCodeResponse response)
         {
             await _server.Stop();
 
-            Api = new SpotifyClient(arg2.AccessToken);
-            
+            var token = await new OAuthClient().RequestToken(
+                new PKCETokenRequest(_settingsProvider.SpotifyClientId, response.Code, _server.BaseUri, _verifier));
+
+            var authenticator = new PKCEAuthenticator(_settingsProvider.SpotifyClientId, token);
+
+            var config = SpotifyClientConfig.CreateDefault().WithAuthenticator(authenticator);
+
+            Api = new SpotifyClient(config);
+
             _loginSuccessAction?.Invoke();
         }
 
