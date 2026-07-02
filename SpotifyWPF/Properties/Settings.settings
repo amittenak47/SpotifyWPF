@@ -2,7 +2,7 @@
 <SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="SpotifyWPF.Properties" GeneratedClassName="Settings">
   <Profiles />
   <Settings>
-    <Setting Name="SpotifyClientId" Type="System.String" Scope="Application">
+    <Setting Name="SpotifyClientId" Type="System.String" Scope="User">
       <Value Profile="(Default)">137da97fe5de4e8c839d69d41c637364</Value>
     </Setting>
     <Setting Name="SpotifyRedirectPort" Type="System.String" Scope="Application">

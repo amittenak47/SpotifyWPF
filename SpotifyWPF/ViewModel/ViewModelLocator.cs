@@ -33,6 +33,8 @@ namespace SpotifyWPF.ViewModel
 
         public SearchPageViewModel Search => ServiceLocator.Current.GetInstance<SearchPageViewModel>();
 
+        public LoginPageViewModel LoginPage => ServiceLocator.Current.GetInstance<LoginPageViewModel>();
+
         public static void Cleanup()
         {
         }
