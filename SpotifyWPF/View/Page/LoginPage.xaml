@@ -7,13 +7,28 @@
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
 
-    <i:Interaction.Triggers>
-        <i:EventTrigger EventName="Loaded">
-            <i:InvokeCommandAction Command="{Binding SpotifyLoginCommand}"/>
-        </i:EventTrigger>
-    </i:Interaction.Triggers>
-
     <Grid>
-        <Label Content="Waiting for Spotify user to login.  See browser window." HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480" Margin="24">
+            <TextBlock Text="Bring Your Own Spotify App"
+                       FontSize="20" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" Margin="0,0,0,12"/>
+
+            <TextBlock TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,12">
+                <Run Text="Enter your personal Spotify Client ID to log in."/>
+                <LineBreak/>
+                <Hyperlink NavigateUri="https://developer.spotify.com/dashboard"
+                           RequestNavigate="Hyperlink_RequestNavigate">
+                    Get your Client ID from the Spotify Developer Dashboard
+                </Hyperlink>
+            </TextBlock>
+
+            <TextBlock Text="Client ID" Margin="0,0,0,4"/>
+            <TextBox Text="{Binding UserClientId, UpdateSourceTrigger=PropertyChanged}"
+                     Padding="6,4" Margin="0,0,0,16"/>
+
+            <Button Content="Log In"
+                    Command="{Binding SpotifyLoginCommand}"
+                    Padding="16,6" HorizontalAlignment="Center"/>
+        </StackPanel>
     </Grid>
 </UserControl>

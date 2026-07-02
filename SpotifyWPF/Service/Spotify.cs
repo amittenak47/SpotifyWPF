@@ -28,7 +28,7 @@ namespace SpotifyWPF.Service
             _settingsProvider = settingsProvider;
 
             _server = new EmbedIOAuthServer(
-                new Uri($"http://localhost:{_settingsProvider.SpotifyRedirectPort}/callback"),
+                new Uri($"http://127.0.0.1:{_settingsProvider.SpotifyRedirectPort}/callback"),
                 int.Parse(_settingsProvider.SpotifyRedirectPort));
 
             _server.AuthorizationCodeReceived += OnAuthorizationCodeReceived;
@@ -57,7 +57,13 @@ namespace SpotifyWPF.Service
                 }
             };
 
-            BrowserUtil.Open(request.ToUri());
+            // BrowserUtil.Open(request.ToUri());
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = request.ToUri().ToString(),
+                UseShellExecute = true
+            };
+            System.Diagnostics.Process.Start(psi);
         }
 
         private async Task OnErrorReceived(object sender, string error, string state)
@@ -67,18 +73,37 @@ namespace SpotifyWPF.Service
 
         private async Task OnAuthorizationCodeReceived(object sender, AuthorizationCodeResponse response)
         {
-            await _server.Stop();
+            try
+            {
+                await _server.Stop();
 
-            var token = await new OAuthClient().RequestToken(
-                new PKCETokenRequest(_settingsProvider.SpotifyClientId, response.Code, _server.BaseUri, _verifier));
+                var token = await new OAuthClient().RequestToken(
+                    new PKCETokenRequest(_settingsProvider.SpotifyClientId, response.Code, _server.BaseUri, _verifier));
 
-            var authenticator = new PKCEAuthenticator(_settingsProvider.SpotifyClientId, token);
+                var authenticator = new PKCEAuthenticator(_settingsProvider.SpotifyClientId, token);
 
-            var config = SpotifyClientConfig.CreateDefault().WithAuthenticator(authenticator);
+                var config = SpotifyClientConfig.CreateDefault().WithAuthenticator(authenticator);
 
-            Api = new SpotifyClient(config);
+                Api = new SpotifyClient(config);
 
-            _loginSuccessAction?.Invoke();
+                _loginSuccessAction?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                // 1. Reveal the hidden error on the UI thread
+                _ = System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        $"Failed to retrieve token from Spotify:\n{ex.Message}",
+                        "Authentication Error",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Error);
+
+                    // 2. Send a failure message to the ViewModel to unlock the login button
+
+                    GalaSoft.MvvmLight.Messaging.Messenger.Default.Send<object>(null, "LoginFailed");
+                }));
+            }
         }
 
         public async Task<PrivateUser> GetPrivateProfileAsync()
