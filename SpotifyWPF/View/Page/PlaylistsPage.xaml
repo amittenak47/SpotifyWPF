@@ -34,32 +34,82 @@
             </StatusBarItem>
         </StatusBar>
 
-        <Grid>
+        <Grid Margin="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="2*"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-            <GroupBox Header="Playlists">
-                <DataGrid x:Name="PlaylistsDataGrid" ItemsSource="{Binding Playlists}" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
-                    <DataGrid.InputBindings>
-                        <MouseBinding Gesture="LeftDoubleClick"
-                                      Command="{Binding LoadTracksCommand}"
-                                      CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItem}"/>
-                        <KeyBinding Key="Delete"
-                                    Command="{Binding DeletePlaylistsCommand}"
-                                    CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"/>
-                    </DataGrid.InputBindings>
+            <GroupBox Header="Playlists" Margin="0,0,8,8">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button Content="Load More" Command="{Binding LoadMorePlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
+                        <Button Content="Load All" Command="{Binding LoadAllPlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
+                        <Button Content="Export" Command="{Binding ExportToJsonCommand}" Padding="12,4" Margin="0,0,8,0"/>
+                        <Button Content="Import" Command="{Binding ImportFromJsonCommand}" IsEnabled="False" Padding="12,4"/>
+                    </StackPanel>
 
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" Width="*"/>
-                        <DataGridTextColumn Header="Created By" Binding="{Binding Owner.DisplayName}" IsReadOnly="True" Width="*"/>
-                        <DataGridTextColumn Header="# Tracks" Binding="{Binding Tracks.Total}" IsReadOnly="True" Width="*"/>
-                    </DataGrid.Columns>
-                </DataGrid>
+                    <DataGrid x:Name="PlaylistsDataGrid" ItemsSource="{Binding Playlists}" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
+                        <DataGrid.InputBindings>
+                            <MouseBinding Gesture="LeftDoubleClick"
+                                          Command="{Binding LoadTracksCommand}"
+                                          CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItem}"/>
+                            <KeyBinding Key="Delete"
+                                        Command="{Binding StagePlaylistsCommand}"
+                                        CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"/>
+                        </DataGrid.InputBindings>
+
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="Created By" Binding="{Binding Owner.DisplayName}" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="# Tracks" Binding="{Binding Tracks.Total}" IsReadOnly="True" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
             </GroupBox>
 
-            <GroupBox Grid.Column="1" Header="Tracks">
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,8">
+                <Button Content="-&gt;"
+                        Command="{Binding StagePlaylistsCommand}"
+                        CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
+                        Padding="12,4" Margin="0,0,0,8"/>
+                <Button Content="&lt;-"
+                        Command="{Binding UnstagePlaylistsCommand}"
+                        CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"
+                        Padding="12,4"/>
+            </StackPanel>
+
+            <GroupBox Grid.Column="2" Header="Staged For Deletion" Margin="0,0,0,8">
+                <DockPanel>
+                    <Button DockPanel.Dock="Bottom"
+                            Content="Delete Staged"
+                            Command="{Binding DeletePlaylistsCommand}"
+                            Padding="12,4"
+                            HorizontalAlignment="Right"
+                            Margin="0,8,0,0"/>
+
+                    <DataGrid x:Name="StagedForDeletionDataGrid" ItemsSource="{Binding StagedForDeletion}" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
+                        <DataGrid.InputBindings>
+                            <KeyBinding Key="Delete"
+                                        Command="{Binding UnstagePlaylistsCommand}"
+                                        CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"/>
+                        </DataGrid.InputBindings>
+
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="Created By" Binding="{Binding Owner.DisplayName}" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="# Tracks" Binding="{Binding Tracks.Total}" IsReadOnly="True" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </GroupBox>
+
+            <GroupBox Grid.Row="1" Grid.ColumnSpan="3" Header="Tracks">
                 <DataGrid x:Name="TracksDataGrid" ItemsSource="{Binding Tracks}" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Name" Binding="{Binding TrackName}" IsReadOnly="True" Width="*"/>
