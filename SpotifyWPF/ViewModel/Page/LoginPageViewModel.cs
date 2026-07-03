@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Text.Json;
 using System.Windows;
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
@@ -16,6 +19,8 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand SpotifyLoginCommand { get; private set; }
 
         private string _userClientId;
+
+        public ObservableCollection<string> SavedClientIds { get; } = new ObservableCollection<string>();
 
         public string UserClientId
         {
@@ -41,10 +46,10 @@ namespace SpotifyWPF.ViewModel.Page
             _spotify = spotify;
             _messageBoxService = messageBoxService;
 
+            LoadSavedClientIds();
             UserClientId = Properties.Settings.Default.SpotifyClientId;
-            Console.WriteLine("STARTUP PROPERTY VALUE: " + Properties.Settings.Default.SpotifyClientId);
 
-            SpotifyLoginCommand = new RelayCommand(ExecuteLogin);
+            SpotifyLoginCommand = new RelayCommand(ExecuteLogin, CanExecuteLogin);
 
             // Listen for login failures so we can unlock the button
             MessengerInstance.Register<object>(this, "LoginFailed", _ => 
@@ -71,7 +76,7 @@ namespace SpotifyWPF.ViewModel.Page
 
                 // 2. Proceed with login if valid
                 IsLoggingIn = true;
-                Properties.Settings.Default.SpotifyClientId = UserClientId.Trim();
+                SaveClientId(UserClientId.Trim());
                 Properties.Settings.Default.Save();
 
                 await _spotify.LoginAsync(OnSuccess);
@@ -86,6 +91,37 @@ namespace SpotifyWPF.ViewModel.Page
         private bool CanExecuteLogin()
         {
             return !IsLoggingIn;
+        }
+
+        private void LoadSavedClientIds()
+        {
+            try
+            {
+                var savedClientIds = JsonSerializer.Deserialize<string[]>(Properties.Settings.Default.SpotifyClientIdsJson) ?? Array.Empty<string>();
+
+                foreach (var clientId in savedClientIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct())
+                    SavedClientIds.Add(clientId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to load saved Spotify Client IDs: {ex}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(Properties.Settings.Default.SpotifyClientId) &&
+                !SavedClientIds.Contains(Properties.Settings.Default.SpotifyClientId))
+            {
+                SavedClientIds.Add(Properties.Settings.Default.SpotifyClientId);
+            }
+        }
+
+        private void SaveClientId(string clientId)
+        {
+            Properties.Settings.Default.SpotifyClientId = clientId;
+
+            if (!SavedClientIds.Contains(clientId))
+                SavedClientIds.Add(clientId);
+
+            Properties.Settings.Default.SpotifyClientIdsJson = JsonSerializer.Serialize(SavedClientIds.ToArray());
         }
 
         private void OnSuccess()

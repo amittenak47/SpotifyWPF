@@ -31,6 +31,7 @@
                     <Setter Property="Command" Value="{Binding Command}"/>
                     <Setter Property="CommandParameter" Value="{Binding}"/>
                     <Setter Property="IsChecked" Value="{Binding IsChecked}"/>
+                    <Setter Property="IsEnabled" Value="{Binding IsEnabled}"/>
                 </Style>
             </Menu.ItemContainerStyle>
 

@@ -22,9 +22,19 @@
                 </Hyperlink>
             </TextBlock>
 
+            <TextBlock Text="Music Platform" Margin="0,0,0,4"/>
+            <ComboBox SelectedIndex="0" Padding="6,4" Margin="0,0,0,16">
+                <ComboBoxItem Content="Spotify"/>
+                <ComboBoxItem Content="Tidal" IsEnabled="False"/>
+                <ComboBoxItem Content="Apple Music" IsEnabled="False"/>
+            </ComboBox>
+
             <TextBlock Text="Client ID" Margin="0,0,0,4"/>
-            <TextBox Text="{Binding UserClientId, UpdateSourceTrigger=PropertyChanged}"
-                     Padding="6,4" Margin="0,0,0,16"/>
+            <ComboBox ItemsSource="{Binding SavedClientIds}"
+                      Text="{Binding UserClientId, UpdateSourceTrigger=PropertyChanged}"
+                      IsEditable="True"
+                      IsTextSearchEnabled="False"
+                      Padding="6,4" Margin="0,0,0,16"/>
 
             <Button Content="Log In"
                     Command="{Binding SpotifyLoginCommand}"

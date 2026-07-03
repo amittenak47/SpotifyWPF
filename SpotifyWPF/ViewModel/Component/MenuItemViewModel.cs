@@ -9,6 +9,7 @@ namespace SpotifyWPF.ViewModel.Component
     {
         private string _header;
         private bool _isChecked;
+        private bool _isEnabled = true;
 
         public MenuItemViewModel(string header) : this(header, null) { }
 
@@ -38,6 +39,17 @@ namespace SpotifyWPF.ViewModel.Component
             set
             {
                 _isChecked = value;
+                RaisePropertyChanged();
+            }
+        }
+
+        public bool IsEnabled
+        {
+            get => _isEnabled;
+
+            set
+            {
+                _isEnabled = value;
                 RaisePropertyChanged();
             }
         }

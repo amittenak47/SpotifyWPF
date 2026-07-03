@@ -35,6 +35,18 @@ namespace SpotifyWPF.Properties {
             }
         }
         
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("[]")]
+        public string SpotifyClientIdsJson {
+            get {
+                return ((string)(this["SpotifyClientIdsJson"]));
+            }
+            set {
+                this["SpotifyClientIdsJson"] = value;
+            }
+        }
+        
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("4002")]
