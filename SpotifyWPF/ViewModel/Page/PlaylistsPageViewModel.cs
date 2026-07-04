@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -29,9 +30,13 @@ namespace SpotifyWPF.ViewModel.Page
 
         private Paging<FullPlaylist> _currentPlaylistPage;
 
+        private readonly List<LogEntry> _allLogMessages = new List<LogEntry>();
+
         private Visibility _progressVisibility = Visibility.Hidden;
 
         private string _status = "Ready";
+
+        private string _selectedLogFilter = "Default";
 
         public PlaylistsPageViewModel(ISpotify spotify, IMapper mapper, IMessageBoxService messageBoxService)
         {
@@ -48,6 +53,8 @@ namespace SpotifyWPF.ViewModel.Page
             DeletePlaylistsCommand = new RelayCommand(async () => await DeletePlaylistsAsync());
             ExportToJsonCommand = new RelayCommand(ExportToJson);
             ImportFromJsonCommand = new RelayCommand(() => { }, () => false);
+
+            Log("Playlists view model created.");
         }
 
         public ObservableCollection<FullPlaylist> Playlists { get; } = new ObservableCollection<FullPlaylist>();
@@ -55,6 +62,24 @@ namespace SpotifyWPF.ViewModel.Page
         public ObservableCollection<FullPlaylist> StagedForDeletion { get; } = new ObservableCollection<FullPlaylist>();
 
         public ObservableCollection<Track> Tracks { get; } = new ObservableCollection<Track>();
+
+        public ObservableCollection<string> LogMessages { get; } = new ObservableCollection<string>();
+
+        public ObservableCollection<string> LogFilterOptions { get; } = new ObservableCollection<string>
+        {
+            "Default",
+            "Verbose"
+        };
+
+        public string SelectedLogFilter
+        {
+            get => _selectedLogFilter;
+            set
+            {
+                if (Set(ref _selectedLogFilter, value))
+                    RefreshVisibleLogMessages();
+            }
+        }
 
         public string Status
         {
@@ -164,54 +189,123 @@ namespace SpotifyWPF.ViewModel.Page
 
         public async Task LoadPlaylistsAsync()
         {
-            if (Playlists.Count > 0) return;
+            Log($"LoadPlaylistsAsync invoked. Current playlist count: {Playlists.Count}.");
+
+            if (Playlists.Count > 0)
+            {
+                Log("Skipping playlist load because playlists are already loaded.");
+                return;
+            }
+
+            if (_spotify.Api == null)
+            {
+                Log("Spotify API client is not available yet. Complete login before loading playlists.");
+                Status = "Login required before loading playlists.";
+                return;
+            }
 
             Status = "Loading playlists...";
 
-            var request = new PlaylistCurrentUsersRequest { Limit = 50 };
-            _currentPlaylistPage = await _spotify.Api.Playlists.CurrentUsers(request);
-
-            await Application.Current.Dispatcher.BeginInvoke((Action) (() =>
+            try
             {
-                Playlists.Clear();
-                StagedForDeletion.Clear();
+                await LogCurrentUserAsync();
 
-                foreach (var playlist in _currentPlaylistPage.Items)
-                    Playlists.Add(playlist);
-            }));
+                var request = new PlaylistCurrentUsersRequest { Limit = 10, Offset = 0 };
+                Log($"Requesting first playlist page. Limit: {request.Limit}. Offset: {request.Offset}.");
+                LogPlaylistRequest("CurrentUsers", request);
 
-            LoadMorePlaylistsCommand.RaiseCanExecuteChanged();
+                _currentPlaylistPage = await _spotify.Api.Playlists.CurrentUsers(request);
+                LogPage("Loaded first playlist page", _currentPlaylistPage);
+                LogPlaylistResponse("CurrentUsers", _currentPlaylistPage);
+                await CompareWithDefaultPlaylistRequestIfEmptyAsync(_currentPlaylistPage);
 
-            Status = "Ready";
+                await Application.Current.Dispatcher.BeginInvoke((Action) (() =>
+                {
+                    Playlists.Clear();
+                    StagedForDeletion.Clear();
+
+                    foreach (var playlist in _currentPlaylistPage.Items)
+                        Playlists.Add(playlist);
+                }));
+
+                Log($"Playlist grid now contains {Playlists.Count} item(s).");
+                LoadMorePlaylistsCommand.RaiseCanExecuteChanged();
+            }
+            catch (Exception ex)
+            {
+                Log($"Failed to load playlists: {ex}");
+                Status = "Failed to load playlists.";
+                return;
+            }
+            finally
+            {
+                if (Status == "Loading playlists...")
+                    Status = "Ready";
+            }
         }
 
         public async Task LoadMorePlaylistsAsync()
         {
+            Log("LoadMorePlaylistsAsync invoked.");
+
             if (_currentPlaylistPage == null)
             {
+                Log("No current page exists; loading the first page instead.");
                 await LoadPlaylistsAsync();
                 return;
             }
 
-            if (_currentPlaylistPage.Next == null) return;
+            if (_currentPlaylistPage.Next == null)
+            {
+                Log("No additional playlist page is available.");
+                return;
+            }
 
             Status = "Loading more playlists...";
 
-            _currentPlaylistPage = await _spotify.Api.NextPage(_currentPlaylistPage);
-
-            await Application.Current.Dispatcher.BeginInvoke((Action) (() =>
+            try
             {
-                foreach (var playlist in _currentPlaylistPage.Items)
-                    Playlists.Add(playlist);
-            }));
+                Log($"Requesting next playlist page from {_currentPlaylistPage.Next}.", true);
 
-            LoadMorePlaylistsCommand.RaiseCanExecuteChanged();
+                _currentPlaylistPage = await _spotify.Api.NextPage(_currentPlaylistPage);
+                LogPage("Loaded next playlist page", _currentPlaylistPage);
+                LogPlaylistResponse("NextPage", _currentPlaylistPage);
 
-            Status = "Ready";
+                await Application.Current.Dispatcher.BeginInvoke((Action) (() =>
+                {
+                    foreach (var playlist in _currentPlaylistPage.Items)
+                        Playlists.Add(playlist);
+                }));
+
+                Log($"Playlist grid now contains {Playlists.Count} item(s).");
+                LoadMorePlaylistsCommand.RaiseCanExecuteChanged();
+            }
+            catch (Exception ex)
+            {
+                Log($"Failed to load more playlists: {ex}");
+                Status = "Failed to load more playlists.";
+                return;
+            }
+            finally
+            {
+                if (Status == "Loading more playlists...")
+                    Status = "Ready";
+            }
+        }
+
+        private void LogPage(string message, Paging<FullPlaylist> page)
+        {
+            var itemCount = page?.Items?.Count ?? 0;
+            var total = page?.Total?.ToString() ?? "unknown";
+            var hasNextPage = page?.Next != null;
+
+            Log($"{message}. Items: {itemCount}. Total: {total}. Has next page: {hasNextPage}.");
         }
 
         public async Task LoadAllPlaylistsAsync()
         {
+            Log("LoadAllPlaylistsAsync invoked.");
+
             if (_currentPlaylistPage == null)
                 await LoadPlaylistsAsync();
 
@@ -221,15 +315,31 @@ namespace SpotifyWPF.ViewModel.Page
 
                 await Task.Delay(150);
 
-                _currentPlaylistPage = await _spotify.Api.NextPage(_currentPlaylistPage);
-
-                await Application.Current.Dispatcher.BeginInvoke((Action) (() =>
+                try
                 {
-                    foreach (var playlist in _currentPlaylistPage.Items)
-                        Playlists.Add(playlist);
-                }));
+                    Log($"Requesting next playlist page from {_currentPlaylistPage.Next}.", true);
+
+                    _currentPlaylistPage = await _spotify.Api.NextPage(_currentPlaylistPage);
+                    LogPage("Loaded playlist page during Load All", _currentPlaylistPage);
+                    LogPlaylistResponse("NextPage", _currentPlaylistPage);
+
+                    await Application.Current.Dispatcher.BeginInvoke((Action) (() =>
+                    {
+                        foreach (var playlist in _currentPlaylistPage.Items)
+                            Playlists.Add(playlist);
+                    }));
+
+                    Log($"Playlist grid now contains {Playlists.Count} item(s).");
+                }
+                catch (Exception ex)
+                {
+                    Log($"Failed while loading all playlists: {ex}");
+                    Status = "Failed while loading all playlists.";
+                    return;
+                }
             }
 
+            Log("Finished loading all available playlist pages.");
             LoadMorePlaylistsCommand.RaiseCanExecuteChanged();
 
             Status = "Ready";
@@ -284,6 +394,104 @@ namespace SpotifyWPF.ViewModel.Page
             var json = JsonSerializer.Serialize(Playlists.ToList(), options);
 
             File.WriteAllText(dialog.FileName, json);
+            Log($"Exported {Playlists.Count} playlist(s) to {dialog.FileName}.");
+        }
+
+        private async Task LogCurrentUserAsync()
+        {
+            try
+            {
+                var currentUser = await _spotify.GetPrivateProfileAsync();
+
+                if (currentUser == null)
+                {
+                    Log("Spotify current user profile returned null.");
+                    return;
+                }
+
+                Log($"Authenticated Spotify user: {currentUser.DisplayName ?? "(no display name)"} ({currentUser.Id}).");
+                Log($"Current user profile: country={currentUser.Country}, product={currentUser.Product}, emailPresent={!string.IsNullOrWhiteSpace(currentUser.Email)}.", true);
+            }
+            catch (Exception ex)
+            {
+                Log($"Unable to read current Spotify user profile: {ex.Message}");
+                Log($"Current user profile exception: {ex}", true);
+            }
+        }
+
+        private void LogPlaylistRequest(string operation, PlaylistCurrentUsersRequest request)
+        {
+            Log($"{operation} request: limit={request.Limit}, offset={request.Offset}, locale={request.Locale ?? "(default)"}.", true);
+        }
+
+        private void LogPlaylistResponse(string operation, Paging<FullPlaylist> page)
+        {
+            Log($"{operation} response: total={page?.Total?.ToString() ?? "unknown"}, limit={page?.Limit?.ToString() ?? "unknown"}, offset={page?.Offset?.ToString() ?? "unknown"}, items={page?.Items?.Count ?? 0}, next={page?.Next ?? "(none)"}, previous={page?.Previous ?? "(none)"}.", true);
+
+            if (page?.Items == null || page.Items.Count == 0)
+            {
+                Log($"{operation} response items: none.", true);
+                return;
+            }
+
+            var itemSummary = string.Join("; ", page.Items.Take(10).Select(playlist =>
+                $"{playlist.Name ?? "(unnamed)"} id={playlist.Id ?? "(no id)"} owner={playlist.Owner?.DisplayName ?? playlist.Owner?.Id ?? "(unknown)"} tracks={playlist.Tracks?.Total.ToString() ?? "unknown"}"));
+
+            Log($"{operation} response first {Math.Min(page.Items.Count, 10)} item(s): {itemSummary}.", true);
+        }
+
+        private async Task CompareWithDefaultPlaylistRequestIfEmptyAsync(Paging<FullPlaylist> page)
+        {
+            if (page?.Total != 0 && page?.Items?.Count != 0) return;
+
+            try
+            {
+                Log("CurrentUsers request returned empty; comparing with parameterless CurrentUsers() used by master.", true);
+
+                var defaultPage = await _spotify.Api.Playlists.CurrentUsers();
+                LogPlaylistResponse("CurrentUsers default overload", defaultPage);
+
+                if (defaultPage?.Items?.Count > 0 || defaultPage?.Total > 0)
+                    Log("Default CurrentUsers() returned playlists while the explicit request returned none.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Default CurrentUsers() comparison failed: {ex.Message}");
+                Log($"Default CurrentUsers() comparison exception: {ex}", true);
+            }
+        }
+
+        private void Log(string message, bool verbose = false)
+        {
+            var logEntry = new LogEntry(DateTime.Now, message, verbose);
+            Console.WriteLine(logEntry.FormattedMessage);
+
+            Application.Current.Dispatcher.BeginInvoke((Action) (() =>
+            {
+                _allLogMessages.Add(logEntry);
+
+                while (_allLogMessages.Count > 200)
+                    _allLogMessages.RemoveAt(0);
+
+                if (ShouldShowLog(logEntry))
+                    LogMessages.Add(logEntry.FormattedMessage);
+
+                while (LogMessages.Count > 200)
+                    LogMessages.RemoveAt(0);
+            }));
+        }
+
+        private void RefreshVisibleLogMessages()
+        {
+            LogMessages.Clear();
+
+            foreach (var logEntry in _allLogMessages.Where(ShouldShowLog))
+                LogMessages.Add(logEntry.FormattedMessage);
+        }
+
+        private bool ShouldShowLog(LogEntry logEntry)
+        {
+            return SelectedLogFilter == "Verbose" || !logEntry.IsVerbose;
         }
 
         private static TimeSpan GetRetryDelay(APITooManyRequestsException ex)
@@ -333,6 +541,24 @@ namespace SpotifyWPF.ViewModel.Page
             }
 
             Status = "Ready";
+        }
+
+        private class LogEntry
+        {
+            public LogEntry(DateTime timestamp, string message, bool isVerbose)
+            {
+                Timestamp = timestamp;
+                Message = message;
+                IsVerbose = isVerbose;
+            }
+
+            public DateTime Timestamp { get; }
+
+            public string Message { get; }
+
+            public bool IsVerbose { get; }
+
+            public string FormattedMessage => $"[{Timestamp:HH:mm:ss}] {(IsVerbose ? "[Verbose] " : string.Empty)}{Message}";
         }
     }
 }

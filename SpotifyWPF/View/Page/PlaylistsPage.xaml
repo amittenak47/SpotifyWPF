@@ -43,6 +43,8 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="2*"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="5"/>
+                <RowDefinition Height="120"/>
             </Grid.RowDefinitions>
 
             <GroupBox Header="Playlists" Margin="0,0,8,8">
@@ -116,6 +118,28 @@
                         <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}" IsReadOnly="True" Width="*"/>
                     </DataGrid.Columns>
                 </DataGrid>
+            </GroupBox>
+
+            <GridSplitter Grid.Row="2"
+                          Grid.ColumnSpan="3"
+                          Height="5"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Center"
+                          ResizeDirection="Rows"/>
+
+            <GroupBox Grid.Row="3" Grid.ColumnSpan="3" Margin="0,8,0,0">
+                <GroupBox.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Logs" VerticalAlignment="Center"/>
+                        <TextBlock Text="Filter" VerticalAlignment="Center" Margin="16,0,4,0"/>
+                        <ComboBox ItemsSource="{Binding LogFilterOptions}"
+                                  SelectedItem="{Binding SelectedLogFilter}"
+                                  Width="100"
+                                  Padding="4,1"/>
+                    </StackPanel>
+                </GroupBox.Header>
+
+                <ListBox ItemsSource="{Binding LogMessages}" FontFamily="Consolas" FontSize="11"/>
             </GroupBox>
         </Grid>
     </DockPanel>
