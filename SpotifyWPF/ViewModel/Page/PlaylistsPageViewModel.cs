@@ -35,9 +35,7 @@ namespace SpotifyWPF.ViewModel.Page
         private readonly IMessageBoxService _messageBoxService;
         private readonly ISpotify _spotify;
         private readonly DispatcherTimer _playlistGridRefreshTimer;
-        private readonly string _playlistStoreDirectory;
-        private readonly string _availablePlaylistsPath;
-        private readonly string _deletionQueuePath;
+        private readonly string _playlistStoreRootDirectory;
 
         private Paging<FullPlaylist> _currentPlaylistPage;
 
@@ -63,6 +61,7 @@ namespace SpotifyWPF.ViewModel.Page
             LoadMorePlaylistsCommand = new RelayCommand(async () => await LoadMorePlaylistsAsync(), CanLoadMorePlaylists);
             LoadAllPlaylistsCommand = new RelayCommand(async () => await LoadAllPlaylistsAsync());
             LoadTracksCommand = new RelayCommand<PlaylistCacheItem>(async playlist => await LoadTracksAsync(playlist));
+            RefreshSelectedPlaylistsCommand = new RelayCommand<IList>(async playlists => await RefreshSelectedPlaylistsAsync(playlists));
             CancelCurrentActionCommand = new RelayCommand(CancelCurrentAction, CanCancelCurrentAction);
             StagePlaylistsCommand = new RelayCommand<IList>(StagePlaylists);
             UnstagePlaylistsCommand = new RelayCommand<IList>(UnstagePlaylists);
@@ -74,10 +73,8 @@ namespace SpotifyWPF.ViewModel.Page
             ExportToJsonCommand = new RelayCommand(ExportToJson);
             ImportFromJsonCommand = new RelayCommand(() => { }, () => false);
 
-            _playlistStoreDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotifyWPF", "Playlists");
-            _availablePlaylistsPath = Path.Combine(_playlistStoreDirectory, "available-playlists.json");
-            _deletionQueuePath = Path.Combine(_playlistStoreDirectory, "deletion-queue.json");
-            Directory.CreateDirectory(_playlistStoreDirectory);
+            _playlistStoreRootDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotifyWPF", "Playlists");
+            Directory.CreateDirectory(GetPlaylistStoreDirectory());
 
             _playlistGridRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
             _playlistGridRefreshTimer.Tick += (sender, args) => RefreshGridFromLocalFiles();
@@ -154,6 +151,8 @@ namespace SpotifyWPF.ViewModel.Page
         }
 
         public RelayCommand<PlaylistCacheItem> LoadTracksCommand { get; }
+
+        public RelayCommand<IList> RefreshSelectedPlaylistsCommand { get; }
 
         public RelayCommand CancelCurrentActionCommand { get; }
 
@@ -591,33 +590,36 @@ namespace SpotifyWPF.ViewModel.Page
         {
             Log("LoadAllPlaylistsAsync invoked.");
 
-            if (_currentPlaylistPage == null)
-            {
-                await LoadPlaylistsAsync();
-
-                if (_currentPlaylistPage == null || _currentPlaylistPage.Next == null)
-                    return;
-            }
-
             var cancellationToken = BeginCancelableAction();
 
             try
             {
-                while (_currentPlaylistPage?.Next != null)
+                var nextOffset = GetKnownPlaylistCount();
+
+                while (true)
                 {
                     Status = "Loading all playlists...";
 
                     await Task.Delay(150, cancellationToken);
                     cancellationToken.ThrowIfCancellationRequested();
-                    Log($"Requesting next playlist page from {_currentPlaylistPage.Next}.", true);
 
-                    _currentPlaylistPage = await _spotify.Api.NextPage(_currentPlaylistPage);
+                    var request = new PlaylistCurrentUsersRequest { Limit = 50, Offset = nextOffset };
+                    Log($"Requesting playlist page for Load All. Limit: {request.Limit}. Offset: {request.Offset}.", true);
+                    LogPlaylistRequest("CurrentUsers Load All", request);
+
+                    _currentPlaylistPage = await _spotify.Api.Playlists.CurrentUsers(request);
                     cancellationToken.ThrowIfCancellationRequested();
                     LogPage("Loaded playlist page during Load All", _currentPlaylistPage);
-                    LogPlaylistResponse("NextPage", _currentPlaylistPage);
+                    LogPlaylistResponse("CurrentUsers Load All", _currentPlaylistPage);
                     SaveAvailablePlaylists(_currentPlaylistPage.Items.Select(ToPlaylistCacheItem));
 
                     Log($"Playlist grid now contains {Playlists.Count} item(s).");
+
+                    var itemCount = _currentPlaylistPage.Items?.Count ?? 0;
+                    if (itemCount == 0 || _currentPlaylistPage.Next == null)
+                        break;
+
+                    nextOffset += itemCount;
                 }
 
                 RefreshGridFromLocalFiles();
@@ -736,6 +738,76 @@ namespace SpotifyWPF.ViewModel.Page
             Log("Refreshed staged deletion results.");
         }
 
+        private async Task RefreshSelectedPlaylistsAsync(IList selectedItems)
+        {
+            var selectedPlaylists = selectedItems?.Cast<PlaylistCacheItem>().ToList();
+
+            if (selectedPlaylists == null || !selectedPlaylists.Any()) return;
+
+            var cancellationToken = BeginCancelableAction();
+
+            try
+            {
+                Status = $"Refreshing {selectedPlaylists.Count} selected playlist(s)...";
+                var availablePlaylists = LoadAvailablePlaylistDictionary();
+                var deletionQueue = LoadDeletionQueueDictionary();
+
+                foreach (var playlist in selectedPlaylists)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    if (string.IsNullOrWhiteSpace(playlist.Id)) continue;
+
+                    try
+                    {
+                        var refreshedPlaylist = await _spotify.Api.Playlists.Get(playlist.Id);
+                        var cacheItem = ToPlaylistCacheItem(refreshedPlaylist);
+
+                        if (deletionQueue.ContainsKey(cacheItem.Id))
+                            deletionQueue[cacheItem.Id].Playlist = cacheItem;
+                        else
+                            availablePlaylists[cacheItem.Id] = cacheItem;
+
+                        Log($"Refreshed playlist '{cacheItem.Name}' ({cacheItem.Id}).", true);
+                    }
+                    catch (APITooManyRequestsException ex)
+                    {
+                        var retryDelay = GetRetryDelay(ex);
+                        Log($"Spotify rate limited selected playlist refresh. Retry after {retryDelay}.");
+                        Status = $"Rate limited. Retry after {retryDelay}.";
+                        break;
+                    }
+                    catch (APIException ex) when (ContainsExceptionMessage(ex, "not found") || ContainsExceptionMessage(ex, "404"))
+                    {
+                        availablePlaylists.Remove(playlist.Id);
+                        deletionQueue.Remove(playlist.Id);
+                        Log($"Playlist '{playlist.Name}' ({playlist.Id}) no longer exists; removed it from local cache.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"Failed to refresh playlist '{playlist.Name}' ({playlist.Id}): {ex.Message}");
+                        Log($"Refresh selected playlist exception: {ex}", true);
+                    }
+                }
+
+                SaveAvailablePlaylistDictionary(availablePlaylists);
+                SaveDeletionQueueDictionary(deletionQueue);
+                RefreshGridFromLocalFiles();
+
+                if (Status.StartsWith("Refreshing"))
+                    Status = "Ready";
+            }
+            catch (OperationCanceledException)
+            {
+                Log("Cancelled selected playlist refresh.");
+                Status = "Cancelled selected playlist refresh.";
+            }
+            finally
+            {
+                EndCancelableAction();
+            }
+        }
+
         private void CopySelectedLogMessages(IList selectedMessages)
         {
             var messages = selectedMessages?.Cast<string>().ToList();
@@ -818,19 +890,24 @@ namespace SpotifyWPF.ViewModel.Page
             SaveAvailablePlaylistDictionary(availablePlaylists);
         }
 
+        private int GetKnownPlaylistCount()
+        {
+            return LoadAvailablePlaylistDictionary().Count + LoadDeletionQueueDictionary().Count;
+        }
+
         private Dictionary<string, PlaylistCacheItem> LoadAvailablePlaylistDictionary()
         {
-            return LoadDictionary<PlaylistCacheItem>(_availablePlaylistsPath);
+            return LoadDictionary<PlaylistCacheItem>(GetAvailablePlaylistsPath());
         }
 
         private Dictionary<string, DeletionQueueItem> LoadDeletionQueueDictionary()
         {
-            return LoadDictionary<DeletionQueueItem>(_deletionQueuePath);
+            return LoadDictionary<DeletionQueueItem>(GetDeletionQueuePath());
         }
 
         private void SaveAvailablePlaylistDictionary(Dictionary<string, PlaylistCacheItem> playlists)
         {
-            SaveDictionary(_availablePlaylistsPath, playlists);
+            SaveDictionary(GetAvailablePlaylistsPath(), playlists);
         }
 
         private void SaveDeletionQueue(IEnumerable<DeletionQueueItem> playlists)
@@ -842,7 +919,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void SaveDeletionQueueDictionary(Dictionary<string, DeletionQueueItem> playlists)
         {
-            SaveDictionary(_deletionQueuePath, playlists);
+            SaveDictionary(GetDeletionQueuePath(), playlists);
         }
 
         private Dictionary<string, T> LoadDictionary<T>(string path)
@@ -865,10 +942,33 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void SaveDictionary<T>(string path, Dictionary<string, T> values)
         {
-            Directory.CreateDirectory(_playlistStoreDirectory);
+            Directory.CreateDirectory(GetPlaylistStoreDirectory());
 
             var json = JsonSerializer.Serialize(values, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(path, json);
+        }
+
+        private string GetPlaylistStoreDirectory()
+        {
+            return Path.Combine(_playlistStoreRootDirectory, GetSafeClientId());
+        }
+
+        private string GetAvailablePlaylistsPath()
+        {
+            return Path.Combine(GetPlaylistStoreDirectory(), "available-playlists.json");
+        }
+
+        private string GetDeletionQueuePath()
+        {
+            return Path.Combine(GetPlaylistStoreDirectory(), "deletion-queue.json");
+        }
+
+        private static string GetSafeClientId()
+        {
+            var clientId = Properties.Settings.Default.SpotifyClientId ?? "default";
+            var safeClientId = new string(clientId.Where(char.IsLetterOrDigit).ToArray());
+
+            return string.IsNullOrWhiteSpace(safeClientId) ? "default" : safeClientId;
         }
 
         private static void ReplaceCollection<T>(ObservableCollection<T> collection, IEnumerable<T> items)

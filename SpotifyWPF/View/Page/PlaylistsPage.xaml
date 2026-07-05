@@ -52,6 +52,11 @@
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                         <Button Content="Load More" Command="{Binding LoadMorePlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
                         <Button Content="Load All" Command="{Binding LoadAllPlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
+                        <Button Content="Refresh Selected"
+                                Command="{Binding RefreshSelectedPlaylistsCommand}"
+                                CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
+                                Padding="12,4"
+                                Margin="0,0,8,0"/>
                         <Button Content="Cancel" Command="{Binding CancelCurrentActionCommand}" Padding="12,4" Margin="0,0,8,0"/>
                         <Button Content="Export" Command="{Binding ExportToJsonCommand}" Padding="12,4" Margin="0,0,8,0"/>
                         <Button Content="Import" Command="{Binding ImportFromJsonCommand}" IsEnabled="False" Padding="12,4"/>
