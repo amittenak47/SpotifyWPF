@@ -10,7 +10,8 @@
         xmlns:component="clr-namespace:SpotifyWPF.ViewModel.Component"
         mc:Ignorable="d"
         DataContext="{Binding Main, Source={StaticResource Locator}}"
-        Title="Spotify WPF" Height="800" Width="800" WindowStartupLocation="CenterScreen" WindowState="Maximized">
+        Title="Spotify WPF" Height="800" Width="800" WindowStartupLocation="CenterScreen" WindowState="Maximized"
+        Background="{StaticResource AppBackgroundBrush}">
 
     <Window.Resources>
         <DataTemplate DataType="{x:Type vm1:LoginPageViewModel}">
@@ -19,15 +20,23 @@
         <DataTemplate DataType="{x:Type vm1:PlaylistsPageViewModel}">
             <page:PlaylistsPage/>
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm1:AlbumsPageViewModel}">
+            <page:AlbumsPage/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm1:ArtistsPageViewModel}">
+            <page:ArtistsPage/>
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm1:SearchPageViewModel}">
             <page:SearchPage/>
         </DataTemplate>
     </Window.Resources>
 
-    <DockPanel>
+    <DockPanel Background="{StaticResource AppBackgroundBrush}">
         <Menu DockPanel.Dock="Top" ItemsSource="{Binding MenuItems}">
             <Menu.ItemContainerStyle>
-                <Style TargetType="{x:Type MenuItem}">
+                <Style TargetType="{x:Type MenuItem}" BasedOn="{StaticResource {x:Type MenuItem}}">
+                    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+                    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
                     <Setter Property="Command" Value="{Binding Command}"/>
                     <Setter Property="CommandParameter" Value="{Binding}"/>
                     <Setter Property="IsChecked" Value="{Binding IsChecked}"/>

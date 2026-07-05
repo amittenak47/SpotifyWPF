@@ -1,4 +1,6 @@
-﻿namespace SpotifyWPF.View
+﻿using SpotifyWPF.View.Extension;
+
+namespace SpotifyWPF.View
 {
     /// <summary>
     /// Interaction logic for MainWindow.xaml
@@ -8,6 +10,7 @@
         public MainWindow()
         {
             InitializeComponent();
+            DarkWindowChrome.Apply(this);
         }
     }
 }

@@ -78,7 +78,9 @@ namespace SpotifyWPF.Service
                 Scope = new List<string>
                 {
                     Scopes.UserReadPrivate, Scopes.PlaylistModifyPrivate, Scopes.PlaylistModifyPublic,
-                    Scopes.PlaylistReadCollaborative, Scopes.PlaylistReadPrivate
+                    Scopes.PlaylistReadCollaborative, Scopes.PlaylistReadPrivate,
+                    Scopes.UserLibraryRead, Scopes.UserLibraryModify,
+                    Scopes.UserFollowRead, Scopes.UserFollowModify
                 }
             };
 

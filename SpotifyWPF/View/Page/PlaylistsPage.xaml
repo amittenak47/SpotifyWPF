@@ -14,7 +14,7 @@
         </i:EventTrigger>
     </i:Interaction.Triggers>
 
-    <DockPanel>
+    <DockPanel Background="{StaticResource AppBackgroundBrush}">
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBar.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -49,6 +49,32 @@
 
             <GroupBox Header="Playlists" Margin="0,0,8,8">
                 <DockPanel>
+                    <GroupBox DockPanel.Dock="Top" Header="Create Playlist" Margin="0,0,0,8">
+                        <WrapPanel Margin="4">
+                            <Label Content="Name" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding NewPlaylistName, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="180"
+                                     VerticalContentAlignment="Center"
+                                     Margin="0,0,8,0"/>
+                            <Label Content="Description" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding NewPlaylistDescription, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="260"
+                                     VerticalContentAlignment="Center"
+                                     Margin="0,0,8,0"/>
+                            <CheckBox Content="Public"
+                                      IsChecked="{Binding NewPlaylistIsPublic}"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,8,0"/>
+                            <CheckBox Content="Collaborative"
+                                      IsChecked="{Binding NewPlaylistIsCollaborative}"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,8,0"/>
+                            <Button Content="Create"
+                                    Command="{Binding CreatePlaylistCommand}"
+                                    Padding="12,4"/>
+                        </WrapPanel>
+                    </GroupBox>
+
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                         <Button Content="Load More" Command="{Binding LoadMorePlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
                         <Button Content="Load All" Command="{Binding LoadAllPlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
@@ -113,10 +139,12 @@
                             <Style TargetType="{x:Type DataGridRow}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding DeletionStatusName}" Value="Deleted">
-                                        <Setter Property="Background" Value="LightCoral"/>
+                                        <Setter Property="Background" Value="#8B2E2E"/>
+                                        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding DeletionStatusName}" Value="Failed">
-                                        <Setter Property="Background" Value="Khaki"/>
+                                        <Setter Property="Background" Value="#8A6D1D"/>
+                                        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -166,8 +194,10 @@
                         <TextBlock Text="Filter" VerticalAlignment="Center" Margin="16,0,4,0"/>
                         <ComboBox ItemsSource="{Binding LogFilterOptions}"
                                   SelectedItem="{Binding SelectedLogFilter}"
+                                  Style="{StaticResource DarkComboBoxStyle}"
                                   Width="100"
-                                  Padding="4,1"/>
+                                  VerticalAlignment="Center"
+                                  Padding="6,2"/>
                     </StackPanel>
                 </GroupBox.Header>
 
