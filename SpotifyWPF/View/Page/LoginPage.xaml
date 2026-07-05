@@ -36,9 +36,14 @@
                       IsTextSearchEnabled="False"
                       Padding="6,4" Margin="0,0,0,16"/>
 
-            <Button Content="Log In"
-                    Command="{Binding SpotifyLoginCommand}"
-                    Padding="16,6" HorizontalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Content="Log In"
+                        Command="{Binding SpotifyLoginCommand}"
+                        Padding="16,6" Margin="0,0,8,0"/>
+                <Button Content="Refresh / Reauthorize Token"
+                        Command="{Binding RefreshSpotifyTokenCommand}"
+                        Padding="16,6"/>
+            </StackPanel>
         </StackPanel>
     </Grid>
 </UserControl>

@@ -8,6 +8,8 @@ namespace SpotifyWPF.Service
     {
         Task LoginAsync(Action onSuccess);
 
+        Task ReauthorizeAsync(Action onSuccess);
+
         Task<PrivateUser> GetPrivateProfileAsync();
 
         ISpotifyClient Api { get; }

@@ -18,6 +18,8 @@ namespace SpotifyWPF.ViewModel.Page
 
         public RelayCommand SpotifyLoginCommand { get; private set; }
 
+        public RelayCommand RefreshSpotifyTokenCommand { get; private set; }
+
         private string _userClientId;
 
         public ObservableCollection<string> SavedClientIds { get; } = new ObservableCollection<string>();
@@ -37,6 +39,7 @@ namespace SpotifyWPF.ViewModel.Page
                 if (Set(ref _isLoggingIn, value))
                 {
                     SpotifyLoginCommand?.RaiseCanExecuteChanged();
+                    RefreshSpotifyTokenCommand?.RaiseCanExecuteChanged();
                 }
             }
         }
@@ -50,6 +53,7 @@ namespace SpotifyWPF.ViewModel.Page
             UserClientId = Properties.Settings.Default.SpotifyClientId;
 
             SpotifyLoginCommand = new RelayCommand(ExecuteLogin, CanExecuteLogin);
+            RefreshSpotifyTokenCommand = new RelayCommand(ExecuteRefreshToken, CanExecuteLogin);
 
             // Listen for login failures so we can unlock the button
             MessengerInstance.Register<object>(this, "LoginFailed", _ => 
@@ -80,6 +84,34 @@ namespace SpotifyWPF.ViewModel.Page
                 Properties.Settings.Default.Save();
 
                 await _spotify.LoginAsync(OnSuccess);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"A hidden crash occurred:\n{ex.Message}", "Crash Detected");
+                IsLoggingIn = false;
+            }
+        }
+
+        private async void ExecuteRefreshToken()
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(UserClientId))
+                {
+                    _messageBoxService.ShowMessageBox(
+                        "Please enter your Spotify Client ID.",
+                        "Client ID Required",
+                        Service.MessageBoxes.MessageBoxButton.OK,
+                        MessageBoxIcon.Warning
+                    );
+                    return;
+                }
+
+                IsLoggingIn = true;
+                SaveClientId(UserClientId.Trim());
+                Properties.Settings.Default.Save();
+
+                await _spotify.ReauthorizeAsync(OnSuccess);
             }
             catch (Exception ex)
             {
