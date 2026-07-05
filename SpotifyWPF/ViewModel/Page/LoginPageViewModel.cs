@@ -27,7 +27,14 @@ namespace SpotifyWPF.ViewModel.Page
         public string UserClientId
         {
             get => _userClientId;
-            set => Set(ref _userClientId, value); 
+            set
+            {
+                if (Set(ref _userClientId, value))
+                {
+                    SpotifyLoginCommand?.RaiseCanExecuteChanged();
+                    RefreshSpotifyTokenCommand?.RaiseCanExecuteChanged();
+                }
+            }
         }
 
         private bool _isLoggingIn;
@@ -122,7 +129,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         private bool CanExecuteLogin()
         {
-            return !IsLoggingIn;
+            return !IsLoggingIn && !string.IsNullOrWhiteSpace(UserClientId);
         }
 
         private void LoadSavedClientIds()
@@ -160,6 +167,8 @@ namespace SpotifyWPF.ViewModel.Page
         {
             Application.Current.Dispatcher.BeginInvoke(new Action(() =>
             {
+                IsLoggingIn = false;
+
                 // Pass new object() to avoid anonymous type matching bugs in MVVM Light
                 MessengerInstance.Send<object>(new object(), MessageType.LoginSuccessful);
             }));
