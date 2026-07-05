@@ -51,6 +51,14 @@ namespace SpotifyWPF.ViewModel.Page
 
         private bool _isActionRunning;
 
+        private string _newPlaylistName;
+
+        private string _newPlaylistDescription;
+
+        private bool _newPlaylistIsPublic;
+
+        private bool _newPlaylistIsCollaborative;
+
         public PlaylistsPageViewModel(ISpotify spotify, IMapper mapper, IMessageBoxService messageBoxService)
         {
             _spotify = spotify;
@@ -72,6 +80,7 @@ namespace SpotifyWPF.ViewModel.Page
             CopyAllLogMessagesCommand = new RelayCommand(CopyAllLogMessages);
             ExportToJsonCommand = new RelayCommand(ExportToJson);
             ImportFromJsonCommand = new RelayCommand(() => { }, () => false);
+            CreatePlaylistCommand = new RelayCommand(async () => await CreatePlaylistAsync(), CanCreatePlaylist);
 
             _playlistStoreRootDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotifyWPF", "Playlists");
             Directory.CreateDirectory(GetPlaylistStoreDirectory());
@@ -98,6 +107,38 @@ namespace SpotifyWPF.ViewModel.Page
             "Verbose"
         };
 
+        public string NewPlaylistName
+        {
+            get => _newPlaylistName;
+            set
+            {
+                if (Set(ref _newPlaylistName, value))
+                    CreatePlaylistCommand?.RaiseCanExecuteChanged();
+            }
+        }
+
+        public string NewPlaylistDescription
+        {
+            get => _newPlaylistDescription;
+            set => Set(ref _newPlaylistDescription, value);
+        }
+
+        public bool NewPlaylistIsPublic
+        {
+            get => _newPlaylistIsPublic;
+            set
+            {
+                if (Set(ref _newPlaylistIsPublic, value) && value)
+                    NewPlaylistIsCollaborative = false;
+            }
+        }
+
+        public bool NewPlaylistIsCollaborative
+        {
+            get => _newPlaylistIsCollaborative;
+            set => Set(ref _newPlaylistIsCollaborative, value);
+        }
+
         public string SelectedLogFilter
         {
             get => _selectedLogFilter;
@@ -114,7 +155,10 @@ namespace SpotifyWPF.ViewModel.Page
             set
             {
                 if (Set(ref _isActionRunning, value))
+                {
                     CancelCurrentActionCommand?.RaiseCanExecuteChanged();
+                    CreatePlaylistCommand?.RaiseCanExecuteChanged();
+                }
             }
         }
 
@@ -175,6 +219,8 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand ExportToJsonCommand { get; }
 
         public RelayCommand ImportFromJsonCommand { get; }
+
+        public RelayCommand CreatePlaylistCommand { get; }
 
         public RelayCommand<IList> CopySelectedLogMessagesCommand { get; }
 
@@ -806,6 +852,68 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 EndCancelableAction();
             }
+        }
+
+        private async Task CreatePlaylistAsync()
+        {
+            if (!CanCreatePlaylist()) return;
+
+            var cancellationToken = BeginCancelableAction();
+
+            try
+            {
+                var playlistName = NewPlaylistName.Trim();
+                Status = $"Creating playlist {playlistName}...";
+                Log($"Creating playlist '{playlistName}'.");
+
+                var request = new PlaylistCreateRequest(playlistName)
+                {
+                    Description = string.IsNullOrWhiteSpace(NewPlaylistDescription) ? null : NewPlaylistDescription.Trim(),
+                    Public = NewPlaylistIsPublic,
+                    Collaborative = !NewPlaylistIsPublic && NewPlaylistIsCollaborative
+                };
+
+                var createdPlaylist = await _spotify.Api.Playlists.Create(request, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                SaveAvailablePlaylists(new[] { ToPlaylistCacheItem(createdPlaylist) });
+                RefreshGridFromLocalFiles();
+
+                NewPlaylistName = string.Empty;
+                NewPlaylistDescription = string.Empty;
+                NewPlaylistIsPublic = false;
+                NewPlaylistIsCollaborative = false;
+
+                Log($"Created playlist '{createdPlaylist.Name}' ({createdPlaylist.Id}) and added it to the local cache.");
+                Status = "Ready";
+            }
+            catch (APITooManyRequestsException ex)
+            {
+                var retryDelay = GetRetryDelay(ex);
+                Log($"Spotify rate limited playlist creation. Retry after {retryDelay}.");
+                Log($"Playlist create rate-limit exception: {ex}", true);
+                Status = $"Rate limited. Retry after {retryDelay}.";
+            }
+            catch (OperationCanceledException)
+            {
+                Status = "Cancelled playlist creation.";
+                Log("Cancelled playlist creation.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Failed to create playlist: {ex.Message}");
+                Log($"Playlist create exception: {ex}", true);
+                Status = "Failed to create playlist.";
+            }
+            finally
+            {
+                EndCancelableAction();
+            }
+        }
+
+        private bool CanCreatePlaylist()
+        {
+            return !IsActionRunning && !string.IsNullOrWhiteSpace(NewPlaylistName);
         }
 
         private void CopySelectedLogMessages(IList selectedMessages)

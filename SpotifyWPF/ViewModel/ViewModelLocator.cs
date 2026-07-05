@@ -24,12 +24,18 @@ namespace SpotifyWPF.ViewModel
             SimpleIoc.Default.Register<MainViewModel>();
             SimpleIoc.Default.Register<LoginPageViewModel>();
             SimpleIoc.Default.Register<PlaylistsPageViewModel>();
+            SimpleIoc.Default.Register<AlbumsPageViewModel>();
+            SimpleIoc.Default.Register<ArtistsPageViewModel>();
             SimpleIoc.Default.Register<SearchPageViewModel>();
         }
 
         public MainViewModel Main => ServiceLocator.Current.GetInstance<MainViewModel>();
 
         public PlaylistsPageViewModel PlaylistsPage => ServiceLocator.Current.GetInstance<PlaylistsPageViewModel>();
+
+        public AlbumsPageViewModel AlbumsPage => ServiceLocator.Current.GetInstance<AlbumsPageViewModel>();
+
+        public ArtistsPageViewModel ArtistsPage => ServiceLocator.Current.GetInstance<ArtistsPageViewModel>();
 
         public SearchPageViewModel Search => ServiceLocator.Current.GetInstance<SearchPageViewModel>();
 

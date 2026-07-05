@@ -1,0 +1,457 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <Style x:Key="DarkComboBoxToggleButtonStyle" TargetType="{x:Type ToggleButton}">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Focusable" Value="False"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ToggleButton}">
+          <Border Background="Transparent" BorderThickness="0"/>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="DarkComboBoxItemStyle" TargetType="{x:Type ComboBoxItem}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="Padding" Value="8,4"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ComboBoxItem}">
+          <Border x:Name="ItemBorder"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="Transparent"
+                  BorderThickness="0"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsHighlighted" Value="True"/>
+                <Condition Property="IsSelected" Value="True"/>
+              </MultiTrigger.Conditions>
+              <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource SpotifyGreenBrush}"/>
+              <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+            </MultiTrigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsHighlighted" Value="True"/>
+                <Condition Property="IsSelected" Value="False"/>
+              </MultiTrigger.Conditions>
+              <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+            </MultiTrigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsSelected" Value="True"/>
+                <Condition Property="IsHighlighted" Value="False"/>
+              </MultiTrigger.Conditions>
+              <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource AppSelectedBrush}"/>
+            </MultiTrigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="DarkComboBoxStyle" TargetType="{x:Type ComboBox}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="MinHeight" Value="28"/>
+    <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItemStyle}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ComboBox}">
+          <Grid SnapsToDevicePixels="True">
+            <Border x:Name="MainBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="2"/>
+            <Grid>
+              <ToggleButton Style="{StaticResource DarkComboBoxToggleButtonStyle}"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                            ClickMode="Press"/>
+              <ContentPresenter x:Name="ContentSite"
+                                Content="{TemplateBinding SelectionBoxItem}"
+                                ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                Margin="{TemplateBinding Padding}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                TextElement.Foreground="{TemplateBinding Foreground}"
+                                IsHitTestVisible="False"/>
+            </Grid>
+            <Popup x:Name="Popup"
+                   Placement="Bottom"
+                   PlacementTarget="{Binding ElementName=MainBorder}"
+                   VerticalOffset="-1"
+                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                   AllowsTransparency="True"
+                   Focusable="False"
+                   PopupAnimation="Fade">
+              <Border Background="{StaticResource AppSurfaceAltBrush}"
+                      BorderBrush="{StaticResource SpotifyGreenBrush}"
+                      BorderThickness="1,0,1,1"
+                      CornerRadius="0,0,2,2"
+                      MinWidth="{Binding ActualWidth, ElementName=MainBorder}">
+                <ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                  <ItemsPresenter Margin="2"/>
+                </ScrollViewer>
+              </Border>
+            </Popup>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+            </Trigger>
+            <Trigger Property="IsDropDownOpen" Value="True">
+              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+              <Setter TargetName="MainBorder" Property="BorderThickness" Value="1,1,1,0"/>
+              <Setter TargetName="MainBorder" Property="CornerRadius" Value="2,2,0,0"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="DarkEditableComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource DarkComboBoxStyle}">
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ComboBox}">
+          <Grid SnapsToDevicePixels="True">
+            <Border x:Name="MainBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="2"/>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+              </Grid.ColumnDefinitions>
+              <TextBox x:Name="PART_EditableTextBox"
+                       Grid.Column="0"
+                       Background="Transparent"
+                       Foreground="{StaticResource AppForegroundBrush}"
+                       BorderThickness="0"
+                       Padding="{TemplateBinding Padding}"
+                       VerticalContentAlignment="Center"
+                       CaretBrush="{StaticResource AppForegroundBrush}"
+                       SelectionBrush="{StaticResource AppSelectedBrush}"
+                       IsReadOnly="{Binding IsReadOnly, RelativeSource={RelativeSource TemplatedParent}}"/>
+              <ToggleButton Grid.Column="1"
+                            Style="{StaticResource DarkComboBoxToggleButtonStyle}"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                            ClickMode="Press"/>
+            </Grid>
+            <Popup x:Name="Popup"
+                   Placement="Bottom"
+                   PlacementTarget="{Binding ElementName=MainBorder}"
+                   VerticalOffset="-1"
+                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                   AllowsTransparency="True"
+                   Focusable="False"
+                   PopupAnimation="Fade">
+              <Border Background="{StaticResource AppSurfaceAltBrush}"
+                      BorderBrush="{StaticResource SpotifyGreenBrush}"
+                      BorderThickness="1,0,1,1"
+                      CornerRadius="0,0,2,2"
+                      MinWidth="{Binding ActualWidth, ElementName=MainBorder}">
+                <ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                  <ItemsPresenter Margin="2"/>
+                </ScrollViewer>
+              </Border>
+            </Popup>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+            </Trigger>
+            <Trigger Property="IsDropDownOpen" Value="True">
+              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+              <Setter TargetName="MainBorder" Property="BorderThickness" Value="1,1,1,0"/>
+              <Setter TargetName="MainBorder" Property="CornerRadius" Value="2,2,0,0"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type ComboBox}" BasedOn="{StaticResource DarkComboBoxStyle}"/>
+
+  <Style TargetType="{x:Type ContextMenu}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="2"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ContextMenu}">
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  Padding="{TemplateBinding Padding}">
+            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type MenuItem}">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="Padding" Value="10,6"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type MenuItem}">
+          <Grid>
+            <Border x:Name="Border"
+                    Background="{TemplateBinding Background}"
+                    Padding="{TemplateBinding Padding}">
+              <Grid>
+                <ContentPresenter ContentSource="Header"
+                                  RecognizesAccessKey="True"
+                                  VerticalAlignment="Center"/>
+                <Path x:Name="SubmenuArrow"
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Center"
+                      Visibility="Collapsed"
+                      Data="M 0,0 L 4,4 L 0,8 Z"
+                      Fill="{StaticResource AppForegroundBrush}"
+                      Margin="12,0,4,0"/>
+              </Grid>
+            </Border>
+            <Popup x:Name="PART_Popup"
+                   AllowsTransparency="True"
+                   Focusable="False"
+                   Placement="Bottom"
+                   IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                   PopupAnimation="Fade">
+              <Border Background="{StaticResource AppSurfaceBrush}"
+                      BorderBrush="{StaticResource SpotifyGreenBrush}"
+                      BorderThickness="1"
+                      Padding="2">
+                <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+              </Border>
+            </Popup>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="Role" Value="SubmenuHeader">
+              <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible"/>
+              <Setter TargetName="PART_Popup" Property="Placement" Value="Right"/>
+            </Trigger>
+            <Trigger Property="IsHighlighted" Value="True">
+              <Setter TargetName="Border" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type GroupBox}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="6"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type GroupBox}">
+          <Grid SnapsToDevicePixels="True">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0"
+                    Grid.RowSpan="2"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="2"/>
+            <Border Margin="8,0,8,0"
+                    Padding="4,0,4,0"
+                    HorizontalAlignment="Left"
+                    Background="{TemplateBinding Background}">
+              <ContentPresenter ContentSource="Header"
+                                RecognizesAccessKey="True"
+                                TextElement.Foreground="{TemplateBinding Foreground}"/>
+            </Border>
+            <ContentPresenter Grid.Row="1"
+                              Margin="{TemplateBinding Padding}"/>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type ListBox}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ListBox}">
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="2">
+            <ScrollViewer Focusable="False" Padding="{TemplateBinding Padding}">
+              <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+            </ScrollViewer>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type ListBoxItem}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="Padding" Value="4,2"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ListBoxItem}">
+          <Border x:Name="Border"
+                  Background="{TemplateBinding Background}"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Border" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter TargetName="Border" Property="Background" Value="{StaticResource AppSelectedBrush}"/>
+              <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type Menu}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type Menu}">
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{StaticResource SpotifyGreenBrush}"
+                  BorderThickness="0,0,0,1">
+            <ItemsPresenter Margin="0,2,0,2"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type StatusBar}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppMutedForegroundBrush}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type StatusBar}">
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{StaticResource SpotifyGreenBrush}"
+                  BorderThickness="1,1,0,0">
+            <ItemsPresenter/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type DataGrid}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="RowBackground" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="AlternatingRowBackground" Value="{StaticResource AppSurfaceAltBrush}"/>
+    <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+    <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="VerticalGridLinesBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="RowHeaderWidth" Value="0"/>
+  </Style>
+
+  <Style TargetType="{x:Type DataGridRow}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+  </Style>
+
+  <Style TargetType="{x:Type DataGridCell}">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="4,2"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type DataGridCell}">
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  SnapsToDevicePixels="True">
+            <ContentPresenter VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type DataGridColumnHeader}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="BorderThickness" Value="0,0,1,1"/>
+    <Setter Property="Padding" Value="6,4"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type DataGridColumnHeader}">
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}">
+            <ContentPresenter HorizontalAlignment="Left"
+                              VerticalAlignment="Center"
+                              Margin="{TemplateBinding Padding}"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type TextBox}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="CaretBrush" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="SelectionBrush" Value="{StaticResource AppSelectedBrush}"/>
+  </Style>
+
+</ResourceDictionary>

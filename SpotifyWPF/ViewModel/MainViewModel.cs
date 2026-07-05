@@ -14,16 +14,22 @@ namespace SpotifyWPF.ViewModel
         private readonly LoginPageViewModel _loginPageViewModel;
         private readonly SearchPageViewModel _searchPageViewModel;
         private readonly PlaylistsPageViewModel _playlistsPageViewModel;
+        private readonly AlbumsPageViewModel _albumsPageViewModel;
+        private readonly ArtistsPageViewModel _artistsPageViewModel;
 
         private ViewModelBase _currentPage;
 
         public MainViewModel(
             LoginPageViewModel loginPageViewModel,
             PlaylistsPageViewModel playlistsPageViewModel,
+            AlbumsPageViewModel albumsPageViewModel,
+            ArtistsPageViewModel artistsPageViewModel,
             SearchPageViewModel searchPageViewModel)
         {
             _loginPageViewModel = loginPageViewModel;
             _playlistsPageViewModel = playlistsPageViewModel;
+            _albumsPageViewModel = albumsPageViewModel;
+            _artistsPageViewModel = artistsPageViewModel;
             _searchPageViewModel = searchPageViewModel;
 
             CurrentPage = loginPageViewModel;
@@ -45,6 +51,8 @@ namespace SpotifyWPF.ViewModel
                     {
                         new MenuItemViewModel("Accounts / Login", new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) {IsChecked = true},
                         new MenuItemViewModel("Playlists", new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) {IsEnabled = false},
+                        new MenuItemViewModel("Albums", new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) {IsEnabled = false},
+                        new MenuItemViewModel("Artists", new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) {IsEnabled = false},
                         new MenuItemViewModel("Search", new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) {IsEnabled = false},
                     }
                 }
@@ -81,6 +89,12 @@ namespace SpotifyWPF.ViewModel
                 case "Playlists":
                     CurrentPage = _playlistsPageViewModel;
                     break;
+                case "Albums":
+                    CurrentPage = _albumsPageViewModel;
+                    break;
+                case "Artists":
+                    CurrentPage = _artistsPageViewModel;
+                    break;
                 case "Search":
                     CurrentPage = _searchPageViewModel;
                     break;
@@ -104,6 +118,8 @@ namespace SpotifyWPF.ViewModel
             var viewMenuItems = MenuItems.First(item => item.Header == "View").MenuItems;
 
             viewMenuItems.First(item => item.Header == "Playlists").IsEnabled = isEnabled;
+            viewMenuItems.First(item => item.Header == "Albums").IsEnabled = isEnabled;
+            viewMenuItems.First(item => item.Header == "Artists").IsEnabled = isEnabled;
             viewMenuItems.First(item => item.Header == "Search").IsEnabled = isEnabled;
         }
 
