@@ -2,6 +2,9 @@
 using SpotifyAPI.Web.Auth;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -37,13 +40,35 @@ namespace SpotifyWPF.Service
 
         public async Task LoginAsync(Action onSuccess)
         {
+            await LoginAsync(onSuccess, false);
+        }
+
+        public async Task ReauthorizeAsync(Action onSuccess)
+        {
+            ClearCachedToken();
+            await LoginAsync(onSuccess, true);
+        }
+
+        private async Task LoginAsync(Action onSuccess, bool forceReauthorization)
+        {
+            _loginSuccessAction = onSuccess;
+
+            if (!forceReauthorization && await TryLoginWithCachedTokenAsync())
+            {
+                _loginSuccessAction?.Invoke();
+                return;
+            }
+
+            await StartInteractiveLoginAsync();
+        }
+
+        private async Task StartInteractiveLoginAsync()
+        {
             var (verifier, challenge) = PKCEUtil.GenerateCodes();
 
             _verifier = verifier;
 
             await _server.Start();
-
-            _loginSuccessAction = onSuccess;
 
             var request = new LoginRequest(_server.BaseUri, _settingsProvider.SpotifyClientId,
                 LoginRequest.ResponseType.Code)
@@ -80,11 +105,8 @@ namespace SpotifyWPF.Service
                 var token = await new OAuthClient().RequestToken(
                     new PKCETokenRequest(_settingsProvider.SpotifyClientId, response.Code, _server.BaseUri, _verifier));
 
-                var authenticator = new PKCEAuthenticator(_settingsProvider.SpotifyClientId, token);
-
-                var config = SpotifyClientConfig.CreateDefault().WithAuthenticator(authenticator);
-
-                Api = new SpotifyClient(config);
+                await SaveTokenAsync(token);
+                BuildClient(token);
 
                 _loginSuccessAction?.Invoke();
             }
@@ -104,6 +126,88 @@ namespace SpotifyWPF.Service
                     GalaSoft.MvvmLight.Messaging.Messenger.Default.Send<object>(null, "LoginFailed");
                 }));
             }
+        }
+
+        private async Task<bool> TryLoginWithCachedTokenAsync()
+        {
+            var token = await LoadTokenAsync();
+
+            if (token == null)
+                return false;
+
+            try
+            {
+                BuildClient(token);
+                _privateProfile = null;
+
+                // Force a lightweight authenticated request so expired tokens refresh before the UI switches pages.
+                _privateProfile = await Api.UserProfile.Current();
+                await SaveTokenAsync(token);
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Cached Spotify token could not be used: {ex}");
+                ClearCachedToken();
+                Api = null;
+                _privateProfile = null;
+
+                return false;
+            }
+        }
+
+        private void BuildClient(PKCETokenResponse token)
+        {
+            var authenticator = new PKCEAuthenticator(_settingsProvider.SpotifyClientId, token);
+            authenticator.TokenRefreshed += (_, refreshedToken) => SaveTokenAsync(refreshedToken).GetAwaiter().GetResult();
+
+            var config = SpotifyClientConfig.CreateDefault().WithAuthenticator(authenticator);
+
+            Api = new SpotifyClient(config);
+        }
+
+        private async Task<PKCETokenResponse> LoadTokenAsync()
+        {
+            var path = GetTokenCachePath();
+
+            if (!File.Exists(path))
+                return null;
+
+            using (var stream = File.OpenRead(path))
+            {
+                return await JsonSerializer.DeserializeAsync<PKCETokenResponse>(stream);
+            }
+        }
+
+        private async Task SaveTokenAsync(PKCETokenResponse token)
+        {
+            var path = GetTokenCachePath();
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+
+            using (var stream = File.Create(path))
+            {
+                await JsonSerializer.SerializeAsync(stream, token, new JsonSerializerOptions { WriteIndented = true });
+            }
+        }
+
+        private void ClearCachedToken()
+        {
+            var path = GetTokenCachePath();
+
+            if (File.Exists(path))
+                File.Delete(path);
+
+            Api = null;
+            _privateProfile = null;
+        }
+
+        private string GetTokenCachePath()
+        {
+            var safeClientId = new string((_settingsProvider.SpotifyClientId ?? string.Empty).Where(char.IsLetterOrDigit).ToArray());
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
+            return Path.Combine(localAppData, "SpotifyWPF", "Auth", $"pkce-token-{safeClientId}.json");
         }
 
         public async Task<PrivateUser> GetPrivateProfileAsync()
