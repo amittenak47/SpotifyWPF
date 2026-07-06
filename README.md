@@ -1,3 +1,5 @@
+> Updating the code to work with the updated Spotify API endpoints and adding other features. Currently using to delete playlists. Be wary of rate limits
+
 # SpotifyWPF
 An unofficial, simple tools application for Spotify
 
