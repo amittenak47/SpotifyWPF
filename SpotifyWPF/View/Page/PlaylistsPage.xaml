@@ -8,12 +8,6 @@
              DataContext="{Binding PlaylistsPage, Source={StaticResource Locator}}"    
              d:DesignHeight="450" d:DesignWidth="800">
 
-    <i:Interaction.Triggers>
-        <i:EventTrigger EventName="Loaded">
-            <i:InvokeCommandAction Command="{Binding LoadPlaylistsCommand}"/>
-        </i:EventTrigger>
-    </i:Interaction.Triggers>
-
     <DockPanel Background="{StaticResource AppBackgroundBrush}">
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBar.ItemsPanel>
@@ -22,15 +16,27 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                     </Grid>
                 </ItemsPanelTemplate>
             </StatusBar.ItemsPanel>
             <StatusBarItem>
-                <Label Content="{Binding Status}"/>
+                <Label Content="{Binding Status, Converter={StaticResource StatusActionConverter}}"/>
             </StatusBarItem>
             <StatusBarItem Grid.Column="1" HorizontalContentAlignment="Stretch">
                 <ProgressBar IsIndeterminate="True" Height="10" Visibility="{Binding ProgressVisibility}"/>
+            </StatusBarItem>
+            <StatusBarItem Grid.Column="2">
+                <StackPanel Orientation="Horizontal" Margin="8,0,4,0">
+                    <Button Content="Execute / Pause"
+                            IsEnabled="False"
+                            Padding="12,3"
+                            Margin="0,0,8,0"/>
+                    <Button Content="Abort"
+                            Command="{Binding CancelCurrentActionCommand}"
+                            Padding="12,3"/>
+                </StackPanel>
             </StatusBarItem>
         </StatusBar>
 
@@ -42,6 +48,7 @@
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="2*"/>
+                <RowDefinition Height="8"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="12"/>
                 <RowDefinition Height="120"/>
@@ -76,19 +83,31 @@
                     </GroupBox>
 
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                        <Button Content="Load More" Command="{Binding LoadMorePlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
+                        <Label Content="Limit" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding PlaylistLoadLimit, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="44"
+                                 VerticalContentAlignment="Center"
+                                 Margin="0,0,8,0"/>
+                        <Button Content="Load" Command="{Binding LoadMorePlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
                         <Button Content="Load All" Command="{Binding LoadAllPlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
                         <Button Content="Refresh Selected"
                                 Command="{Binding RefreshSelectedPlaylistsCommand}"
                                 CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
                                 Padding="12,4"
                                 Margin="0,0,8,0"/>
-                        <Button Content="Cancel" Command="{Binding CancelCurrentActionCommand}" Padding="12,4" Margin="0,0,8,0"/>
                         <Button Content="Export" Command="{Binding ExportToJsonCommand}" Padding="12,4" Margin="0,0,8,0"/>
                         <Button Content="Import" Command="{Binding ImportFromJsonCommand}" IsEnabled="False" Padding="12,4"/>
                     </StackPanel>
 
-                    <DataGrid x:Name="PlaylistsDataGrid" ItemsSource="{Binding Playlists}" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
+                    <DataGrid x:Name="PlaylistsDataGrid"
+                              ItemsSource="{Binding Playlists}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              IsReadOnly="True"
+                              CanUserSortColumns="True"
+                              SelectionMode="Extended"
+                              SelectionUnit="FullRow"
+                              HeadersVisibility="Column">
                         <DataGrid.InputBindings>
                             <MouseBinding Gesture="LeftDoubleClick"
                                           Command="{Binding LoadTracksCommand}"
@@ -99,13 +118,25 @@
                         </DataGrid.InputBindings>
 
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" Width="*"/>
-                            <DataGridTextColumn Header="Created By" Binding="{Binding OwnerDisplayName}" IsReadOnly="True" Width="*"/>
-                            <DataGridTextColumn Header="# Tracks" Binding="{Binding TracksTotal}" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="Name" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="Owner" Binding="{Binding OwnerDisplayName}" SortMemberPath="OwnerDisplayName" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="# Tracks" Binding="{Binding TracksTotal}" SortMemberPath="TracksTotal" IsReadOnly="True" Width="Auto"/>
+                            <DataGridTextColumn Header="Spotify ID" Binding="{Binding Id}" SortMemberPath="Id" IsReadOnly="True" Width="*"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
             </GroupBox>
+
+            <GridSplitter Grid.Row="1"
+                          Grid.ColumnSpan="3"
+                          Height="8"
+                          Background="{StaticResource SpotifyGreenLineBrush}"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
+                          Cursor="SizeNS"
+                          ShowsPreview="True"
+                          ResizeBehavior="PreviousAndNext"
+                          ResizeDirection="Rows"/>
 
             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,8">
                 <Button Content="-&gt;"
@@ -121,7 +152,12 @@
             <GroupBox Grid.Column="2" Header="Staged For Deletion" Margin="0,0,0,8">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                        <Button Content="Refresh Results"
+                        <Label Content="Delete delay (ms)" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding DeleteRequestDelayMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="70"
+                                 VerticalContentAlignment="Center"
+                                 Margin="0,0,8,0"/>
+                        <Button Content="Refresh"
                                 Command="{Binding RefreshDeletionResultsCommand}"
                                 Padding="12,4"
                                 Margin="0,0,8,0"/>
@@ -129,14 +165,27 @@
                                 Command="{Binding MarkForDeletionCommand}"
                                 Padding="12,4"
                                 Margin="0,0,8,0"/>
+                        <Button Content="Unmark For Deletion"
+                                Command="{Binding UnmarkForDeletionCommand}"
+                                CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"
+                                Padding="12,4"
+                                Margin="0,0,8,0"/>
                         <Button Content="Delete"
                                 Command="{Binding DeletePlaylistsCommand}"
                                 Padding="12,4"/>
                     </StackPanel>
 
-                    <DataGrid x:Name="StagedForDeletionDataGrid" ItemsSource="{Binding StagedForDeletion}" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
+                    <DataGrid x:Name="StagedForDeletionDataGrid"
+                              ItemsSource="{Binding StagedForDeletion}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              IsReadOnly="True"
+                              CanUserSortColumns="True"
+                              SelectionMode="Extended"
+                              SelectionUnit="FullRow"
+                              HeadersVisibility="Column">
                         <DataGrid.RowStyle>
-                            <Style TargetType="{x:Type DataGridRow}">
+                            <Style TargetType="{x:Type DataGridRow}" BasedOn="{StaticResource {x:Type DataGridRow}}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding DeletionStatusName}" Value="Deleted">
                                         <Setter Property="Background" Value="#8B2E2E"/>
@@ -157,29 +206,30 @@
                         </DataGrid.InputBindings>
 
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Playlist.Name}" IsReadOnly="True" Width="*"/>
-                            <DataGridTextColumn Header="Created By" Binding="{Binding Playlist.OwnerDisplayName}" IsReadOnly="True" Width="*"/>
-                            <DataGridTextColumn Header="# Tracks" Binding="{Binding Playlist.TracksTotal}" IsReadOnly="True" Width="*"/>
-                            <DataGridTextColumn Header="Queue" Binding="{Binding MarkStatus}" IsReadOnly="True" Width="Auto"/>
-                            <DataGridTextColumn Header="Delete Status" Binding="{Binding DeletionStatusName}" IsReadOnly="True" Width="Auto"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Playlist.Name}" SortMemberPath="Playlist.Name" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="Owner" Binding="{Binding Playlist.OwnerDisplayName}" SortMemberPath="Playlist.OwnerDisplayName" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="# Tracks" Binding="{Binding Playlist.TracksTotal}" SortMemberPath="Playlist.TracksTotal" IsReadOnly="True" Width="Auto"/>
+                            <DataGridTextColumn Header="Spotify ID" Binding="{Binding Playlist.Id}" SortMemberPath="Playlist.Id" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="Queue" Binding="{Binding MarkStatus}" SortMemberPath="MarkStatus" IsReadOnly="True" Width="Auto"/>
+                            <DataGridTextColumn Header="Delete Status" Binding="{Binding DeletionStatusName}" SortMemberPath="DeletionStatusName" IsReadOnly="True" Width="Auto"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
             </GroupBox>
 
-            <GroupBox Grid.Row="1" Grid.ColumnSpan="3" Header="Tracks">
+            <GroupBox Grid.Row="2" Grid.ColumnSpan="3" Header="Tracks">
                 <DataGrid x:Name="TracksDataGrid" ItemsSource="{Binding Tracks}" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Name" Binding="{Binding TrackName}" IsReadOnly="True" Width="*"/>
-                        <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}" IsReadOnly="True" Width="*"/>
+                        <DataGridTextColumn Header="Name" Binding="{Binding TrackName}" SortMemberPath="TrackName" IsReadOnly="True" Width="*"/>
+                        <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}" SortMemberPath="Artists" IsReadOnly="True" Width="*"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </GroupBox>
 
-            <GridSplitter Grid.Row="2"
+            <GridSplitter Grid.Row="3"
                           Grid.ColumnSpan="3"
                           Height="12"
-                          Background="Transparent"
+                          Background="{StaticResource SpotifyGreenLineBrush}"
                           HorizontalAlignment="Stretch"
                           VerticalAlignment="Stretch"
                           Cursor="SizeNS"
@@ -187,7 +237,7 @@
                           ResizeBehavior="PreviousAndNext"
                           ResizeDirection="Rows"/>
 
-            <GroupBox Grid.Row="3" Grid.ColumnSpan="3" Margin="0,8,0,0">
+            <GroupBox Grid.Row="4" Grid.ColumnSpan="3" Margin="0,8,0,0">
                 <GroupBox.Header>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Logs" VerticalAlignment="Center"/>
