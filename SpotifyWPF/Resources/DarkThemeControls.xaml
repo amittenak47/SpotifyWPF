@@ -403,6 +403,15 @@
   <Style TargetType="{x:Type DataGridRow}">
     <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
     <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True">
+        <Setter Property="Background" Value="{StaticResource AppHoverBrush}"/>
+      </Trigger>
+      <Trigger Property="IsSelected" Value="True">
+        <Setter Property="Background" Value="{StaticResource AppSelectedBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <Style TargetType="{x:Type DataGridCell}">
@@ -414,12 +423,19 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type DataGridCell}">
-          <Border Background="{TemplateBinding Background}"
+          <Border x:Name="CellBorder"
+                  Background="{TemplateBinding Background}"
                   BorderBrush="{TemplateBinding BorderBrush}"
                   BorderThickness="{TemplateBinding BorderThickness}"
                   SnapsToDevicePixels="True">
             <ContentPresenter VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
           </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter TargetName="CellBorder" Property="Background" Value="{StaticResource AppSelectedBrush}"/>
+              <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
@@ -437,9 +453,116 @@
           <Border Background="{TemplateBinding Background}"
                   BorderBrush="{TemplateBinding BorderBrush}"
                   BorderThickness="{TemplateBinding BorderThickness}">
-            <ContentPresenter HorizontalAlignment="Left"
-                              VerticalAlignment="Center"
-                              Margin="{TemplateBinding Padding}"/>
+            <Grid Margin="{TemplateBinding Padding}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <ContentPresenter HorizontalAlignment="Left"
+                                VerticalAlignment="Center"/>
+              <Path x:Name="SortGlyph"
+                    Grid.Column="1"
+                    Width="8"
+                    Height="5"
+                    Margin="8,0,0,0"
+                    Stretch="Fill"
+                    Fill="{StaticResource SpotifyGreenBrush}"
+                    Visibility="Collapsed"/>
+            </Grid>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="SortDirection" Value="Ascending">
+              <Setter TargetName="SortGlyph" Property="Visibility" Value="Visible"/>
+              <Setter TargetName="SortGlyph" Property="Data" Value="M 0,5 L 4,0 L 8,5 Z"/>
+            </Trigger>
+            <Trigger Property="SortDirection" Value="Descending">
+              <Setter TargetName="SortGlyph" Property="Visibility" Value="Visible"/>
+              <Setter TargetName="SortGlyph" Property="Data" Value="M 0,0 L 4,5 L 8,0 Z"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type Thumb}">
+    <Setter Property="Background" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type Thumb}">
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{StaticResource SpotifyGreenBrush}"
+                  BorderThickness="1"
+                  CornerRadius="3"/>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="DarkScrollBarLineButtonStyle" TargetType="{x:Type RepeatButton}">
+    <Setter Property="Focusable" Value="False"/>
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type RepeatButton}">
+          <Border Background="{TemplateBinding Background}"/>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type ScrollBar}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="Width" Value="12"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ScrollBar}">
+          <Grid Background="{TemplateBinding Background}">
+            <Track x:Name="PART_Track"
+                   IsDirectionReversed="True">
+              <Track.DecreaseRepeatButton>
+                <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}"
+                              Style="{StaticResource DarkScrollBarLineButtonStyle}"/>
+              </Track.DecreaseRepeatButton>
+              <Track.Thumb>
+                <Thumb Background="{StaticResource SpotifyGreenLineBrush}"/>
+              </Track.Thumb>
+              <Track.IncreaseRepeatButton>
+                <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}"
+                              Style="{StaticResource DarkScrollBarLineButtonStyle}"/>
+              </Track.IncreaseRepeatButton>
+            </Track>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+              <Setter Property="Height" Value="12"/>
+              <Setter Property="Width" Value="Auto"/>
+              <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="{x:Type ProgressBar}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ProgressBar}">
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}">
+            <Grid x:Name="PART_Track"
+                  ClipToBounds="True">
+              <Rectangle x:Name="PART_Indicator"
+                         HorizontalAlignment="Left"
+                         Fill="{TemplateBinding Foreground}"/>
+            </Grid>
           </Border>
         </ControlTemplate>
       </Setter.Value>

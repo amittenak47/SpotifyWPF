@@ -9,10 +9,16 @@
     <DockPanel Margin="8" Background="{StaticResource AppBackgroundBrush}">
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem>
-                <Label Content="{Binding Status}"/>
+                <Label Content="{Binding Status, Converter={StaticResource StatusActionConverter}}"/>
             </StatusBarItem>
             <StatusBarItem HorizontalContentAlignment="Stretch">
                 <ProgressBar IsIndeterminate="True" Height="10" Visibility="{Binding ProgressVisibility}"/>
+            </StatusBarItem>
+            <StatusBarItem>
+                <Button Content="Abort"
+                        Command="{Binding CancelCurrentActionCommand}"
+                        Padding="12,3"
+                        Margin="8,0,4,0"/>
             </StatusBarItem>
         </StatusBar>
 
@@ -30,7 +36,6 @@
                         CommandParameter="{Binding ElementName=AlbumsDataGrid, Path=SelectedItems}"
                         Padding="12,4"
                         Margin="0,0,8,0"/>
-                <Button Content="Cancel" Command="{Binding CancelCurrentActionCommand}" Padding="12,4" Margin="0,0,16,0"/>
                 <Label Content="Filter:" VerticalAlignment="Center"/>
                 <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}" Width="220" VerticalContentAlignment="Center"/>
             </WrapPanel>
