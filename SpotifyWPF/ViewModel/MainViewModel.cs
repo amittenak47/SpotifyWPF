@@ -84,6 +84,7 @@ namespace SpotifyWPF.ViewModel
             switch (menuItem.Header)
             {
                 case "Accounts / Login":
+                    _loginPageViewModel.ResetLoginState();
                     CurrentPage = _loginPageViewModel;
                     break;
                 case "Playlists":

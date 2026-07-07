@@ -10,6 +10,8 @@ namespace SpotifyWPF.Service
 
         Task ReauthorizeAsync(Action onSuccess);
 
+        void ResetAuthenticationState();
+
         Task<PrivateUser> GetPrivateProfileAsync();
 
         ISpotifyClient Api { get; }
