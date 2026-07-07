@@ -69,6 +69,12 @@ namespace SpotifyWPF.ViewModel.Page
             });
         }
 
+        public void ResetLoginState()
+        {
+            _spotify.ResetAuthenticationState();
+            IsLoggingIn = false;
+        }
+
         private async void ExecuteLogin()
         {
             try

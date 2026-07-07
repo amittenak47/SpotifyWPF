@@ -67,10 +67,61 @@
       <Style TargetType="{x:Type TabControl}">
         <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+        <Setter Property="Padding" Value="0"/>
       </Style>
       <Style TargetType="{x:Type TabItem}">
-        <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
+        <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource AppMutedForegroundBrush}"/>
+        <Setter Property="Padding" Value="14,6"/>
+        <Setter Property="Margin" Value="0,0,4,0"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="{x:Type TabItem}">
+              <Border x:Name="TabBorder"
+                      Background="{TemplateBinding Background}"
+                      BorderBrush="{StaticResource AppBorderBrush}"
+                      BorderThickness="1,1,1,0"
+                      CornerRadius="4,4,0,0"
+                      Padding="{TemplateBinding Padding}"
+                      Margin="{TemplateBinding Margin}">
+                <ContentPresenter x:Name="ContentSite"
+                                  ContentSource="Header"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  TextElement.Foreground="{TemplateBinding Foreground}"/>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                  <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
+                  <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+                  <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+                  <Setter Property="Panel.ZIndex" Value="1"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <Style TargetType="{x:Type TreeView}">
+        <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+      </Style>
+      <Style TargetType="{x:Type TreeViewItem}">
+        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        <Setter Property="Padding" Value="2"/>
+        <Style.Resources>
+          <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#1F6F43"/>
+          <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#F5F5F5"/>
+          <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#2D2D2D"/>
+        </Style.Resources>
       </Style>
       <Style TargetType="{x:Type StatusBarItem}">
         <Setter Property="Foreground" Value="{StaticResource AppMutedForegroundBrush}"/>

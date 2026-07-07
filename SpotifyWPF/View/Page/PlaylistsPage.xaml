@@ -29,8 +29,13 @@
             </StatusBarItem>
             <StatusBarItem Grid.Column="2">
                 <StackPanel Orientation="Horizontal" Margin="8,0,4,0">
-                    <Button Content="Execute / Pause"
-                            IsEnabled="False"
+                    <Label Content="Request spacing (ms)" VerticalAlignment="Center"/>
+                    <TextBox Text="{Binding RequestSpacingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                             Width="56"
+                             VerticalContentAlignment="Center"
+                             Margin="0,0,8,0"/>
+                    <Button Content="{Binding ExecuteOrPauseButtonLabel}"
+                            Command="{Binding ExecuteOrPauseCommand}"
                             Padding="12,3"
                             Margin="0,0,8,0"/>
                     <Button Content="Abort"
@@ -90,6 +95,16 @@
                                  Margin="0,0,8,0"/>
                         <Button Content="Load" Command="{Binding LoadMorePlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
                         <Button Content="Load All" Command="{Binding LoadAllPlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
+                        <Button Content="Enqueue Load"
+                                Command="{Binding EnqueueLoadLimitCommand}"
+                                Focusable="False"
+                                Padding="12,4"
+                                Margin="0,0,8,0"/>
+                        <Button Content="Enqueue Load All"
+                                Command="{Binding EnqueueLoadAllCommand}"
+                                Focusable="False"
+                                Padding="12,4"
+                                Margin="0,0,8,0"/>
                         <Button Content="Refresh Selected"
                                 Command="{Binding RefreshSelectedPlaylistsCommand}"
                                 CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
@@ -142,32 +157,38 @@
                 <Button Content="-&gt;"
                         Command="{Binding StagePlaylistsCommand}"
                         CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
+                        Focusable="False"
                         Padding="12,4" Margin="0,0,0,8"/>
                 <Button Content="&lt;-"
                         Command="{Binding UnstagePlaylistsCommand}"
                         CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"
+                        Focusable="False"
                         Padding="12,4"/>
             </StackPanel>
 
             <GroupBox Grid.Column="2" Header="Staged For Deletion" Margin="0,0,0,8">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                        <Label Content="Delete delay (ms)" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding DeleteRequestDelayMilliseconds, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="70"
-                                 VerticalContentAlignment="Center"
-                                 Margin="0,0,8,0"/>
                         <Button Content="Refresh"
                                 Command="{Binding RefreshDeletionResultsCommand}"
                                 Padding="12,4"
                                 Margin="0,0,8,0"/>
                         <Button Content="Mark For Deletion"
                                 Command="{Binding MarkForDeletionCommand}"
+                                CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"
+                                Focusable="False"
                                 Padding="12,4"
                                 Margin="0,0,8,0"/>
                         <Button Content="Unmark For Deletion"
                                 Command="{Binding UnmarkForDeletionCommand}"
                                 CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"
+                                Focusable="False"
+                                Padding="12,4"
+                                Margin="0,0,8,0"/>
+                        <Button Content="Enqueue Delete"
+                                Command="{Binding EnqueueDeleteSelectionCommand}"
+                                CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"
+                                Focusable="False"
                                 Padding="12,4"
                                 Margin="0,0,8,0"/>
                         <Button Content="Delete"
@@ -238,34 +259,62 @@
                           ResizeDirection="Rows"/>
 
             <GroupBox Grid.Row="4" Grid.ColumnSpan="3" Margin="0,8,0,0">
-                <GroupBox.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Logs" VerticalAlignment="Center"/>
-                        <TextBlock Text="Filter" VerticalAlignment="Center" Margin="16,0,4,0"/>
-                        <ComboBox ItemsSource="{Binding LogFilterOptions}"
-                                  SelectedItem="{Binding SelectedLogFilter}"
-                                  Style="{StaticResource DarkComboBoxStyle}"
-                                  Width="100"
-                                  VerticalAlignment="Center"
-                                  Padding="6,2"/>
-                    </StackPanel>
-                </GroupBox.Header>
+                <TabControl>
+                    <TabItem Header="Logs">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top"
+                                        Orientation="Horizontal"
+                                        Margin="0,0,0,8">
+                                <TextBlock Text="Filter"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+                                <ComboBox ItemsSource="{Binding LogFilterOptions}"
+                                          SelectedItem="{Binding SelectedLogFilter}"
+                                          Style="{StaticResource DarkComboBoxStyle}"
+                                          Width="120"
+                                          VerticalAlignment="Center"
+                                          Padding="6,2"/>
+                            </StackPanel>
 
-                <ListBox x:Name="LogMessagesListBox"
-                         ItemsSource="{Binding LogMessages}"
-                         FontFamily="Consolas"
-                         FontSize="11"
-                         SelectionMode="Extended">
-                    <ListBox.ContextMenu>
-                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                            <MenuItem Header="Copy Selected"
-                                      Command="{Binding CopySelectedLogMessagesCommand}"
-                                      CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                            <MenuItem Header="Copy All"
-                                      Command="{Binding CopyAllLogMessagesCommand}"/>
-                        </ContextMenu>
-                    </ListBox.ContextMenu>
-                </ListBox>
+                            <ListBox x:Name="LogMessagesListBox"
+                                     ItemsSource="{Binding LogMessages}"
+                                     FontFamily="Consolas"
+                                     FontSize="11"
+                                     SelectionMode="Extended">
+                                <ListBox.ContextMenu>
+                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <MenuItem Header="Copy Selected"
+                                                  Command="{Binding CopySelectedLogMessagesCommand}"
+                                                  CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        <MenuItem Header="Copy All"
+                                                  Command="{Binding CopyAllLogMessagesCommand}"/>
+                                    </ContextMenu>
+                                </ListBox.ContextMenu>
+                            </ListBox>
+                        </DockPanel>
+                    </TabItem>
+
+                    <TabItem Header="Actions">
+                        <TreeView x:Name="QueuedActionsTreeView"
+                                  ItemsSource="{Binding QueuedActions}"
+                                  FontFamily="Consolas"
+                                  FontSize="11"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  PreviewKeyDown="QueuedActionsTreeView_PreviewKeyDown">
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding DetailItems}">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                    <HierarchicalDataTemplate.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" Margin="4,1,0,1"/>
+                                        </DataTemplate>
+                                    </HierarchicalDataTemplate.ItemTemplate>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </TabItem>
+                </TabControl>
             </GroupBox>
         </Grid>
     </DockPanel>

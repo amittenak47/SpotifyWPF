@@ -22,6 +22,8 @@ namespace SpotifyWPF.Service
 
         private Action _loginSuccessAction;
 
+        private bool _isAuthServerRunning;
+
         private string _verifier;
 
         public ISpotifyClient Api { get; private set; }
@@ -49,6 +51,13 @@ namespace SpotifyWPF.Service
             await LoginAsync(onSuccess, true);
         }
 
+        public void ResetAuthenticationState()
+        {
+            _loginSuccessAction = null;
+            _verifier = null;
+            StopAuthServerAsync().GetAwaiter().GetResult();
+        }
+
         private async Task LoginAsync(Action onSuccess, bool forceReauthorization)
         {
             _loginSuccessAction = onSuccess;
@@ -64,11 +73,14 @@ namespace SpotifyWPF.Service
 
         private async Task StartInteractiveLoginAsync()
         {
+            await StopAuthServerAsync();
+
             var (verifier, challenge) = PKCEUtil.GenerateCodes();
 
             _verifier = verifier;
 
             await _server.Start();
+            _isAuthServerRunning = true;
 
             var request = new LoginRequest(_server.BaseUri, _settingsProvider.SpotifyClientId,
                 LoginRequest.ResponseType.Code)
@@ -95,14 +107,15 @@ namespace SpotifyWPF.Service
 
         private async Task OnErrorReceived(object sender, string error, string state)
         {
-            await _server.Stop();
+            await StopAuthServerAsync();
+            NotifyLoginFailed($"Spotify authorization failed: {error}");
         }
 
         private async Task OnAuthorizationCodeReceived(object sender, AuthorizationCodeResponse response)
         {
             try
             {
-                await _server.Stop();
+                await StopAuthServerAsync();
 
                 var token = await new OAuthClient().RequestToken(
                     new PKCETokenRequest(_settingsProvider.SpotifyClientId, response.Code, _server.BaseUri, _verifier));
@@ -111,23 +124,49 @@ namespace SpotifyWPF.Service
                 BuildClient(token);
 
                 _loginSuccessAction?.Invoke();
+                _loginSuccessAction = null;
             }
             catch (Exception ex)
             {
-                // 1. Reveal the hidden error on the UI thread
-                _ = System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                _loginSuccessAction = null;
+                NotifyLoginFailed($"Failed to retrieve token from Spotify:\n{ex.Message}");
+            }
+        }
+
+        private async Task StopAuthServerAsync()
+        {
+            if (!_isAuthServerRunning)
+                return;
+
+            try
+            {
+                await _server.Stop();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to stop Spotify auth server: {ex}");
+            }
+            finally
+            {
+                _isAuthServerRunning = false;
+            }
+        }
+
+        private static void NotifyLoginFailed(string message)
+        {
+            _ = System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (!string.IsNullOrWhiteSpace(message))
                 {
                     System.Windows.MessageBox.Show(
-                        $"Failed to retrieve token from Spotify:\n{ex.Message}",
+                        message,
                         "Authentication Error",
                         System.Windows.MessageBoxButton.OK,
                         System.Windows.MessageBoxImage.Error);
+                }
 
-                    // 2. Send a failure message to the ViewModel to unlock the login button
-
-                    GalaSoft.MvvmLight.Messaging.Messenger.Default.Send<object>(null, "LoginFailed");
-                }));
-            }
+                GalaSoft.MvvmLight.Messaging.Messenger.Default.Send<object>(null, "LoginFailed");
+            }));
         }
 
         private async Task<bool> TryLoginWithCachedTokenAsync()
