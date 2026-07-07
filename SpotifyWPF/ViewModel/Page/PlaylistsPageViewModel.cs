@@ -59,6 +59,10 @@ namespace SpotifyWPF.ViewModel.Page
 
         private bool _newPlaylistIsCollaborative;
 
+        private string _playlistsFilterText;
+
+        private string _stagedPlaylistsFilterText;
+
         private int _playlistLoadLimit = 50;
 
         private readonly SemaphoreSlim _requestSpacing = new SemaphoreSlim(1, 1);
@@ -97,6 +101,10 @@ namespace SpotifyWPF.ViewModel.Page
             ExportToJsonCommand = new RelayCommand(ExportToJson);
             ImportFromJsonCommand = new RelayCommand(() => { }, () => false);
             CreatePlaylistCommand = new RelayCommand(async () => await CreatePlaylistAsync(), CanCreatePlaylist);
+            ApplyPlaylistsFilterCommand = new RelayCommand(RefreshGridFromLocalFiles);
+            ClearPlaylistsFilterCommand = new RelayCommand(ClearPlaylistsFilter);
+            ApplyStagedPlaylistsFilterCommand = new RelayCommand(RefreshGridFromLocalFiles);
+            ClearStagedPlaylistsFilterCommand = new RelayCommand(ClearStagedPlaylistsFilter);
             EnqueueLoadLimitCommand = new RelayCommand(EnqueueLoadLimit, CanEnqueueActions);
             EnqueueLoadAllCommand = new RelayCommand(EnqueueLoadAll, CanEnqueueActions);
             EnqueueDeleteSelectionCommand = new RelayCommand<IList>(EnqueueDeleteSelection, CanEnqueueDeleteSelection);
@@ -160,13 +168,45 @@ namespace SpotifyWPF.ViewModel.Page
         public bool NewPlaylistIsCollaborative
         {
             get => _newPlaylistIsCollaborative;
-            set => Set(ref _newPlaylistIsCollaborative, value);
+            set
+            {
+                if (Set(ref _newPlaylistIsCollaborative, value) && value)
+                    NewPlaylistIsPublic = false;
+            }
+        }
+
+        private string _tracksPlaylistTitle = "Tracks";
+
+        public string TracksPlaylistTitle
+        {
+            get => _tracksPlaylistTitle;
+            private set => Set(ref _tracksPlaylistTitle, value);
         }
 
         public int PlaylistLoadLimit
         {
             get => _playlistLoadLimit;
             set => Set(ref _playlistLoadLimit, Math.Max(1, Math.Min(50, value)));
+        }
+
+        public string PlaylistsFilterText
+        {
+            get => _playlistsFilterText;
+            set
+            {
+                if (Set(ref _playlistsFilterText, value))
+                    RefreshGridFromLocalFiles();
+            }
+        }
+
+        public string StagedPlaylistsFilterText
+        {
+            get => _stagedPlaylistsFilterText;
+            set
+            {
+                if (Set(ref _stagedPlaylistsFilterText, value))
+                    RefreshGridFromLocalFiles();
+            }
         }
 
         private int _requestSpacingMilliseconds = 150;
@@ -279,6 +319,14 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand ImportFromJsonCommand { get; }
 
         public RelayCommand CreatePlaylistCommand { get; }
+
+        public RelayCommand ApplyPlaylistsFilterCommand { get; }
+
+        public RelayCommand ClearPlaylistsFilterCommand { get; }
+
+        public RelayCommand ApplyStagedPlaylistsFilterCommand { get; }
+
+        public RelayCommand ClearStagedPlaylistsFilterCommand { get; }
 
         public RelayCommand EnqueueLoadLimitCommand { get; }
 
@@ -1184,18 +1232,38 @@ namespace SpotifyWPF.ViewModel.Page
 
             try
             {
+                if (_spotify.Api == null)
+                {
+                    Log("Spotify API client is not available yet. Complete login before creating playlists.");
+                    Status = "Login required before creating playlists.";
+                    return;
+                }
+
+                var currentUser = await _spotify.GetPrivateProfileAsync();
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (currentUser == null || string.IsNullOrWhiteSpace(currentUser.Id))
+                {
+                    Log("Unable to create playlist because the current Spotify user profile is unavailable.");
+                    Status = "Failed to create playlist.";
+                    return;
+                }
+
                 var playlistName = NewPlaylistName.Trim();
                 Status = $"Creating playlist {playlistName}...";
-                Log($"Creating playlist '{playlistName}'.");
+                Log($"Creating playlist '{playlistName}' for user {currentUser.Id}.");
+
+                var isCollaborative = NewPlaylistIsCollaborative;
+                var isPublic = NewPlaylistIsPublic && !isCollaborative;
 
                 var request = new PlaylistCreateRequest(playlistName)
                 {
                     Description = string.IsNullOrWhiteSpace(NewPlaylistDescription) ? null : NewPlaylistDescription.Trim(),
-                    Public = NewPlaylistIsPublic,
-                    Collaborative = !NewPlaylistIsPublic && NewPlaylistIsCollaborative
+                    Public = isPublic,
+                    Collaborative = isCollaborative
                 };
 
-                var createdPlaylist = await _spotify.Api.Playlists.Create(request, cancellationToken);
+                var createdPlaylist = await _spotify.Api.Playlists.Create(currentUser.Id, request, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
 
                 SaveAvailablePlaylists(new[] { ToPlaylistCacheItem(createdPlaylist) });
@@ -1207,7 +1275,7 @@ namespace SpotifyWPF.ViewModel.Page
                 NewPlaylistIsCollaborative = false;
 
                 Log($"Created playlist '{createdPlaylist.Name}' ({createdPlaylist.Id}) and added it to the local cache.");
-                Status = "Ready";
+                Status = $"Created playlist '{createdPlaylist.Name}'.";
             }
             catch (APITooManyRequestsException ex)
             {
@@ -1619,10 +1687,15 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void RefreshGridFromLocalFiles()
         {
+            var playlistsFilter = PlaylistsFilterText?.Trim();
+            var stagedFilter = StagedPlaylistsFilterText?.Trim();
+
             var availablePlaylists = LoadAvailablePlaylistDictionary().Values
+                .Where(playlist => MatchesPlaylistFilter(playlist, playlistsFilter))
                 .OrderBy(playlist => playlist.Name)
                 .ToList();
             var deletionQueue = LoadDeletionQueueDictionary().Values
+                .Where(item => MatchesPlaylistFilter(item.Playlist, stagedFilter))
                 .OrderBy(playlist => playlist.Playlist?.Name)
                 .ToList();
 
@@ -1638,6 +1711,29 @@ namespace SpotifyWPF.ViewModel.Page
             }));
         }
 
+        private static bool MatchesPlaylistFilter(PlaylistCacheItem playlist, string filter)
+        {
+            if (playlist == null) return false;
+
+            if (string.IsNullOrWhiteSpace(filter))
+                return true;
+
+            return (playlist.Name?.IndexOf(filter, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0
+                   || (playlist.OwnerDisplayName?.IndexOf(filter, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0
+                   || (playlist.OwnerId?.IndexOf(filter, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0
+                   || (playlist.Id?.IndexOf(filter, StringComparison.OrdinalIgnoreCase) ?? -1) >= 0;
+        }
+
+        private void ClearPlaylistsFilter()
+        {
+            PlaylistsFilterText = string.Empty;
+        }
+
+        private void ClearStagedPlaylistsFilter()
+        {
+            StagedPlaylistsFilterText = string.Empty;
+        }
+
         private static bool PlaylistCollectionsMatch(IList<PlaylistCacheItem> currentItems, IList<PlaylistCacheItem> newItems)
         {
             if (currentItems.Count != newItems.Count) return false;
@@ -1650,6 +1746,7 @@ namespace SpotifyWPF.ViewModel.Page
                 if (current.Id != next.Id ||
                     current.Name != next.Name ||
                     current.OwnerDisplayName != next.OwnerDisplayName ||
+                    current.OwnerId != next.OwnerId ||
                     current.TracksTotal != next.TracksTotal)
                     return false;
             }
@@ -1669,6 +1766,7 @@ namespace SpotifyWPF.ViewModel.Page
                 if (current.Playlist?.Id != next.Playlist?.Id ||
                     current.Playlist?.Name != next.Playlist?.Name ||
                     current.Playlist?.OwnerDisplayName != next.Playlist?.OwnerDisplayName ||
+                    current.Playlist?.OwnerId != next.Playlist?.OwnerId ||
                     current.Playlist?.TracksTotal != next.Playlist?.TracksTotal ||
                     current.IsMarkedForDeletion != next.IsMarkedForDeletion ||
                     current.DeletionStatus != next.DeletionStatus ||
@@ -1795,6 +1893,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 Id = playlist.Id,
                 Name = playlist.Name,
+                OwnerId = playlist.Owner?.Id,
                 OwnerDisplayName = playlist.Owner?.DisplayName ?? playlist.Owner?.Id,
                 TracksTotal = playlist.Tracks?.Total,
                 SnapshotUpdatedAtUtc = DateTime.UtcNow
@@ -1953,37 +2052,103 @@ namespace SpotifyWPF.ViewModel.Page
 
         public async Task LoadTracksAsync(PlaylistCacheItem playlist)
         {
-            if (playlist == null) return;
+            if (playlist == null)
+            {
+                Log("Select a playlist before loading tracks.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(playlist.Id))
+            {
+                Log($"Cannot load tracks for playlist '{playlist.Name ?? "(unnamed)"}' because it has no Spotify ID.");
+                Status = "Failed to load tracks.";
+                return;
+            }
+
+            if (_spotify.Api == null)
+            {
+                Log("Spotify API client is not available yet. Complete login before loading tracks.");
+                Status = "Login required before loading tracks.";
+                return;
+            }
 
             var cancellationToken = BeginCancelableAction();
 
             try
             {
-                Status = "Loading tracks...";
+                TracksPlaylistTitle = $"Tracks — {playlist.Name ?? "(unnamed)"}";
+                Status = $"Loading tracks for {playlist.Name}...";
+                Log($"Loading tracks for playlist '{playlist.Name}' ({playlist.Id}).");
 
-                await Application.Current.Dispatcher.BeginInvoke((Action) (() => { Tracks.Clear(); }));
+                var currentUser = await _spotify.GetPrivateProfileAsync();
+                cancellationToken.ThrowIfCancellationRequested();
 
-                var req = new PlaylistGetItemsRequest { Limit = 100 };
-                var page = await _spotify.Api.Playlists.GetItems(playlist.Id, req);
+                if (currentUser != null)
+                {
+                    Log($"Track load context: playlistOwner={playlist.OwnerDisplayName ?? playlist.OwnerId ?? "(unknown)"}, currentUser={currentUser.DisplayName ?? currentUser.Id} ({currentUser.Id}).", true);
+
+                    if (!string.IsNullOrWhiteSpace(playlist.OwnerId) &&
+                        !string.Equals(playlist.OwnerId, currentUser.Id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Log("Note: Spotify only returns playlist track items for playlists you own or collaborate on. This playlist appears to belong to another account.");
+                    }
+                }
+
+                await Application.Current.Dispatcher.InvokeAsync(() => Tracks.Clear());
+
+                var request = new PlaylistGetItemsRequest(PlaylistGetItemsRequest.AdditionalTypes.All)
+                {
+                    Limit = 100,
+                    Offset = 0
+                };
+
+                var page = await _spotify.Api.Playlists.GetItems(playlist.Id, request, cancellationToken);
+                var loadedCount = 0;
+                var position = 1;
 
                 while (page != null)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var tracks = page.Items.Select(item => _mapper.Map<Track>(item)).ToList();
 
-                    await Application.Current.Dispatcher.BeginInvoke((Action) (() =>
+                    var mappedTracks = page.Items
+                        .Select(item => AutoMapperConfiguration.MapPlaylistItem(item, position++))
+                        .ToList();
+
+                    loadedCount += mappedTracks.Count;
+
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        foreach (var track in tracks)
+                        foreach (var track in mappedTracks)
                             Tracks.Add(track);
-                    }));
+                    });
 
-                    if (page.Next != null)
-                        page = await _spotify.Api.NextPage(page);
-                    else
+                    Log($"Loaded playlist track page: offset={page.Offset?.ToString() ?? "unknown"}, items={mappedTracks.Count}, loadedTotal={loadedCount}.", true);
+
+                    if (page.Next == null)
                         break;
+
+                    await WaitForRequestSpacingAsync(cancellationToken);
+                    page = await _spotify.Api.NextPage(page);
                 }
 
-                Status = "Ready";
+                Log($"Loaded {loadedCount} track(s) for playlist '{playlist.Name}'.");
+                Status = loadedCount == 0
+                    ? $"No tracks found in '{playlist.Name}'."
+                    : $"Loaded {loadedCount} track(s) from '{playlist.Name}'.";
+            }
+            catch (APIException ex) when (IsPlaylistTracksForbidden(ex))
+            {
+                Log("Spotify returned Forbidden for playlist tracks. Web Playback is not required for this feature.");
+                Log("Spotify only allows Get Playlist Items for playlists you own or where you are a collaborator. Followed/liked playlists from other users will return 403.");
+                Log($"Track load forbidden response: {ex.Message}", true);
+                Status = "Forbidden: track list only available for your own or collaborative playlists.";
+            }
+            catch (APITooManyRequestsException ex)
+            {
+                var retryDelay = GetRetryDelay(ex);
+                Log($"Spotify rate limited track loading. Retry after {FormatRetryDelay(retryDelay)}.");
+                Log($"Track load rate-limit exception: {ex}", true);
+                Status = $"Rate limited. Retry after {FormatRetryDelay(retryDelay)}.";
             }
             catch (OperationCanceledException)
             {
@@ -2001,6 +2166,11 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
+        private static bool IsPlaylistTracksForbidden(APIException ex)
+        {
+            return ex != null && ex.Message?.IndexOf("Forbidden", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         public class PlaylistCacheItem
         {
             public string Id { get; set; }
@@ -2008,6 +2178,8 @@ namespace SpotifyWPF.ViewModel.Page
             public string Name { get; set; }
 
             public string OwnerDisplayName { get; set; }
+
+            public string OwnerId { get; set; }
 
             public int? TracksTotal { get; set; }
 

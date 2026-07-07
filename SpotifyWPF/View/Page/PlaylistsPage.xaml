@@ -87,6 +87,23 @@
                         </WrapPanel>
                     </GroupBox>
 
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Label Content="Search" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding PlaylistsFilterText, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="180"
+                                 VerticalContentAlignment="Center"
+                                 Margin="0,0,8,0"/>
+                        <Button Content="Search"
+                                Command="{Binding ApplyPlaylistsFilterCommand}"
+                                Focusable="False"
+                                Padding="12,4"
+                                Margin="0,0,8,0"/>
+                        <Button Content="Clear"
+                                Command="{Binding ClearPlaylistsFilterCommand}"
+                                Focusable="False"
+                                Padding="12,4"/>
+                    </StackPanel>
+
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                         <Label Content="Limit" VerticalAlignment="Center"/>
                         <TextBox Text="{Binding PlaylistLoadLimit, UpdateSourceTrigger=PropertyChanged}"
@@ -168,6 +185,23 @@
 
             <GroupBox Grid.Column="2" Header="Staged For Deletion" Margin="0,0,0,8">
                 <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Label Content="Search" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding StagedPlaylistsFilterText, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="180"
+                                 VerticalContentAlignment="Center"
+                                 Margin="0,0,8,0"/>
+                        <Button Content="Search"
+                                Command="{Binding ApplyStagedPlaylistsFilterCommand}"
+                                Focusable="False"
+                                Padding="12,4"
+                                Margin="0,0,8,0"/>
+                        <Button Content="Clear"
+                                Command="{Binding ClearStagedPlaylistsFilterCommand}"
+                                Focusable="False"
+                                Padding="12,4"/>
+                    </StackPanel>
+
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                         <Button Content="Refresh"
                                 Command="{Binding RefreshDeletionResultsCommand}"
@@ -238,13 +272,41 @@
                 </DockPanel>
             </GroupBox>
 
-            <GroupBox Grid.Row="2" Grid.ColumnSpan="3" Header="Tracks">
-                <DataGrid x:Name="TracksDataGrid" ItemsSource="{Binding Tracks}" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Name" Binding="{Binding TrackName}" SortMemberPath="TrackName" IsReadOnly="True" Width="*"/>
-                        <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}" SortMemberPath="Artists" IsReadOnly="True" Width="*"/>
-                    </DataGrid.Columns>
-                </DataGrid>
+            <GroupBox Grid.Row="2" Grid.ColumnSpan="3" Header="{Binding TracksPlaylistTitle}">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,8">
+                        <TextBlock Text="Double-click a playlist or use Load Tracks."
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"
+                                   Opacity="0.8"/>
+                        <Button Content="Load Tracks"
+                                Command="{Binding LoadTracksCommand}"
+                                CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItem}"
+                                Focusable="False"
+                                Padding="12,4"/>
+                    </StackPanel>
+
+                    <DataGrid x:Name="TracksDataGrid"
+                              ItemsSource="{Binding Tracks}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              IsReadOnly="True"
+                              CanUserSortColumns="True"
+                              HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding Position}" SortMemberPath="Position" Width="Auto"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding TrackName}" SortMemberPath="TrackName" Width="*"/>
+                            <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}" SortMemberPath="Artists" Width="*"/>
+                            <DataGridTextColumn Header="Album" Binding="{Binding Album}" SortMemberPath="Album" Width="*"/>
+                            <DataGridTextColumn Header="Disc #" Binding="{Binding DiscNumber}" SortMemberPath="DiscNumber" Width="Auto"/>
+                            <DataGridTextColumn Header="Track #" Binding="{Binding TrackNumber}" SortMemberPath="TrackNumber" Width="Auto"/>
+                            <DataGridTextColumn Header="Duration" Binding="{Binding Duration}" SortMemberPath="Duration" Width="Auto"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding ItemType}" SortMemberPath="ItemType" Width="Auto"/>
+                            <DataGridTextColumn Header="Spotify ID" Binding="{Binding SpotifyId}" SortMemberPath="SpotifyId" Width="*"/>
+                            <DataGridTextColumn Header="Note" Binding="{Binding StatusNote}" SortMemberPath="StatusNote" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
             </GroupBox>
 
             <GridSplitter Grid.Row="3"
