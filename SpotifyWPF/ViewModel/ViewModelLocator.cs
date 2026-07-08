@@ -3,7 +3,10 @@ using CommonServiceLocator;
 using GalaSoft.MvvmLight.Ioc;
 using SpotifyWPF.Model;
 using SpotifyWPF.Service;
+using SpotifyWPF.Service.Audio;
 using SpotifyWPF.Service.MessageBoxes;
+using SpotifyWPF.Service.Playback;
+using SpotifyWPF.Service.Prediction;
 using SpotifyWPF.ViewModel.Page;
 
 namespace SpotifyWPF.ViewModel
@@ -28,6 +31,17 @@ namespace SpotifyWPF.ViewModel
             SimpleIoc.Default.Register<IPlaylistPagingService, PlaylistPagingService>();
             SimpleIoc.Default.Register<IPlaylistDeletionService, PlaylistDeletionService>();
             SimpleIoc.Default.Register<IPlaylistActionQueueService, PlaylistActionQueueService>();
+            SimpleIoc.Default.Register<IWebPlaybackHost, WebPlaybackHost>();
+            SimpleIoc.Default.Register<ISpotifyPlaybackService, SpotifyPlaybackService>();
+            SimpleIoc.Default.Register<IAnalysisGate, AnalysisGate>();
+            SimpleIoc.Default.Register<IListeningLogService, ListeningLogService>();
+            SimpleIoc.Default.Register<ILoopRegionStore, LoopRegionStore>();
+            SimpleIoc.Default.Register<ILoopController, LoopController>();
+            SimpleIoc.Default.Register<IAudioCaptureService, WasapiLoopbackCaptureService>();
+            SimpleIoc.Default.Register<SpotifyAnalysisProvider>();
+            SimpleIoc.Default.Register<LocalAnalysisProvider>();
+            SimpleIoc.Default.Register<IAnalysisProviderSelector, AnalysisProviderSelector>();
+            SimpleIoc.Default.Register<INextTrackPredictor, NextTrackPredictor>();
 
             // Page view models
             SimpleIoc.Default.Register<MainViewModel>();

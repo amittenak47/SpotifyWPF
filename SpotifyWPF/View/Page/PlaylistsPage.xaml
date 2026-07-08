@@ -150,6 +150,14 @@
                                         CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"/>
                         </DataGrid.InputBindings>
 
+                        <DataGrid.ContextMenu>
+                            <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                <MenuItem Header="Open in Loop Lab"
+                                          Command="{Binding OpenInLoopLabCommand}"
+                                          CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="Name" IsReadOnly="True" Width="*"/>
                             <DataGridTextColumn Header="Owner" Binding="{Binding OwnerDisplayName}" SortMemberPath="OwnerDisplayName" IsReadOnly="True" Width="*"/>

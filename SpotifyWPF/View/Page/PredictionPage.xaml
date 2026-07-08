@@ -5,25 +5,352 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
              DataContext="{Binding PredictionPage, Source={StaticResource Locator}}"
+             Loaded="PredictionPage_Loaded"
+             Unloaded="PredictionPage_Unloaded"
              d:DesignHeight="450" d:DesignWidth="800">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
 
     <DockPanel Margin="8" Background="{StaticResource AppBackgroundBrush}">
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem>
                 <Label Content="{Binding Status}"/>
             </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <Label Content="{Binding AnalysisSourceText}"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <Label Content="{Binding DeviceText}"/>
+            </StatusBarItem>
         </StatusBar>
 
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="520">
-            <TextBlock Text="Prediction"
-                       FontSize="22"
-                       FontWeight="SemiBold"
-                       HorizontalAlignment="Center"
-                       Margin="0,0,0,12"/>
-            <TextBlock TextWrapping="Wrap"
-                       TextAlignment="Center"
-                       Foreground="{StaticResource AppMutedForegroundBrush}"
-                       Text="Planned: infinite looping (Infinite Jukebox-style beat graph) and personalized next-track prediction. This page is a scaffold for upcoming experimental playback features."/>
-        </StackPanel>
+        <TabControl Background="{StaticResource AppBackgroundBrush}">
+            <TabItem Header="Loop Lab">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Player init error panel -->
+                    <Border Grid.Row="0"
+                            Background="{StaticResource AppSurfaceAltBrush}"
+                            BorderBrush="{StaticResource AppBorderBrush}"
+                            BorderThickness="1"
+                            Padding="8"
+                            Margin="0,0,0,8"
+                            Visibility="{Binding HasPlayerInitializationError,
+                                                 Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock Text="{Binding PlayerInitializationError}"
+                                   TextWrapping="Wrap"
+                                   Foreground="#E05545"/>
+                    </Border>
+
+                    <!-- Playback controls -->
+                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding TrackInput, UpdateSourceTrigger=PropertyChanged}"
+                                 VerticalContentAlignment="Center"
+                                 ToolTip="Track ID, spotify:track: URI, or open.spotify.com link"/>
+                        <Button Grid.Column="1"
+                                Content="Play"
+                                MinWidth="72"
+                                Margin="8,0,0,0"
+                                Command="{Binding PlayCommand}"/>
+                        <Button Grid.Column="2"
+                                Content="{Binding PauseResumeLabel}"
+                                MinWidth="72"
+                                Margin="8,0,0,0"
+                                Command="{Binding PauseResumeCommand}"/>
+                    </Grid>
+
+                    <!-- Now playing -->
+                    <Border Grid.Row="2"
+                            Background="{StaticResource AppSurfaceBrush}"
+                            BorderBrush="{StaticResource AppBorderBrush}"
+                            BorderThickness="1"
+                            Padding="8"
+                            Margin="0,0,0,8">
+                        <StackPanel>
+                            <TextBlock Text="{Binding NowPlayingTitle}"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource AppForegroundBrush}"/>
+                            <TextBlock Text="{Binding NowPlayingArtist}"
+                                       Foreground="{StaticResource AppMutedForegroundBrush}"
+                                       Margin="0,2,0,6"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ProgressBar Grid.Column="0"
+                                             Height="6"
+                                             VerticalAlignment="Center"
+                                             Minimum="0"
+                                             Maximum="{Binding DurationMs, Mode=OneWay}"
+                                             Value="{Binding PositionMs, Mode=OneWay}"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding PositionText}"
+                                           Margin="8,0,0,0"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Loop controls (simple outro skip) -->
+                    <Border Grid.Row="3"
+                            Background="{StaticResource AppSurfaceBrush}"
+                            BorderBrush="{StaticResource AppBorderBrush}"
+                            BorderThickness="1"
+                            Padding="8"
+                            Margin="0,0,0,8">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Loop (skip outro / repeat section)"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource AppForegroundBrush}"/>
+                                <RadioButton Content="Simple loop"
+                                             GroupName="LoopMode"
+                                             Margin="16,0,0,0"
+                                             VerticalAlignment="Center"
+                                             Foreground="{StaticResource AppForegroundBrush}"
+                                             IsChecked="{Binding SimpleModeEnabled}"/>
+                                <RadioButton Content="Infinite Jukebox"
+                                             GroupName="LoopMode"
+                                             Margin="12,0,0,0"
+                                             VerticalAlignment="Center"
+                                             Foreground="{StaticResource AppForegroundBrush}"
+                                             IsChecked="{Binding JukeboxModeEnabled}"
+                                             ToolTip="Jumps between similar beats instead of a fixed region (requires track analysis)"/>
+                            </StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0" Text="Start (ms)"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                <TextBox Grid.Column="1" MinWidth="70" Margin="6,0,0,0"
+                                         VerticalContentAlignment="Center"
+                                         Text="{Binding LoopStartMs, UpdateSourceTrigger=LostFocus}"/>
+                                <Button Grid.Column="2" Content="Set from position" Margin="6,0,12,0"
+                                        Command="{Binding SetLoopStartCommand}"/>
+
+                                <TextBlock Grid.Column="3" Text="End (ms)"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                <TextBox Grid.Column="4" MinWidth="70" Margin="6,0,0,0"
+                                         VerticalContentAlignment="Center"
+                                         Text="{Binding LoopEndMs, UpdateSourceTrigger=LostFocus}"/>
+                                <Button Grid.Column="5" Content="Set from position" Margin="6,0,12,0"
+                                        Command="{Binding SetLoopEndCommand}"/>
+
+                                <CheckBox Grid.Column="6" Content="Enable loop"
+                                          VerticalAlignment="Center"
+                                          Foreground="{StaticResource AppForegroundBrush}"
+                                          IsChecked="{Binding LoopEnabled}"/>
+
+                                <TextBlock Grid.Column="7" Text="{Binding LoopStatusText}"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Right"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                            </Grid>
+
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Button Grid.Column="0" Content="Analyze track"
+                                        MinWidth="100"
+                                        Command="{Binding AnalyzeTrackCommand}"
+                                        ToolTip="Builds the beat map used by Infinite Jukebox mode (may need one full uninterrupted play-through)"/>
+                                <TextBlock Grid.Column="1" Text="{Binding AnalysisStatusText}"
+                                           Margin="10,0,10,0"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                <Button Grid.Column="2" Content="Export"
+                                        MinWidth="60"
+                                        Margin="0,0,6,0"
+                                        Command="{Binding ExportLoopDataCommand}"
+                                        ToolTip="Export loop profiles and cached analyses to a JSON file"/>
+                                <Button Grid.Column="3" Content="Import"
+                                        MinWidth="60"
+                                        Command="{Binding ImportLoopDataCommand}"
+                                        ToolTip="Import loop profiles and cached analyses from a JSON file"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Embedded Web Playback SDK player (re-parented singleton WebView2) -->
+                    <Border Grid.Row="4"
+                            x:Name="PlayerHostBorder"
+                            Height="48"
+                            Background="{StaticResource AppSurfaceBrush}"
+                            BorderBrush="{StaticResource AppBorderBrush}"
+                            BorderThickness="1"
+                            Margin="0,0,0,8"/>
+
+                    <!-- Activity log -->
+                    <DockPanel Grid.Row="5">
+                        <TextBlock DockPanel.Dock="Top"
+                                   Text="Activity"
+                                   Foreground="{StaticResource AppMutedForegroundBrush}"
+                                   Margin="0,0,0,4"/>
+                        <ListBox ItemsSource="{Binding LogMessages}"
+                                 Background="{StaticResource AppSurfaceBrush}"
+                                 Foreground="{StaticResource AppMutedForegroundBrush}"
+                                 BorderBrush="{StaticResource AppBorderBrush}"
+                                 FontFamily="Consolas"
+                                 FontSize="11"/>
+                    </DockPanel>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Next Track">
+                <Grid Margin="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="260"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Header row: status + actions -->
+                    <DockPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,8">
+                        <Button DockPanel.Dock="Right" Content="Refresh"
+                                MinWidth="80"
+                                Command="{Binding RefreshPredictionsCommand}"/>
+                        <CheckBox DockPanel.Dock="Right"
+                                  Content="Auto-play next"
+                                  Margin="0,0,12,0"
+                                  VerticalAlignment="Center"
+                                  Foreground="{StaticResource AppForegroundBrush}"
+                                  IsChecked="{Binding AutoPlayNext}"
+                                  ToolTip="When a track ends naturally (loop off), start the top prediction automatically"/>
+                        <TextBlock Text="{Binding PredictionStatusText}"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                    </DockPanel>
+
+                    <!-- Ranked predictions -->
+                    <ListBox Grid.Row="1" Grid.Column="0"
+                             Margin="0,0,8,0"
+                             ItemsSource="{Binding Predictions}"
+                             Background="{StaticResource AppSurfaceBrush}"
+                             BorderBrush="{StaticResource AppBorderBrush}"
+                             HorizontalContentAlignment="Stretch"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{Binding DisplayName}"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{StaticResource AppForegroundBrush}"/>
+                                        <TextBlock Text="{Binding Reason}"
+                                                   FontSize="11"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding ScoreText}"
+                                               Margin="8,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                    <Button Grid.Column="2" Content="Pin"
+                                            Margin="0,0,6,0"
+                                            MinWidth="44"
+                                            Command="{Binding DataContext.TogglePinCommand,
+                                                              RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                            CommandParameter="{Binding}"/>
+                                    <Button Grid.Column="3" Content="Play next"
+                                            MinWidth="76"
+                                            Command="{Binding DataContext.PlayPredictionCommand,
+                                                              RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- Scoring weights -->
+                    <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                            Background="{StaticResource AppSurfaceBrush}"
+                            BorderBrush="{StaticResource AppBorderBrush}"
+                            BorderThickness="1"
+                            Padding="10">
+                        <StackPanel>
+                            <TextBlock Text="Scoring weights"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource AppForegroundBrush}"
+                                       Margin="0,0,0,8"/>
+
+                            <TextBlock Text="Follows previous track" Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightTransition}" Margin="0,2,0,8"/>
+
+                            <TextBlock Text="Repeat favorite" Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightRepeatAffinity}" Margin="0,2,0,8"/>
+
+                            <TextBlock Text="Same artist" Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightSameArtist}" Margin="0,2,0,8"/>
+
+                            <TextBlock Text="Tempo similarity" Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightTempoSimilarity}" Margin="0,2,0,8"/>
+
+                            <TextBlock Text="Recently played penalty" Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightRecencyPenalty}" Margin="0,2,0,8"/>
+
+                            <TextBlock Text="Pinned bonus" Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightPinned}" Margin="0,2,0,8"/>
+
+                            <TextBlock Text="Changes apply on the next refresh."
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
     </DockPanel>
 </UserControl>

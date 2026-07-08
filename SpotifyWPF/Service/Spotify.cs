@@ -26,6 +26,25 @@ namespace SpotifyWPF.Service
 
         private string _verifier;
 
+        private PKCETokenResponse _currentToken;
+
+        private readonly SemaphoreSlim _tokenSemaphore = new SemaphoreSlim(1, 1);
+
+        /// <summary>
+        /// Scopes required by the app. Cached tokens missing any of these force an interactive re-login
+        /// (e.g. after upgrading from a build without the Web Playback SDK streaming scopes).
+        /// </summary>
+        private static readonly string[] RequiredScopes =
+        {
+            Scopes.UserReadPrivate, Scopes.PlaylistModifyPrivate, Scopes.PlaylistModifyPublic,
+            Scopes.PlaylistReadCollaborative, Scopes.PlaylistReadPrivate,
+            Scopes.UserLibraryRead, Scopes.UserLibraryModify,
+            Scopes.UserFollowRead, Scopes.UserFollowModify,
+            Scopes.Streaming, Scopes.UserReadEmail,
+            Scopes.UserReadPlaybackState, Scopes.UserModifyPlaybackState,
+            Scopes.UserReadCurrentlyPlaying, Scopes.UserReadRecentlyPlayed
+        };
+
         public ISpotifyClient Api { get; private set; }
 
         public Spotify(ISettingsProvider settingsProvider)
@@ -87,13 +106,7 @@ namespace SpotifyWPF.Service
             {
                 CodeChallengeMethod = "S256",
                 CodeChallenge = challenge,
-                Scope = new List<string>
-                {
-                    Scopes.UserReadPrivate, Scopes.PlaylistModifyPrivate, Scopes.PlaylistModifyPublic,
-                    Scopes.PlaylistReadCollaborative, Scopes.PlaylistReadPrivate,
-                    Scopes.UserLibraryRead, Scopes.UserLibraryModify,
-                    Scopes.UserFollowRead, Scopes.UserFollowModify
-                }
+                Scope = new List<string>(RequiredScopes)
             };
 
             // BrowserUtil.Open(request.ToUri());
@@ -176,6 +189,13 @@ namespace SpotifyWPF.Service
             if (token == null)
                 return false;
 
+            if (!HasRequiredScopes(token))
+            {
+                Console.WriteLine("Cached Spotify token is missing required scopes; forcing interactive login.");
+                ClearCachedToken();
+                return false;
+            }
+
             try
             {
                 BuildClient(token);
@@ -200,12 +220,72 @@ namespace SpotifyWPF.Service
 
         private void BuildClient(PKCETokenResponse token)
         {
+            _currentToken = token;
+
             var authenticator = new PKCEAuthenticator(_settingsProvider.SpotifyClientId, token);
-            authenticator.TokenRefreshed += (_, refreshedToken) => SaveTokenAsync(refreshedToken).GetAwaiter().GetResult();
+            authenticator.TokenRefreshed += (_, refreshedToken) =>
+            {
+                _currentToken = refreshedToken;
+                SaveTokenAsync(refreshedToken).GetAwaiter().GetResult();
+            };
 
             var config = SpotifyClientConfig.CreateDefault().WithAuthenticator(authenticator);
 
             Api = new SpotifyClient(config);
+        }
+
+        private static bool HasRequiredScopes(PKCETokenResponse token)
+        {
+            var granted = new HashSet<string>(
+                (token.Scope ?? string.Empty).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
+
+            return RequiredScopes.All(scope => granted.Contains(scope));
+        }
+
+        public async Task<string> GetAccessTokenAsync()
+        {
+            var token = _currentToken;
+
+            if (token == null)
+                return null;
+
+            // Refresh proactively when the token is within a minute of expiry so the Web Playback SDK
+            // never receives a token that dies mid-session.
+            if (token.CreatedAt.AddSeconds(token.ExpiresIn - 60) > DateTime.UtcNow)
+                return token.AccessToken;
+
+            await _tokenSemaphore.WaitAsync();
+
+            try
+            {
+                token = _currentToken;
+
+                if (token == null)
+                    return null;
+
+                if (token.CreatedAt.AddSeconds(token.ExpiresIn - 60) > DateTime.UtcNow)
+                    return token.AccessToken;
+
+                var refreshed = await new OAuthClient().RequestToken(
+                    new PKCETokenRefreshRequest(_settingsProvider.SpotifyClientId, token.RefreshToken));
+
+                if (string.IsNullOrEmpty(refreshed.RefreshToken))
+                    refreshed.RefreshToken = token.RefreshToken;
+
+                await SaveTokenAsync(refreshed);
+                BuildClient(refreshed);
+
+                return refreshed.AccessToken;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to refresh Spotify access token: {ex}");
+                return _currentToken?.AccessToken;
+            }
+            finally
+            {
+                _tokenSemaphore.Release();
+            }
         }
 
         private async Task<PKCETokenResponse> LoadTokenAsync()
@@ -241,6 +321,7 @@ namespace SpotifyWPF.Service
 
             Api = null;
             _privateProfile = null;
+            _currentToken = null;
         }
 
         private string GetTokenCachePath()

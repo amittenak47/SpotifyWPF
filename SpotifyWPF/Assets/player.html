@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SpotifyWPF Player</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #121212;
+    color: #b3b3b3;
+    font-family: "Segoe UI", sans-serif;
+    font-size: 12px;
+    overflow: hidden;
+  }
+  #status {
+    padding: 8px 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ok { color: #1db954; }
+  .err { color: #e05545; }
+</style>
+</head>
+<body>
+<div id="status">Loading Spotify Web Playback SDK…</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var host = window.chrome && window.chrome.webview ? window.chrome.webview : null;
+  var statusEl = document.getElementById('status');
+  var player = null;
+  var pendingTokenCallbacks = [];
+
+  // Locally tracked playback state so the enforcement loop never needs async calls.
+  var base = null; // { trackId, trackUri, trackName, artistNames, durationMs, positionMs, paused, at }
+  var lastState = null;
+  var armed = null; // { actionId, whenMs, seekToMs }
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = cls || '';
+  }
+
+  function post(message) {
+    if (host) {
+      host.postMessage(message);
+    }
+  }
+
+  function estimatedPositionMs() {
+    if (!base) return 0;
+    if (base.paused) return base.positionMs;
+    var est = base.positionMs + (performance.now() - base.at);
+    return base.durationMs > 0 ? Math.min(est, base.durationMs) : est;
+  }
+
+  function snapshotFromSdkState(state) {
+    var track = state.track_window && state.track_window.current_track;
+    return {
+      trackId: track ? track.id : null,
+      trackUri: track ? track.uri : null,
+      trackName: track ? track.name : null,
+      artistNames: track && track.artists ? track.artists.map(function (a) { return a.name; }).join(', ') : null,
+      durationMs: state.duration || 0,
+      positionMs: state.position || 0,
+      paused: !!state.paused,
+      at: performance.now()
+    };
+  }
+
+  function handleSdkState(state) {
+    if (!state) {
+      base = null;
+      lastState = null;
+      return;
+    }
+
+    var snap = snapshotFromSdkState(state);
+
+    // Track-end heuristic: the SDK reports paused at position 0 for the same track that was just
+    // playing near its end (autoplay off / nothing queued).
+    if (lastState && !lastState.paused && snap.paused && snap.positionMs === 0 &&
+        lastState.trackId === snap.trackId && lastState.durationMs > 0 &&
+        lastState.positionMs > lastState.durationMs - 5000) {
+      post({ type: 'track-ended', trackId: snap.trackId });
+    }
+
+    // A different track invalidates any armed action from the previous one.
+    if (lastState && lastState.trackId !== snap.trackId) {
+      armed = null;
+    }
+
+    base = snap;
+    lastState = snap;
+
+    post({
+      type: 'state',
+      trackId: snap.trackId,
+      trackUri: snap.trackUri,
+      trackName: snap.trackName,
+      artistNames: snap.artistNames,
+      durationMs: snap.durationMs,
+      positionMs: snap.positionMs,
+      paused: snap.paused
+    });
+
+    if (snap.trackName) {
+      setStatus((snap.paused ? '⏸ ' : '▶ ') + snap.trackName + ' — ' + (snap.artistNames || ''), 'ok');
+    }
+  }
+
+  // Enforcement loop (~50 ms): fire the single armed seek action with no interop latency.
+  setInterval(function () {
+    if (!armed || !player || !base || base.paused) return;
+
+    var pos = estimatedPositionMs();
+    if (pos >= armed.whenMs) {
+      var fired = armed;
+      armed = null;
+
+      player.seek(fired.seekToMs);
+
+      // Optimistically move the local clock so we do not double-fire before the next SDK state.
+      base.positionMs = fired.seekToMs;
+      base.at = performance.now();
+
+      post({ type: 'action-fired', actionId: fired.actionId, firedAtMs: pos, seekToMs: fired.seekToMs });
+    }
+  }, 50);
+
+  // Position reports for the WPF UI / listening log (~4x per second).
+  setInterval(function () {
+    if (!base || !base.trackId) return;
+    post({ type: 'position', trackId: base.trackId, positionMs: Math.round(estimatedPositionMs()), paused: base.paused });
+  }, 250);
+
+  // Re-sync the local clock against the SDK once per second (does not touch lastState, which is the
+  // baseline for end-of-track detection in real state-change events).
+  setInterval(function () {
+    if (!player) return;
+    player.getCurrentState().then(function (state) {
+      if (state) {
+        base = snapshotFromSdkState(state);
+      }
+    });
+  }, 1000);
+
+  // Messages from the WPF host.
+  if (host) {
+    host.addEventListener('message', function (event) {
+      var msg = event.data;
+      if (!msg || !msg.type) return;
+
+      switch (msg.type) {
+        case 'token':
+          var callbacks = pendingTokenCallbacks;
+          pendingTokenCallbacks = [];
+          callbacks.forEach(function (cb) {
+            if (msg.accessToken) cb(msg.accessToken);
+          });
+          break;
+
+        case 'arm':
+          armed = { actionId: msg.actionId, whenMs: msg.whenMs, seekToMs: msg.seekToMs };
+          break;
+
+        case 'disarm':
+          armed = null;
+          break;
+
+        case 'pause':
+          if (player) player.pause();
+          break;
+
+        case 'resume':
+          if (player) player.resume();
+          break;
+
+        case 'seek':
+          if (player) {
+            player.seek(msg.positionMs);
+            if (base) {
+              base.positionMs = msg.positionMs;
+              base.at = performance.now();
+            }
+          }
+          break;
+
+        case 'volume':
+          if (player) player.setVolume(msg.volume);
+          break;
+
+        case 'reconnect':
+          if (player) player.connect();
+          break;
+      }
+    });
+  }
+
+  window.onSpotifyWebPlaybackSDKReady = function () {
+    player = new Spotify.Player({
+      name: 'SpotifyWPF Loop Lab',
+      getOAuthToken: function (cb) {
+        pendingTokenCallbacks.push(cb);
+        post({ type: 'token-request' });
+      },
+      volume: 0.8
+    });
+
+    player.addListener('ready', function (data) {
+      setStatus('Player ready. Waiting for playback…', 'ok');
+      post({ type: 'ready', deviceId: data.device_id });
+    });
+
+    player.addListener('not_ready', function (data) {
+      setStatus('Player went offline.', 'err');
+      post({ type: 'not-ready', deviceId: data.device_id });
+    });
+
+    player.addListener('player_state_changed', handleSdkState);
+
+    ['initialization_error', 'authentication_error', 'account_error', 'playback_error']
+      .forEach(function (kind) {
+        player.addListener(kind, function (err) {
+          setStatus(kind + ': ' + err.message, 'err');
+          post({ type: 'error', kind: kind, message: err.message });
+        });
+      });
+
+    player.connect();
+  };
+
+  var script = document.createElement('script');
+  script.src = 'https://sdk.scdn.co/spotify-player.js';
+  script.onerror = function () {
+    setStatus('Could not load the Spotify SDK (network?).', 'err');
+    post({ type: 'error', kind: 'sdk_load_error', message: 'Failed to load https://sdk.scdn.co/spotify-player.js' });
+  };
+  document.head.appendChild(script);
+})();
+</script>
+</body>
+</html>

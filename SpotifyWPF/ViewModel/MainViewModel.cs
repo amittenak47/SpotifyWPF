@@ -38,6 +38,7 @@ namespace SpotifyWPF.ViewModel
             CurrentPage = loginPageViewModel;
 
             MessengerInstance.Register<object>(this, MessageType.LoginSuccessful, LoginSuccessful);
+            MessengerInstance.Register<string>(this, MessageType.OpenInLoopLab, OpenInLoopLab);
 
             MenuItems = new ObservableCollection<MenuItemViewModel>
             {
@@ -87,6 +88,13 @@ namespace SpotifyWPF.ViewModel
             SetAuthenticatedMenuItemsEnabled(true);
             NavigateTo(_playlistsPageViewModel);
             CheckViewMenuItem("Playlists");
+        }
+
+        /// <summary>Navigates to the Prediction page; the page itself handles the payload URI.</summary>
+        private void OpenInLoopLab(string contextUri)
+        {
+            CurrentPage = _predictionPageViewModel;
+            CheckMenuItem("Experimental", "Prediction");
         }
 
         private void SwitchViewFromMenuItem(MenuItemViewModel menuItem)

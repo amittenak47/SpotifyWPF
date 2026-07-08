@@ -14,6 +14,12 @@ namespace SpotifyWPF.Service
 
         Task<PrivateUser> GetPrivateProfileAsync();
 
+        /// <summary>
+        /// Returns a currently valid access token, refreshing it first when it is close to expiry.
+        /// Returns null when the user is not logged in. Used to hand tokens to the Web Playback SDK.
+        /// </summary>
+        Task<string> GetAccessTokenAsync();
+
         ISpotifyClient Api { get; }
     }
 }

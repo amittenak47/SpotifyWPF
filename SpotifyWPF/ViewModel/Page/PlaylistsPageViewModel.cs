@@ -100,6 +100,7 @@ namespace SpotifyWPF.ViewModel.Page
             LoadMorePlaylistsCommand = new RelayCommand(async () => await LoadMorePlaylistsAsync(), CanLoadMorePlaylists);
             LoadAllPlaylistsCommand = new RelayCommand(async () => await LoadAllPlaylistsAsync());
             LoadTracksCommand = new RelayCommand<PlaylistCacheItem>(async playlist => await LoadTracksAsync(playlist));
+            OpenInLoopLabCommand = new RelayCommand<PlaylistCacheItem>(OpenInLoopLab);
             RefreshSelectedPlaylistsCommand = new RelayCommand<IList>(async playlists => await RefreshSelectedPlaylistsAsync(playlists));
             CancelCurrentActionCommand = new RelayCommand(CancelCurrentAction, CanCancelCurrentAction);
             ExecuteOrPauseCommand = new RelayCommand(async () => await ExecuteOrPauseAsync(), CanExecuteOrPause);
@@ -272,6 +273,8 @@ namespace SpotifyWPF.ViewModel.Page
         }
 
         public RelayCommand<PlaylistCacheItem> LoadTracksCommand { get; }
+
+        public RelayCommand<PlaylistCacheItem> OpenInLoopLabCommand { get; }
 
         public RelayCommand<IList> RefreshSelectedPlaylistsCommand { get; }
 
@@ -1392,6 +1395,16 @@ namespace SpotifyWPF.ViewModel.Page
                 Log($"Unable to read current Spotify user profile: {ex.Message}");
                 Log($"Current user profile exception: {ex}", true);
             }
+        }
+
+        /// <summary>Hands the playlist to the Experimental → Prediction page (Loop Lab) for playback.</summary>
+        private void OpenInLoopLab(PlaylistCacheItem playlist)
+        {
+            if (playlist == null || string.IsNullOrEmpty(playlist.Id))
+                return;
+
+            Log($"Opening playlist '{playlist.Name}' in Loop Lab.");
+            MessengerInstance.Send($"spotify:playlist:{playlist.Id}", MessageType.OpenInLoopLab);
         }
 
         public async Task LoadTracksAsync(PlaylistCacheItem playlist)
