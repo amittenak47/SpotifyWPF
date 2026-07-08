@@ -109,11 +109,14 @@ namespace SpotifyWPF.ViewModel.Page
             TogglePinCommand = new RelayCommand<ScoredTrack>(TogglePin);
             ExportLoopDataCommand = new RelayCommand(ExportLoopData);
             ImportLoopDataCommand = new RelayCommand(ImportLoopData);
+            AutoDetectPythonCommand = new RelayCommand(AutoDetectPython);
+            BrowsePythonCommand = new RelayCommand(BrowsePython);
 
             MessengerInstance.Register<string>(this, MessageType.OpenInLoopLab,
                 async contextUri => await HandleOpenInLoopLabAsync(contextUri));
 
             UpdateAnalysisSourceText(_analysisGate.CachedSource);
+            _pythonExecutablePath = PythonLauncher.GetConfiguredPath();
         }
 
         #region Bindable state
@@ -204,6 +207,19 @@ namespace SpotifyWPF.ViewModel.Page
         {
             get => _analysisSourceText;
             set => Set(ref _analysisSourceText, value);
+        }
+
+        private string _pythonExecutablePath = string.Empty;
+
+        /// <summary>Full path to python.exe for Path B local analysis; stored in per-user app settings.</summary>
+        public string PythonExecutablePath
+        {
+            get => _pythonExecutablePath;
+            set
+            {
+                if (Set(ref _pythonExecutablePath, value ?? string.Empty))
+                    PythonLauncher.SaveConfiguredPath(_pythonExecutablePath);
+            }
         }
 
         private string _playerInitializationError;
@@ -421,6 +437,10 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand ExportLoopDataCommand { get; }
 
         public RelayCommand ImportLoopDataCommand { get; }
+
+        public RelayCommand AutoDetectPythonCommand { get; }
+
+        public RelayCommand BrowsePythonCommand { get; }
 
         private bool CanUsePlayer()
         {
@@ -947,6 +967,36 @@ namespace SpotifyWPF.ViewModel.Page
             public List<LoopProfile> LoopRegions { get; set; } = new List<LoopProfile>();
 
             public List<TrackAnalysis> Analyses { get; set; } = new List<TrackAnalysis>();
+        }
+
+        private void AutoDetectPython()
+        {
+            if (PythonLauncher.TryAutoDetect(out var path))
+            {
+                PythonExecutablePath = path;
+                Log($"Python auto-detect: {path}");
+                Status = "Python interpreter detected and saved.";
+                return;
+            }
+
+            Status = "Could not auto-detect Python 3. Browse to python.exe or install Python 3.12 + librosa.";
+            Log("Python auto-detect failed. Install Python 3 and run: py -3.12 -m pip install librosa soundfile");
+        }
+
+        private void BrowsePython()
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = "Python (python.exe)|python.exe|All files (*.*)|*.*",
+                Title = "Select Python interpreter"
+            };
+
+            if (dialog.ShowDialog() != true)
+                return;
+
+            PythonExecutablePath = dialog.FileName;
+            Log($"Python path set: {dialog.FileName}");
+            Status = "Python interpreter saved.";
         }
 
         private void ExportLoopData()

@@ -206,6 +206,36 @@
                                         Command="{Binding ImportLoopDataCommand}"
                                         ToolTip="Import loop profiles and cached analyses from a JSON file"/>
                             </Grid>
+
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0"
+                                           Text="Python (Path B)"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"
+                                           ToolTip="Full path to python.exe for local librosa analysis"/>
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding PythonExecutablePath, UpdateSourceTrigger=LostFocus}"
+                                         VerticalContentAlignment="Center"
+                                         ToolTip="Leave empty to auto-detect on first analysis, or click Auto-detect"/>
+                                <Button Grid.Column="2"
+                                        Content="Browse"
+                                        MinWidth="72"
+                                        Margin="8,0,0,0"
+                                        Command="{Binding BrowsePythonCommand}"/>
+                                <Button Grid.Column="3"
+                                        Content="Auto-detect"
+                                        MinWidth="88"
+                                        Margin="8,0,0,0"
+                                        Command="{Binding AutoDetectPythonCommand}"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
 

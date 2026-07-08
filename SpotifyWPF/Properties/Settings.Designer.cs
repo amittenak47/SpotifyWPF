@@ -55,5 +55,17 @@ namespace SpotifyWPF.Properties {
                 return ((string)(this["SpotifyRedirectPort"]));
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string PythonExecutablePath {
+            get {
+                return ((string)(this["PythonExecutablePath"]));
+            }
+            set {
+                this["PythonExecutablePath"] = value;
+            }
+        }
     }
 }

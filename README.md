@@ -147,17 +147,14 @@ Verify:
 py -3.12 -c "import librosa, soundfile; print(librosa.__version__, soundfile.__version__)"
 ```
 
-**Important:** If `python` on your PATH points to Python 2.x (common on Windows), tell SpotifyWPF which interpreter to use before running local analysis:
+**Python interpreter (Path B):** Configure inside the app — no environment variables needed.
 
-```powershell
-# Current PowerShell session
-$env:SPOTIFYWPF_PYTHON = "py -3.12"
+1. Install Python 3 and librosa (commands above).
+2. Open **Experimental → Prediction → Loop Lab**.
+3. Under **Python (Path B)**, click **Auto-detect** (resolves the full `python.exe` path via the Windows `py` launcher), or **Browse** to `python.exe`.
+4. The path is saved in per-user app settings (same store as your Spotify Client ID), typically under `%LocalAppData%` in a `user.config` file for SpotifyWPF.
 
-# Persist for your user account
-[Environment]::SetEnvironmentVariable("SPOTIFYWPF_PYTHON", "py -3.12", "User")
-```
-
-Or set `SPOTIFYWPF_PYTHON` to the full path of `python.exe` (for example `C:\Users\You\AppData\Local\Programs\Python\Python312\python.exe`).
+If the field is left empty, SpotifyWPF tries auto-detect the first time local analysis runs.
 
 **Using Loop Lab:**
 
@@ -167,3 +164,19 @@ Or set `SPOTIFYWPF_PYTHON` to the full path of `python.exe` (for example `C:\Use
 4. Use the **Loop Lab** tab for playback/looping; use the **Predictions** tab for next-track scoring after a track finishes.
 
 **Local analysis tips:** mute other apps during capture (WASAPI records the system mix). Each track is captured and analyzed at most once; results are cached under `%LocalAppData%\SpotifyWPF\Prediction\`.
+
+### Installers vs portable
+
+This fork currently has two distribution paths (see [Installation](#installation) above):
+
+| Method | What you get | Loop Lab extras |
+|--------|----------------|-----------------|
+| **MSIX / appinstaller** (`SpotifyWPF.MSIX`) | Store-style install, auto-update via `Package.appinstaller` | WebView2 is usually already on Windows 11; installer can declare the WebView2 bootstrapper as a dependency when you revise packaging. **Python is not bundled** — user installs once, then sets path in Loop Lab. |
+| **Portable (GitHub release zip)** | Extract folder and run `SpotifyWPF.exe` | Same as MSIX for Python/WebView2: prerequisites are machine-wide, settings still live in per-user AppData (not beside the `.exe`). |
+
+**Streamlined MSI/MSIX plan (when you revise the installer):**
+
+1. Bundle or bootstrap **WebView2 Runtime** (required for all Loop Lab users).
+2. Do **not** bundle Python/librosa in the installer (large, license-heavy) — optional custom action could run `winget install Python.Python.3.12` or show a first-run checklist.
+3. On first Loop Lab open, prompt **Auto-detect Python** (already in the app UI).
+4. Keep Spotify Client ID + Python path in **user settings** (AppData) — works identically for installed and portable builds.

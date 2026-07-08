@@ -18,8 +18,6 @@ namespace SpotifyWPF.Service.Prediction
     /// </summary>
     public class LocalAnalysisProvider : ITrackAnalysisProvider
     {
-        private const string PythonOverrideEnvironmentVariable = "SPOTIFYWPF_PYTHON";
-
         private static readonly TimeSpan SidecarTimeout = TimeSpan.FromMinutes(10);
 
         /// <summary>Extra wait beyond the track duration before giving up on the capture pass.</summary>
@@ -177,20 +175,10 @@ namespace SpotifyWPF.Service.Prediction
             if (!File.Exists(scriptPath))
                 throw new FileNotFoundException($"Analysis sidecar not found at {scriptPath}.");
 
-            var pythonPath = Environment.GetEnvironmentVariable(PythonOverrideEnvironmentVariable);
+            var arguments =
+                $"\"{scriptPath}\" \"{wavPath}\" \"{outputPath}\" --track-id \"{trackId}\"";
 
-            if (string.IsNullOrWhiteSpace(pythonPath))
-                pythonPath = "python";
-
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = pythonPath,
-                Arguments = $"\"{scriptPath}\" \"{wavPath}\" \"{outputPath}\" --track-id \"{trackId}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true
-            };
+            var startInfo = PythonLauncher.CreateSidecarStartInfo(arguments);
 
             using (var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true })
             {
@@ -205,8 +193,8 @@ namespace SpotifyWPF.Service.Prediction
                 {
                     throw new InvalidOperationException(
                         "Could not start Python for local analysis. Install Python 3 with librosa " +
-                        $"(pip install librosa soundfile) or set {PythonOverrideEnvironmentVariable} " +
-                        $"to the interpreter path. ({ex.Message})", ex);
+                        "(pip install librosa soundfile), then set the Python path on the Loop Lab page " +
+                        $"or use Auto-detect. ({ex.Message})", ex);
                 }
 
                 var stderrTask = process.StandardError.ReadToEndAsync();

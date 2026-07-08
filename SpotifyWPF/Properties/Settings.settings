@@ -11,5 +11,8 @@
     <Setting Name="SpotifyRedirectPort" Type="System.String" Scope="Application">
       <Value Profile="(Default)">4002</Value>
     </Setting>
+    <Setting Name="PythonExecutablePath" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
   </Settings>
 </SettingsFile>
