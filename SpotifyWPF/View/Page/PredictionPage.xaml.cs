@@ -30,6 +30,7 @@ namespace SpotifyWPF.View.Page
                 PlayerHostBorder.Child = view;
             }
 
+            // WebView2 must be in the visual tree before CoreWebView2 initializes.
             if (DataContext is PredictionPageViewModel viewModel)
                 await viewModel.OnPageLoadedAsync();
         }

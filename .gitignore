@@ -342,4 +342,4 @@ publish/
 [Pp]ublish/
 
 # Local LLM handoff prompts (keep off GitHub)
-docs/fable-prediction-prompt.md
+docs/

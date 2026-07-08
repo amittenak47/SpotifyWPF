@@ -139,18 +139,19 @@ namespace SpotifyWPF.Service.Playback
         public WebView2 GetOrCreateView()
         {
             if (_webView == null)
-            {
                 _webView = new WebView2();
-                _initializationTask = InitializeAsync();
-            }
 
             return _webView;
         }
 
         public Task EnsureInitializedAsync()
         {
-            GetOrCreateView();
-            return _initializationTask ?? Task.CompletedTask;
+            var view = GetOrCreateView();
+
+            if (_initializationTask == null)
+                _initializationTask = InitializeAsync();
+
+            return _initializationTask;
         }
 
         private async Task InitializeAsync()
@@ -177,8 +178,10 @@ namespace SpotifyWPF.Service.Playback
             catch (Exception ex)
             {
                 InitializationError =
-                    "Failed to start the embedded player. Install the Microsoft Edge WebView2 Runtime and restart. " +
-                    $"({ex.Message})";
+                    "Failed to start the embedded player. Install the Microsoft Edge WebView2 Runtime, " +
+                    "fully close and restart SpotifyWPF, then try again. If it still fails, delete " +
+                    $"%LocalAppData%\\SpotifyWPF\\Prediction\\webview2 and retry. ({ex.Message})";
+                Console.WriteLine($"WebPlaybackHost initialization failed: {ex}");
                 InitializationFailed?.Invoke(this, EventArgs.Empty);
             }
         }
