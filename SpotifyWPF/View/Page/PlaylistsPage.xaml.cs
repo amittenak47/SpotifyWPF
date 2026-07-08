@@ -1,6 +1,5 @@
-﻿using System.Linq;
-using System.Windows.Controls;
 using System.Windows.Input;
+using SpotifyWPF.Model;
 using SpotifyWPF.ViewModel.Page;
 
 namespace SpotifyWPF.View.Page
@@ -24,7 +23,7 @@ namespace SpotifyWPF.View.Page
             if (viewModel == null)
                 return;
 
-            if (QueuedActionsTreeView.SelectedItem is PlaylistsPageViewModel.QueuedActionDetailItem detail)
+            if (QueuedActionsTreeView.SelectedItem is QueuedActionDetailItem detail)
             {
                 var parentAction = viewModel.FindQueuedActionForDetail(detail);
                 if (parentAction != null)
@@ -36,7 +35,7 @@ namespace SpotifyWPF.View.Page
                 return;
             }
 
-            if (QueuedActionsTreeView.SelectedItem is PlaylistsPageViewModel.QueuedPlaylistAction action)
+            if (QueuedActionsTreeView.SelectedItem is QueuedPlaylistAction action)
             {
                 viewModel.RemoveQueuedAction(action);
                 e.Handled = true;

@@ -75,7 +75,7 @@ namespace SpotifyWPF.ViewModel
         private void LoginSuccessful(object o)
         {
             SetAuthenticatedMenuItemsEnabled(true);
-            CurrentPage = _playlistsPageViewModel;
+            NavigateTo(_playlistsPageViewModel);
             CheckViewMenuItem("Playlists");
         }
 
@@ -85,25 +85,47 @@ namespace SpotifyWPF.ViewModel
             {
                 case "Accounts / Login":
                     _loginPageViewModel.ResetLoginState();
-                    CurrentPage = _loginPageViewModel;
+                    NavigateTo(_loginPageViewModel);
                     break;
                 case "Playlists":
-                    CurrentPage = _playlistsPageViewModel;
+                    NavigateTo(_playlistsPageViewModel);
                     break;
                 case "Albums":
-                    CurrentPage = _albumsPageViewModel;
+                    NavigateTo(_albumsPageViewModel);
                     break;
                 case "Artists":
-                    CurrentPage = _artistsPageViewModel;
+                    NavigateTo(_artistsPageViewModel);
                     break;
                 case "Search":
-                    CurrentPage = _searchPageViewModel;
+                    NavigateTo(_searchPageViewModel);
                     break;
                 default:
                     return;
             }
 
             CheckViewMenuItem(menuItem.Header);
+        }
+
+        // Page view models are singletons while views are recreated on every
+        // navigation, so lifecycle hooks must be idempotent (safe on every
+        // revisit). See docs/architecture.md.
+        private async void NavigateTo(ViewModelBase page)
+        {
+            var previousPage = CurrentPage;
+            CurrentPage = page;
+
+            try
+            {
+                if (!ReferenceEquals(previousPage, page) && previousPage is IPageLifecycle leavingPage)
+                    await leavingPage.OnNavigatedFromAsync();
+
+                if (page is IPageLifecycle enteringPage)
+                    await enteringPage.OnNavigatedToAsync();
+            }
+            catch (System.Exception ex)
+            {
+                System.Console.WriteLine($"Page lifecycle hook failed: {ex}");
+            }
         }
 
         private void CheckViewMenuItem(string header)

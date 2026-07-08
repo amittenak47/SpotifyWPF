@@ -1,0 +1,47 @@
+<UserControl x:Class="SpotifyWPF.View.Component.ActivityLogView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             d:DesignHeight="120" d:DesignWidth="800">
+
+    <!-- DataContext is expected to be an ActivityLogViewModel supplied by the hosting page. -->
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="ActivityLogBooleanToVisibilityConverter"/>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top"
+                    Orientation="Horizontal"
+                    Margin="0,0,0,8"
+                    Visibility="{Binding ShowFilter, Converter={StaticResource ActivityLogBooleanToVisibilityConverter}}">
+            <TextBlock Text="Filter"
+                       VerticalAlignment="Center"
+                       Margin="0,0,8,0"/>
+            <ComboBox ItemsSource="{Binding LogFilterOptions}"
+                      SelectedItem="{Binding SelectedLogFilter}"
+                      Style="{StaticResource DarkComboBoxStyle}"
+                      Width="120"
+                      VerticalAlignment="Center"
+                      Padding="6,2"/>
+        </StackPanel>
+
+        <ListBox x:Name="LogMessagesListBox"
+                 ItemsSource="{Binding LogMessages}"
+                 FontFamily="{Binding FontFamily}"
+                 FontSize="{Binding FontSize}"
+                 SelectionMode="Extended">
+            <ListBox.ContextMenu>
+                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                    <MenuItem Header="Copy Selected"
+                              Command="{Binding CopySelectedLogMessagesCommand}"
+                              CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="Copy All"
+                              Command="{Binding CopyAllLogMessagesCommand}"/>
+                </ContextMenu>
+            </ListBox.ContextMenu>
+        </ListBox>
+    </DockPanel>
+</UserControl>

@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:i="http://schemas.microsoft.com/expression/2010/interactivity"
+             xmlns:component="clr-namespace:SpotifyWPF.View.Component"
              mc:Ignorable="d"
              DataContext="{Binding PlaylistsPage, Source={StaticResource Locator}}"    
              d:DesignHeight="450" d:DesignWidth="800">
@@ -323,37 +324,7 @@
             <GroupBox Grid.Row="4" Grid.ColumnSpan="3" Margin="0,8,0,0">
                 <TabControl>
                     <TabItem Header="Logs">
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Top"
-                                        Orientation="Horizontal"
-                                        Margin="0,0,0,8">
-                                <TextBlock Text="Filter"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0"/>
-                                <ComboBox ItemsSource="{Binding LogFilterOptions}"
-                                          SelectedItem="{Binding SelectedLogFilter}"
-                                          Style="{StaticResource DarkComboBoxStyle}"
-                                          Width="120"
-                                          VerticalAlignment="Center"
-                                          Padding="6,2"/>
-                            </StackPanel>
-
-                            <ListBox x:Name="LogMessagesListBox"
-                                     ItemsSource="{Binding LogMessages}"
-                                     FontFamily="Consolas"
-                                     FontSize="11"
-                                     SelectionMode="Extended">
-                                <ListBox.ContextMenu>
-                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                        <MenuItem Header="Copy Selected"
-                                                  Command="{Binding CopySelectedLogMessagesCommand}"
-                                                  CommandParameter="{Binding PlacementTarget.SelectedItems, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                        <MenuItem Header="Copy All"
-                                                  Command="{Binding CopyAllLogMessagesCommand}"/>
-                                    </ContextMenu>
-                                </ListBox.ContextMenu>
-                            </ListBox>
-                        </DockPanel>
+                        <component:ActivityLogView DataContext="{Binding ActivityLog}"/>
                     </TabItem>
 
                     <TabItem Header="Actions">
