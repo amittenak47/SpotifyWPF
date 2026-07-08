@@ -34,7 +34,15 @@
         </DataTemplate>
     </Window.Resources>
 
-    <DockPanel Background="{StaticResource AppBackgroundBrush}">
+    <!-- WebView2 must stay in the visual tree when Loop Lab is not visible; see PredictionPage load/unload. -->
+    <Grid Background="{StaticResource AppBackgroundBrush}">
+        <Border x:Name="WebPlaybackHiddenHost"
+                Visibility="Collapsed"
+                IsHitTestVisible="False"
+                Width="0"
+                Height="0"/>
+
+        <DockPanel Background="{StaticResource AppBackgroundBrush}">
         <Menu DockPanel.Dock="Top" ItemsSource="{Binding MenuItems}">
             <Menu.ItemContainerStyle>
                 <Style TargetType="{x:Type MenuItem}" BasedOn="{StaticResource {x:Type MenuItem}}">
@@ -55,5 +63,6 @@
         </Menu>
         
         <ContentControl DockPanel.Dock="Bottom" x:Name="Pages" Content="{Binding CurrentPage}"/>
-    </DockPanel>
+        </DockPanel>
+    </Grid>
 </Window>

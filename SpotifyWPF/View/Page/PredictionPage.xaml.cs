@@ -8,7 +8,8 @@ namespace SpotifyWPF.View.Page
 {
     /// <summary>
     /// Interaction logic for PredictionPage.xaml. The WebView2 player is a singleton owned by
-    /// IWebPlaybackHost and is re-parented into this page on load so playback survives navigation.
+    /// IWebPlaybackHost. It is shown on this page while Loop Lab is active and parked on
+    /// MainWindow while other pages are visible so CoreWebView2 stays alive.
     /// </summary>
     public partial class PredictionPage
     {
@@ -21,6 +22,9 @@ namespace SpotifyWPF.View.Page
         {
             var host = ServiceLocator.Current.GetInstance<IWebPlaybackHost>();
             var view = host.GetOrCreateView();
+            var mainWindow = Window.GetWindow(this) as MainWindow;
+
+            mainWindow?.UnparkWebPlaybackView(view);
 
             if (!ReferenceEquals(PlayerHostBorder.Child, view))
             {
@@ -37,9 +41,13 @@ namespace SpotifyWPF.View.Page
 
         private void PredictionPage_Unloaded(object sender, RoutedEventArgs e)
         {
-            // Detach but do not dispose: the shared WebView2 keeps playing while other pages are shown.
-            if (PlayerHostBorder.Child != null)
-                PlayerHostBorder.Child = null;
+            var view = PlayerHostBorder.Child;
+
+            if (view == null)
+                return;
+
+            PlayerHostBorder.Child = null;
+            (Window.GetWindow(this) as MainWindow)?.ParkWebPlaybackView(view);
         }
     }
 }

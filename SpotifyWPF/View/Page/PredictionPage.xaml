@@ -401,18 +401,8 @@
                             Margin="0,0,0,8"/>
 
                     <!-- Activity log -->
-                    <DockPanel Grid.Row="6">
-                        <TextBlock DockPanel.Dock="Top"
-                                   Text="Activity"
-                                   Foreground="{StaticResource AppMutedForegroundBrush}"
-                                   Margin="0,0,0,4"/>
-                        <ListBox ItemsSource="{Binding LogMessages}"
-                                 Background="{StaticResource AppSurfaceBrush}"
-                                 Foreground="{StaticResource AppMutedForegroundBrush}"
-                                 BorderBrush="{StaticResource AppBorderBrush}"
-                                 FontFamily="Consolas"
-                                 FontSize="11"/>
-                    </DockPanel>
+                    <component:ActivityLogView Grid.Row="6"
+                                               DataContext="{Binding ActivityLog}"/>
                 </Grid>
             </TabItem>
 

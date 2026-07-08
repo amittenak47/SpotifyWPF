@@ -14,6 +14,7 @@ using SpotifyWPF.Model.Prediction;
 using SpotifyWPF.Service;
 using SpotifyWPF.Service.Playback;
 using SpotifyWPF.Service.Prediction;
+using SpotifyWPF.ViewModel.Component;
 
 namespace SpotifyWPF.ViewModel.Page
 {
@@ -24,8 +25,6 @@ namespace SpotifyWPF.ViewModel.Page
     /// </summary>
     public class PredictionPageViewModel : ViewModelBase
     {
-        private const int MaxLogMessages = 200;
-
         /// <summary>A play counts as ended naturally when it stops within this window of the end.</summary>
         private const long NaturalEndToleranceMs = 5000;
 
@@ -59,8 +58,6 @@ namespace SpotifyWPF.ViewModel.Page
         /// <summary>Context URI handed over from the Playlists grid, played once the SDK device is up.</summary>
         private string _pendingContextUri;
 
-        private bool _pageInitialized;
-
         /// <summary>Guards against re-applying the loop profile while the UI is being refreshed from it.</summary>
         private bool _suppressLoopApply;
 
@@ -93,6 +90,8 @@ namespace SpotifyWPF.ViewModel.Page
             _analysisProviderSelector = analysisProviderSelector;
             _predictor = predictor;
             _weights = predictor.GetWeights();
+
+            ActivityLog = new ActivityLogViewModel { NewestFirst = true };
 
             _loopController.LoopEvent += (_, message) => Log(message);
             _loopController.JukeboxJump += OnJukeboxJump;
@@ -244,7 +243,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         public bool HasPlayerInitializationError => !string.IsNullOrEmpty(PlayerInitializationError);
 
-        public ObservableCollection<string> LogMessages { get; } = new ObservableCollection<string>();
+        public ActivityLogViewModel ActivityLog { get; }
 
         public string CurrentTrackId => _currentPlay?.TrackId;
 
@@ -615,14 +614,27 @@ namespace SpotifyWPF.ViewModel.Page
         /// <summary>Called by the view whenever the page loads; safe to call repeatedly.</summary>
         public async Task OnPageLoadedAsync()
         {
-            if (_pageInitialized)
+            if (!string.IsNullOrEmpty(_playbackHost.InitializationError))
+            {
+                PlayerInitializationError = _playbackHost.InitializationError;
+                Status = "Embedded player failed to start.";
                 return;
+            }
 
-            _pageInitialized = true;
+            if (_playbackHost.IsReady)
+            {
+                Status = "Player ready.";
+                return;
+            }
 
             Status = "Starting embedded player…";
-
             await _playbackHost.EnsureInitializedAsync();
+
+            if (!string.IsNullOrEmpty(_playbackHost.InitializationError))
+            {
+                PlayerInitializationError = _playbackHost.InitializationError;
+                Status = "Embedded player failed to start.";
+            }
         }
 
         private async Task PlayFromInputAsync()
@@ -1407,17 +1419,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void Log(string message, bool verbose = false)
         {
-            var line = $"[{DateTime.Now:HH:mm:ss}]{(verbose ? " [Verbose]" : string.Empty)} {message}";
-
-            Console.WriteLine(line);
-
-            RunOnUiThread(() =>
-            {
-                LogMessages.Insert(0, line);
-
-                while (LogMessages.Count > MaxLogMessages)
-                    LogMessages.RemoveAt(LogMessages.Count - 1);
-            });
+            ActivityLog.Log(message, verbose);
         }
 
         private static void RunOnUiThread(Action action)
