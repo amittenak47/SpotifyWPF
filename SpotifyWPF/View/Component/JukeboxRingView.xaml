@@ -1,0 +1,15 @@
+<UserControl x:Class="SpotifyWPF.View.Component.JukeboxRingView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SpotifyWPF.View.Component"
+             MinHeight="160"
+             MinWidth="160">
+    <Grid>
+        <local:JukeboxRingCanvas x:Name="Ring"
+                                 DurationMs="{Binding RingDurationMs, Mode=OneWay}"
+                                 PositionMs="{Binding PositionMs, Mode=OneWay}"
+                                 SegmentStartsSec="{Binding RingSegmentStartsSec, Mode=OneWay}"
+                                 GlowFromMs="{Binding RingGlowFromMs, Mode=OneWay}"
+                                 GlowToMs="{Binding RingGlowToMs, Mode=OneWay}"/>
+    </Grid>
+</UserControl>

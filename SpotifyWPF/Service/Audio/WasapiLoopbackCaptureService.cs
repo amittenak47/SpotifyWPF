@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using SpotifyWPF.Service.Prediction;
 
@@ -39,6 +40,10 @@ namespace SpotifyWPF.Service.Audio
 
         private WaveFileWriter _writer;
 
+        private WaveFormat _writeFormat;
+
+        private bool _convertFloatToPcm16;
+
         private TaskCompletionSource<object> _stoppedCompletion;
 
         private string _trackId;
@@ -71,9 +76,21 @@ namespace SpotifyWPF.Service.Audio
                 var wavPath = PredictionPaths.GetAudioCachePath(trackId);
                 PredictionPaths.EnsureDirectory(wavPath);
 
-                var capture = new WasapiLoopbackCapture();
+                var capture = CreateLoopbackCapture();
+                var captureFormat = capture.WaveFormat;
 
-                _writer = new WaveFileWriter(wavPath, capture.WaveFormat);
+                if (captureFormat.Encoding == WaveFormatEncoding.IeeeFloat && captureFormat.BitsPerSample == 32)
+                {
+                    _convertFloatToPcm16 = true;
+                    _writeFormat = new WaveFormat(captureFormat.SampleRate, 16, captureFormat.Channels);
+                }
+                else
+                {
+                    _convertFloatToPcm16 = false;
+                    _writeFormat = captureFormat;
+                }
+
+                _writer = new WaveFileWriter(wavPath, _writeFormat);
                 _trackId = trackId;
                 _wavPath = wavPath;
                 _captureError = null;
@@ -106,7 +123,7 @@ namespace SpotifyWPF.Service.Audio
             if (capture == null)
                 return null;
 
-            var format = capture.WaveFormat;
+            var format = _writeFormat ?? capture.WaveFormat;
 
             capture.StopRecording();
 
@@ -158,11 +175,43 @@ namespace SpotifyWPF.Service.Audio
             }
         }
 
+        private static WasapiLoopbackCapture CreateLoopbackCapture()
+        {
+            // Event-driven capture on the default multimedia render endpoint — fewer dropouts than
+            // the default poll-based ctor and uses the device's native mix format (often 48 kHz).
+            using (var enumerator = new MMDeviceEnumerator())
+            {
+                var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                return new WasapiLoopbackCapture(device);
+            }
+        }
+
         private void OnDataAvailable(object sender, WaveInEventArgs e)
         {
             lock (_lock)
             {
-                _writer?.Write(e.Buffer, 0, e.BytesRecorded);
+                if (_writer == null)
+                    return;
+
+                if (_convertFloatToPcm16)
+                {
+                    var floatCount = e.BytesRecorded / 4;
+                    var pcm16 = new byte[floatCount * 2];
+
+                    for (var i = 0; i < floatCount; i++)
+                    {
+                        var sample = BitConverter.ToSingle(e.Buffer, i * 4);
+                        sample = Math.Max(-1f, Math.Min(1f, sample));
+                        var value = (short)(sample * 32767f);
+                        pcm16[i * 2] = (byte)(value & 0xFF);
+                        pcm16[i * 2 + 1] = (byte)((value >> 8) & 0xFF);
+                    }
+
+                    _writer.Write(pcm16, 0, pcm16.Length);
+                    return;
+                }
+
+                _writer.Write(e.Buffer, 0, e.BytesRecorded);
             }
         }
 

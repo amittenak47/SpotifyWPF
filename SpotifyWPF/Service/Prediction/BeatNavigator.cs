@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using SpotifyWPF.Model.Prediction;
 
 namespace SpotifyWPF.Service.Prediction
 {
@@ -14,6 +15,8 @@ namespace SpotifyWPF.Service.Prediction
         public long TriggerMs { get; set; }
 
         public long SeekToMs { get; set; }
+
+        public double BranchDistance { get; set; }
     }
 
     /// <summary>
@@ -28,22 +31,29 @@ namespace SpotifyWPF.Service.Prediction
     /// </summary>
     public class BeatNavigator
     {
-        private const double MinRandomBranchChance = 0.18;
-
-        private const double MaxRandomBranchChance = 0.50;
-
-        private const double RandomBranchChanceDelta = 0.018;
-
         private readonly Random _random;
 
-        private double _currentBranchChance = MinRandomBranchChance;
+        private readonly JukeboxSettings _settings;
+
+        private double _currentBranchChance;
 
         public BeatGraph Graph { get; }
 
-        public BeatNavigator(BeatGraph graph, int? randomSeed = null)
+        public double CurrentBranchChance => _currentBranchChance;
+
+        public BeatNavigator(BeatGraph graph, JukeboxSettings settings, int? randomSeed = null)
         {
             Graph = graph ?? throw new ArgumentNullException(nameof(graph));
+            _settings = settings ?? JukeboxSettings.CreateDefaults();
+            _currentBranchChance = ClampProbability(_settings.BranchProbabilityMin);
             _random = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
+        }
+
+        private double ClampProbability(double value)
+        {
+            var min = Math.Min(_settings.BranchProbabilityMin, _settings.BranchProbabilityMax);
+            var max = Math.Max(_settings.BranchProbabilityMin, _settings.BranchProbabilityMax);
+            return Math.Max(min, Math.Min(max, value));
         }
 
         /// <summary>True when the graph has at least one usable branch.</summary>
@@ -88,7 +98,7 @@ namespace SpotifyWPF.Service.Prediction
                 // Point of no return: always branch backwards here rather than running off the end.
                 if (i == Graph.LastBranchPointIndex)
                 {
-                    var backwardEdge = ChooseEdge(beat.Neighbors.Where(e => e.DestinationIndex < i).ToList());
+                    var backwardEdge = ChooseEdge(i, beat.Neighbors.Where(e => e.DestinationIndex < i).ToList());
 
                     if (backwardEdge != null)
                         return MakeJump(i, backwardEdge);
@@ -99,42 +109,68 @@ namespace SpotifyWPF.Service.Prediction
 
                 if (_random.NextDouble() < _currentBranchChance)
                 {
-                    var edge = ChooseEdge(beat.Neighbors);
+                    var edge = ChooseEdge(i, beat.Neighbors);
 
                     if (edge != null)
                     {
-                        _currentBranchChance = MinRandomBranchChance;
+                        _currentBranchChance = ClampProbability(_settings.BranchProbabilityMin);
                         return MakeJump(i, edge);
                     }
                 }
                 else
                 {
-                    _currentBranchChance = Math.Min(MaxRandomBranchChance,
-                        _currentBranchChance + RandomBranchChanceDelta);
+                    _currentBranchChance = ClampProbability(
+                        _currentBranchChance + _settings.BranchProbabilityRampPerBeat);
                 }
             }
 
             return null;
         }
 
-        private BeatEdge ChooseEdge(IReadOnlyList<BeatEdge> edges)
+        private BeatEdge ChooseEdge(int fromBeatIndex, IReadOnlyList<BeatEdge> edges)
         {
             if (edges == null || edges.Count == 0)
                 return null;
 
-            return edges[_random.Next(edges.Count)];
+            var filtered = FilterEdges(fromBeatIndex, edges);
+
+            if (filtered.Count == 0)
+                return null;
+
+            return filtered[_random.Next(filtered.Count)];
+        }
+
+        private List<BeatEdge> FilterEdges(int fromBeatIndex, IReadOnlyList<BeatEdge> edges)
+        {
+            IEnumerable<BeatEdge> query = edges;
+
+            if (_settings.AllowOnlyReverseBranches)
+                query = query.Where(e => e.DestinationIndex < fromBeatIndex);
+
+            if (_settings.AllowOnlyLongBranches)
+            {
+                var minBeats = Math.Max(_settings.LongBranchMinBeats, 4);
+                query = query.Where(e => Math.Abs(e.DestinationIndex - fromBeatIndex) >= minBeats);
+            }
+
+            return query.ToList();
         }
 
         private JukeboxJump MakeJump(int fromIndex, BeatEdge edge)
         {
             var target = Graph.Beats[edge.DestinationIndex];
+            var triggerMs = Graph.Beats[fromIndex].EndMs - _settings.SeekLeadMs;
+
+            if (triggerMs < Graph.Beats[fromIndex].StartMs)
+                triggerMs = Graph.Beats[fromIndex].StartMs;
 
             return new JukeboxJump
             {
                 FromBeatIndex = fromIndex,
                 TargetBeatIndex = edge.DestinationIndex,
-                TriggerMs = Graph.Beats[fromIndex].EndMs,
-                SeekToMs = target.StartMs
+                TriggerMs = Math.Max(0, triggerMs),
+                SeekToMs = target.StartMs,
+                BranchDistance = edge.Distance
             };
         }
     }

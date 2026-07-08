@@ -40,6 +40,7 @@
   var base = null; // { trackId, trackUri, trackName, artistNames, durationMs, positionMs, paused, at }
   var lastState = null;
   var armed = null; // { actionId, whenMs, seekToMs }
+  var endedTrackIds = {}; // trackId -> true once track-ended posted
 
   function setStatus(text, cls) {
     statusEl.textContent = text;
@@ -49,6 +50,26 @@
   function post(message) {
     if (host) {
       host.postMessage(message);
+    }
+  }
+
+  function notifyTrackEndedIfFinished(previous, current) {
+    if (!previous || !current || !current.trackId || current.durationMs <= 0)
+      return;
+
+    if (endedTrackIds[current.trackId])
+      return;
+
+    var wasPlaying = !previous.paused;
+    var nearEnd = previous.positionMs > previous.durationMs - 5000;
+    var atEnd = current.positionMs >= current.durationMs - 1500;
+    var pausedAtZero = wasPlaying && current.paused && current.positionMs === 0 && nearEnd;
+    var pausedAtEnd = wasPlaying && current.paused && atEnd;
+    var playingThroughEnd = wasPlaying && !current.paused && atEnd;
+
+    if (pausedAtZero || pausedAtEnd || playingThroughEnd) {
+      endedTrackIds[current.trackId] = true;
+      post({ type: 'track-ended', trackId: current.trackId });
     }
   }
 
@@ -82,18 +103,16 @@
 
     var snap = snapshotFromSdkState(state);
 
-    // Track-end heuristic: the SDK reports paused at position 0 for the same track that was just
-    // playing near its end (autoplay off / nothing queued).
-    if (lastState && !lastState.paused && snap.paused && snap.positionMs === 0 &&
-        lastState.trackId === snap.trackId && lastState.durationMs > 0 &&
-        lastState.positionMs > lastState.durationMs - 5000) {
-      post({ type: 'track-ended', trackId: snap.trackId });
-    }
+    notifyTrackEndedIfFinished(lastState, snap);
 
     // A different track invalidates any armed action from the previous one.
     if (lastState && lastState.trackId !== snap.trackId) {
       armed = null;
     }
+
+    // Allow track-ended to fire again when the same track restarts from the top.
+    if (snap.trackId && snap.positionMs < 2000 && !snap.paused)
+      delete endedTrackIds[snap.trackId];
 
     base = snap;
     lastState = snap;
@@ -136,7 +155,14 @@
   // Position reports for the WPF UI / listening log (~4x per second).
   setInterval(function () {
     if (!base || !base.trackId) return;
-    post({ type: 'position', trackId: base.trackId, positionMs: Math.round(estimatedPositionMs()), paused: base.paused });
+
+    var positionMs = Math.round(estimatedPositionMs());
+    post({ type: 'position', trackId: base.trackId, positionMs: positionMs, paused: base.paused });
+
+    if (!endedTrackIds[base.trackId] && base.durationMs > 0 && positionMs >= base.durationMs - 1000) {
+      endedTrackIds[base.trackId] = true;
+      post({ type: 'track-ended', trackId: base.trackId });
+    }
   }, 250);
 
   // Re-sync the local clock against the SDK once per second (does not touch lastState, which is the
@@ -209,7 +235,7 @@
         pendingTokenCallbacks.push(cb);
         post({ type: 'token-request' });
       },
-      volume: 0.8
+      volume: 1.0
     });
 
     player.addListener('ready', function (data) {

@@ -58,10 +58,24 @@ namespace SpotifyWPF.Service.Prediction
 
             try
             {
-                var wavPath = PredictionPaths.GetAudioCachePath(trackId);
+                var wavPath = PredictionPaths.ResolveAudioCachePath(trackId);
 
                 if (!File.Exists(wavPath))
+                {
                     wavPath = await CaptureTrackAsync(trackId, progress, cancellationToken);
+                }
+                else if (!string.Equals(wavPath, PredictionPaths.GetAudioCachePath(trackId), StringComparison.OrdinalIgnoreCase))
+                {
+                    progress?.Report($"Using cached capture: {wavPath}");
+                }
+
+                if (!File.Exists(wavPath))
+                {
+                    throw new FileNotFoundException(
+                        $"No captured WAV found for track {trackId}. Looked in {PredictionPaths.AudioCacheDirectory}. " +
+                        "Re-run Analyze track to capture again, and double-check the track ID — " +
+                        "Spotify IDs distinguish similar characters like I, l, and i.");
+                }
 
                 progress?.Report("Analyzing audio (librosa sidecar)…");
 
@@ -111,10 +125,34 @@ namespace SpotifyWPF.Service.Prediction
             {
                 if (state.TrackId == trackId && state.DurationMs > 0)
                     Interlocked.CompareExchange(ref durationMs, state.DurationMs, 0);
+
+                TryCompleteCaptureAtEnd(state.TrackId, state.PositionMs, state.DurationMs, state.Paused);
             };
+
+            EventHandler<PositionSnapshot> onPositionUpdated = (_, position) =>
+            {
+                var duration = Interlocked.Read(ref durationMs);
+                TryCompleteCaptureAtEnd(position.TrackId, position.PositionMs, duration, position.Paused);
+            };
+
+            void TryCompleteCaptureAtEnd(string currentTrackId, long positionMs, long trackDurationMs, bool paused)
+            {
+                if (currentTrackId != trackId)
+                    return;
+
+                var duration = trackDurationMs > 0 ? trackDurationMs : Interlocked.Read(ref durationMs);
+
+                if (duration <= 0)
+                    return;
+
+                // SDK often stops at the end timestamp instead of reporting paused @ position 0.
+                if (positionMs >= duration - 1500 || (paused && positionMs >= duration - 5000))
+                    endedCompletion.TrySetResult(null);
+            }
 
             _playbackHost.TrackEnded += onTrackEnded;
             _playbackHost.StateChanged += onStateChanged;
+            _playbackHost.PositionUpdated += onPositionUpdated;
 
             // A loop seeking around during the capture would corrupt the recording.
             _playbackHost.DisarmAction();
@@ -145,7 +183,13 @@ namespace SpotifyWPF.Service.Prediction
                                     : TimeSpan.FromMinutes(12)) + CaptureGrace;
 
                     if (waited > limit)
-                        throw new TimeoutException("The track did not finish within the expected time.");
+                    {
+                        throw new TimeoutException(
+                            $"The track did not finish within the expected time " +
+                            $"(waited {waited.TotalSeconds:0}s, limit {limit.TotalSeconds:0}s, " +
+                            $"duration {currentDuration}ms). The player may not have reported track end — " +
+                            "try Analyze track again after this fix, or delete any partial .wav in audio-cache.");
+                    }
                 }
 
                 // Keep recording briefly past the end so the tail is intact.
@@ -164,6 +208,7 @@ namespace SpotifyWPF.Service.Prediction
             {
                 _playbackHost.TrackEnded -= onTrackEnded;
                 _playbackHost.StateChanged -= onStateChanged;
+                _playbackHost.PositionUpdated -= onPositionUpdated;
             }
         }
 
@@ -194,7 +239,9 @@ namespace SpotifyWPF.Service.Prediction
                     throw new InvalidOperationException(
                         "Could not start Python for local analysis. Install Python 3 with librosa " +
                         "(pip install librosa soundfile), then set the Python path on the Loop Lab page " +
-                        $"or use Auto-detect. ({ex.Message})", ex);
+                        "or use Auto-detect. Microsoft Store Python must run via the py launcher " +
+                        "(Auto-detect handles this). If you set the path manually, use py:-3.12 or a " +
+                        $"non-Store python.exe under Local\\Programs\\Python. ({ex.Message})", ex);
                 }
 
                 var stderrTask = process.StandardError.ReadToEndAsync();

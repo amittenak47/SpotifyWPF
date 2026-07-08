@@ -36,6 +36,7 @@ namespace SpotifyWPF.ViewModel
             SimpleIoc.Default.Register<IAnalysisGate, AnalysisGate>();
             SimpleIoc.Default.Register<IListeningLogService, ListeningLogService>();
             SimpleIoc.Default.Register<ILoopRegionStore, LoopRegionStore>();
+            SimpleIoc.Default.Register<IJukeboxSettingsStore, JukeboxSettingsStore>();
             SimpleIoc.Default.Register<ILoopController, LoopController>();
             SimpleIoc.Default.Register<IAudioCaptureService, WasapiLoopbackCaptureService>();
             SimpleIoc.Default.Register<SpotifyAnalysisProvider>();

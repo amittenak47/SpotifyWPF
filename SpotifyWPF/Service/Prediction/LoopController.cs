@@ -24,8 +24,13 @@ namespace SpotifyWPF.Service.Prediction
         /// <summary>Human-readable loop activity for the UI log ("armed", "jumped", …).</summary>
         event EventHandler<string> LoopEvent;
 
+        /// <summary>Raised when a jukebox jump is planned or performed (ring glow).</summary>
+        event EventHandler<JukeboxJumpEventArgs> JukeboxJump;
+
         /// <summary>Raised whenever the active track or loop state changes (UI refresh).</summary>
         event EventHandler ActiveLoopChanged;
+
+        void InvalidateGraphCache();
     }
 
     /// <summary>
@@ -44,6 +49,8 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly ILoopRegionStore _store;
 
+        private readonly IJukeboxSettingsStore _jukeboxSettings;
+
         private readonly BeatGraphBuilder _graphBuilder = new BeatGraphBuilder();
 
         /// <summary>Beat graphs are pure functions of the cached analysis; keep them per track.</summary>
@@ -61,12 +68,18 @@ namespace SpotifyWPF.Service.Prediction
 
         public event EventHandler<string> LoopEvent;
 
+        public event EventHandler<JukeboxJumpEventArgs> JukeboxJump;
+
         public event EventHandler ActiveLoopChanged;
 
-        public LoopController(IWebPlaybackHost playbackHost, ILoopRegionStore store)
+        public LoopController(IWebPlaybackHost playbackHost, ILoopRegionStore store,
+            IJukeboxSettingsStore jukeboxSettings)
         {
             _playbackHost = playbackHost;
             _store = store;
+            _jukeboxSettings = jukeboxSettings;
+
+            _jukeboxSettings.SettingsChanged += (_, __) => InvalidateGraphCache();
 
             _playbackHost.StateChanged += OnStateChanged;
             _playbackHost.ActionFired += OnActionFired;
@@ -169,7 +182,7 @@ namespace SpotifyWPF.Service.Prediction
             }
 
             if (_navigator == null || !ReferenceEquals(_navigator.Graph, graph))
-                _navigator = new BeatNavigator(graph);
+                _navigator = new BeatNavigator(graph, _jukeboxSettings.Get());
 
             if (!_navigator.CanJump)
             {
@@ -196,6 +209,35 @@ namespace SpotifyWPF.Service.Prediction
             LoopEvent?.Invoke(this,
                 $"Jukebox: next jump at {FormatMs(_plannedJump.TriggerMs)} " +
                 $"→ beat {_plannedJump.TargetBeatIndex} ({FormatMs(_plannedJump.SeekToMs)}).");
+
+            RaiseJukeboxJump(_plannedJump, planned: true);
+        }
+
+        private void RaiseJukeboxJump(JukeboxJump jump, bool planned)
+        {
+            if (jump == null || _navigator?.Graph == null)
+                return;
+
+            var beats = _navigator.Graph.Beats;
+            JukeboxJump?.Invoke(this, new JukeboxJumpEventArgs
+            {
+                FromBeatIndex = jump.FromBeatIndex,
+                ToBeatIndex = jump.TargetBeatIndex,
+                FromMs = beats[jump.FromBeatIndex].StartMs,
+                ToMs = jump.SeekToMs,
+                BranchDistance = jump.BranchDistance,
+                IsPlanned = planned
+            });
+        }
+
+        public void InvalidateGraphCache()
+        {
+            _graphCache.Clear();
+            _navigator = null;
+            _plannedJump = null;
+
+            if (IsLoopActive && ActiveProfile.Mode == LoopModes.Jukebox)
+                Rearm();
         }
 
         private void OnJukeboxActionFired(ArmedActionFiredEventArgs e)
@@ -206,8 +248,11 @@ namespace SpotifyWPF.Service.Prediction
             var jump = _plannedJump;
 
             if (jump != null)
+            {
                 LoopEvent?.Invoke(this,
                     $"Jukebox: jumped beat {jump.FromBeatIndex} → {jump.TargetBeatIndex}.");
+                RaiseJukeboxJump(jump, planned: false);
+            }
 
             if (!IsLoopActive || ActiveProfile.Mode != LoopModes.Jukebox)
                 return;
@@ -232,7 +277,7 @@ namespace SpotifyWPF.Service.Prediction
 
             try
             {
-                var graph = _graphBuilder.Build(analysis);
+                var graph = _graphBuilder.Build(analysis, _jukeboxSettings.Get());
                 _graphCache[trackId] = graph;
 
                 LoopEvent?.Invoke(this,

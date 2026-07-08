@@ -19,6 +19,7 @@ import sys
 try:
     import numpy as np
     import librosa
+    import soundfile as sf
 except ImportError as exc:  # pragma: no cover
     sys.stderr.write(
         "Missing Python dependency: %s\nInstall with: pip install librosa soundfile\n" % exc)
@@ -26,6 +27,9 @@ except ImportError as exc:  # pragma: no cover
 
 HOP_LENGTH = 512
 SAMPLE_RATE = 22050  # matches the rate Spotify's analyzer used
+SEGMENT_HOP_SEC = 0.25
+SEGMENT_LEN_SEC = 0.75
+MAX_RING_SEGMENTS = 48
 
 
 def scalar(value):
@@ -53,6 +57,54 @@ def build_intervals(times, total_duration, confidence=0.8):
     return intervals
 
 
+def build_overlapping_segments(frame_times, chroma, mfcc, rms_db, duration):
+    """Echo Nest-style overlapping windows (not one segment per beat)."""
+    segments = []
+    start = 0.0
+
+    while start < duration - 0.05:
+        end = min(start + SEGMENT_LEN_SEC, duration)
+        idx = frame_slice(frame_times, start, end)
+
+        if idx.size == 0:
+            start += SEGMENT_HOP_SEC
+            continue
+
+        chroma_mean = chroma[:, idx].mean(axis=1)
+        peak = chroma_mean.max()
+        if peak > 0:
+            chroma_mean = chroma_mean / peak
+        pitches = [round(float(v), 4) for v in chroma_mean]
+        timbre = [round(float(v), 4) for v in mfcc[:, idx].mean(axis=1)]
+
+        rms_idx = idx[idx < len(rms_db)]
+        if rms_idx.size == 0:
+            loudness_start = -60.0
+            loudness_max = -60.0
+            loudness_max_time = 0.0
+        else:
+            seg_db = rms_db[rms_idx]
+            loudness_start = float(seg_db[0])
+            max_pos = int(np.argmax(seg_db))
+            loudness_max = float(seg_db[max_pos])
+            loudness_max_time = float(frame_times[rms_idx[max_pos]] - start)
+
+        segments.append({
+            "start": round(float(start), 5),
+            "duration": round(float(end - start), 5),
+            "confidence": 1.0,
+            "loudnessStart": round(loudness_start, 3),
+            "loudnessMax": round(loudness_max, 3),
+            "loudnessMaxTime": round(loudness_max_time, 5),
+            "pitches": pitches,
+            "timbre": timbre,
+        })
+
+        start += SEGMENT_HOP_SEC
+
+    return segments
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input_wav")
@@ -61,6 +113,12 @@ def main():
     args = parser.parse_args()
 
     try:
+        y, sr_native = sf.read(args.input_wav, dtype="float32", always_2d=True)
+        y = y.mean(axis=1)
+        if sr_native != SAMPLE_RATE:
+            y = librosa.resample(y, orig_sr=sr_native, target_sr=SAMPLE_RATE)
+        sr = SAMPLE_RATE
+    except Exception:
         y, sr = librosa.load(args.input_wav, sr=SAMPLE_RATE, mono=True)
     except Exception as exc:
         sys.stderr.write("Could not read %s: %s\n" % (args.input_wav, exc))
@@ -88,50 +146,7 @@ def main():
 
     beats = build_intervals(beat_times, duration)
 
-    # One segment per beat: mean chroma (peak-normalized like Spotify's pitches) and mean MFCCs.
-    segments = []
-    for beat in beats:
-        start = beat["start"]
-        end = start + beat["duration"]
-        idx = frame_slice(frame_times, start, end)
-
-        if idx.size == 0:
-            pitches = [0.0] * 12
-            timbre = [0.0] * 12
-            loudness_start = -60.0
-            loudness_max = -60.0
-            loudness_max_time = 0.0
-        else:
-            chroma_mean = chroma[:, idx].mean(axis=1)
-            peak = chroma_mean.max()
-            if peak > 0:
-                chroma_mean = chroma_mean / peak
-            pitches = [round(float(v), 4) for v in chroma_mean]
-
-            timbre = [round(float(v), 4) for v in mfcc[:, idx].mean(axis=1)]
-
-            rms_idx = idx[idx < len(rms_db)]
-            if rms_idx.size == 0:
-                loudness_start = -60.0
-                loudness_max = -60.0
-                loudness_max_time = 0.0
-            else:
-                seg_db = rms_db[rms_idx]
-                loudness_start = float(seg_db[0])
-                max_pos = int(np.argmax(seg_db))
-                loudness_max = float(seg_db[max_pos])
-                loudness_max_time = float(frame_times[rms_idx[max_pos]] - start)
-
-        segments.append({
-            "start": beat["start"],
-            "duration": beat["duration"],
-            "confidence": 1.0,
-            "loudnessStart": round(loudness_start, 3),
-            "loudnessMax": round(loudness_max, 3),
-            "loudnessMaxTime": round(loudness_max_time, 5),
-            "pitches": pitches,
-            "timbre": timbre,
-        })
+    segments = build_overlapping_segments(frame_times, chroma, mfcc, rms_db, duration)
 
     # Bars: every 4 beats (crude but adequate for position-in-bar weighting).
     bar_times = beat_times[::4]

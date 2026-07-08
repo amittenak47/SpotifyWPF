@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:component="clr-namespace:SpotifyWPF.View.Component"
              mc:Ignorable="d"
              DataContext="{Binding PredictionPage, Source={StaticResource Locator}}"
              Loaded="PredictionPage_Loaded"
@@ -32,6 +33,7 @@
             <TabItem Header="Loop Lab">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -239,8 +241,158 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Embedded Web Playback SDK player (re-parented singleton WebView2) -->
+                    <!-- Jukebox tune + ring (visible when Infinite Jukebox is selected) -->
                     <Border Grid.Row="4"
+                            Background="{StaticResource AppSurfaceBrush}"
+                            BorderBrush="{StaticResource AppBorderBrush}"
+                            BorderThickness="1"
+                            Padding="8"
+                            Margin="0,0,0,8"
+                            Visibility="{Binding JukeboxModeEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                <TextBlock Text="Branch ring"
+                                           FontWeight="SemiBold"
+                                           HorizontalAlignment="Center"
+                                           Foreground="{StaticResource AppForegroundBrush}"
+                                           Margin="0,0,0,6"/>
+                                <component:JukeboxRingView Width="180" Height="180"
+                                                             DataContext="{Binding}"/>
+                                <TextBlock Text="{Binding RingSegmentCountText}"
+                                           FontSize="11"
+                                           TextAlignment="Center"
+                                           Margin="0,4,0,0"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                <TextBlock Text="{Binding JukeboxBranchChanceText}"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           TextAlignment="Center"
+                                           Margin="0,6,0,0"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                <TextBlock Text="Jukebox Tune"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource AppForegroundBrush}"
+                                           Margin="0,0,0,8"/>
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="48"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="Branch similarity threshold (lower = smoother)"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding JukeboxSimilarityThresholdMaxText}"
+                                               HorizontalAlignment="Right"
+                                               Foreground="{StaticResource AppForegroundBrush}"/>
+                                    <Slider Grid.Column="0" Grid.ColumnSpan="2"
+                                            Margin="0,20,0,0"
+                                            Minimum="25" Maximum="80"
+                                            Value="{Binding JukeboxSimilarityThresholdMax}"/>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="48"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Branch probability min"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding JukeboxBranchProbabilityMinText}"
+                                               HorizontalAlignment="Right"
+                                               Foreground="{StaticResource AppForegroundBrush}"/>
+                                    <Slider Grid.Column="0" Grid.ColumnSpan="2"
+                                            Margin="0,20,0,0"
+                                            Minimum="0" Maximum="40"
+                                            Value="{Binding JukeboxBranchProbabilityMinPercent}"/>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="48"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Branch probability max"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding JukeboxBranchProbabilityMaxText}"
+                                               HorizontalAlignment="Right"
+                                               Foreground="{StaticResource AppForegroundBrush}"/>
+                                    <Slider Grid.Column="0" Grid.ColumnSpan="2"
+                                            Margin="0,20,0,0"
+                                            Minimum="5" Maximum="60"
+                                            Value="{Binding JukeboxBranchProbabilityMaxPercent}"/>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="48"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Ramp-up per beat"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding JukeboxBranchRampText}"
+                                               HorizontalAlignment="Right"
+                                               Foreground="{StaticResource AppForegroundBrush}"/>
+                                    <Slider Grid.Column="0" Grid.ColumnSpan="2"
+                                            Margin="0,20,0,0"
+                                            Minimum="0.2" Maximum="3"
+                                            Value="{Binding JukeboxBranchRampPerBeatPercent}"/>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Seek lead (SDK latency)"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding JukeboxSeekLeadMsText}"
+                                               HorizontalAlignment="Right"
+                                               Foreground="{StaticResource AppForegroundBrush}"/>
+                                    <Slider Grid.Column="0" Grid.ColumnSpan="2"
+                                            Margin="0,20,0,0"
+                                            Minimum="0" Maximum="300"
+                                            Value="{Binding JukeboxSeekLeadMs}"/>
+                                </Grid>
+
+                                <CheckBox Content="Allow only reverse branches"
+                                          Foreground="{StaticResource AppForegroundBrush}"
+                                          IsChecked="{Binding JukeboxAllowOnlyReverseBranches}"
+                                          Margin="0,0,0,4"/>
+                                <CheckBox Content="Allow only long branches (16+ beats apart)"
+                                          Foreground="{StaticResource AppForegroundBrush}"
+                                          IsChecked="{Binding JukeboxAllowOnlyLongBranches}"
+                                          Margin="0,0,0,8"/>
+
+                                <TextBlock Text="Re-analyze after changing segments; graph rebuilds when sliders change."
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Margin="0,8,0,0"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Embedded Web Playback SDK player (re-parented singleton WebView2) -->
+                    <Border Grid.Row="5"
                             x:Name="PlayerHostBorder"
                             Height="48"
                             Background="{StaticResource AppSurfaceBrush}"
@@ -249,7 +401,7 @@
                             Margin="0,0,0,8"/>
 
                     <!-- Activity log -->
-                    <DockPanel Grid.Row="5">
+                    <DockPanel Grid.Row="6">
                         <TextBlock DockPanel.Dock="Top"
                                    Text="Activity"
                                    Foreground="{StaticResource AppMutedForegroundBrush}"

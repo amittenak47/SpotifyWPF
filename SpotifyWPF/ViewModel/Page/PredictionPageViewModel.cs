@@ -47,6 +47,10 @@ namespace SpotifyWPF.ViewModel.Page
 
         private readonly ILoopRegionStore _loopRegionStore;
 
+        private readonly IJukeboxSettingsStore _jukeboxSettings;
+
+        private readonly JukeboxSettings _jukeboxSettingsModel;
+
         private readonly PredictorWeights _weights;
 
         /// <summary>Last track that finished naturally — the anchor for "what next" scoring.</summary>
@@ -74,9 +78,12 @@ namespace SpotifyWPF.ViewModel.Page
             ILoopController loopController,
             IAnalysisProviderSelector analysisProviderSelector,
             INextTrackPredictor predictor,
-            ILoopRegionStore loopRegionStore)
+            ILoopRegionStore loopRegionStore,
+            IJukeboxSettingsStore jukeboxSettings)
         {
             _loopRegionStore = loopRegionStore;
+            _jukeboxSettings = jukeboxSettings;
+            _jukeboxSettingsModel = _jukeboxSettings.Get();
             _spotify = spotify;
             _playbackHost = playbackHost;
             _playbackService = playbackService;
@@ -88,6 +95,7 @@ namespace SpotifyWPF.ViewModel.Page
             _weights = predictor.GetWeights();
 
             _loopController.LoopEvent += (_, message) => Log(message);
+            _loopController.JukeboxJump += OnJukeboxJump;
 
             _playbackHost.PlayerReady += OnPlayerReady;
             _playbackHost.StateChanged += OnStateChanged;
@@ -325,6 +333,156 @@ namespace SpotifyWPF.ViewModel.Page
             get => _analysisStatusText;
             set => Set(ref _analysisStatusText, value);
         }
+
+        public double JukeboxSimilarityThresholdMax
+        {
+            get => _jukeboxSettingsModel.BranchSimilarityThresholdMax;
+            set
+            {
+                if (Math.Abs(_jukeboxSettingsModel.BranchSimilarityThresholdMax - value) < 0.01)
+                    return;
+
+                _jukeboxSettingsModel.BranchSimilarityThresholdMax = value;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMaxText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public double JukeboxBranchProbabilityMinPercent
+        {
+            get => _jukeboxSettingsModel.BranchProbabilityMin * 100;
+            set => SetJukeboxProbabilityMin(value / 100);
+        }
+
+        public double JukeboxBranchProbabilityMaxPercent
+        {
+            get => _jukeboxSettingsModel.BranchProbabilityMax * 100;
+            set => SetJukeboxProbabilityMax(value / 100);
+        }
+
+        public double JukeboxBranchRampPerBeatPercent
+        {
+            get => _jukeboxSettingsModel.BranchProbabilityRampPerBeat * 100;
+            set
+            {
+                if (Math.Abs(_jukeboxSettingsModel.BranchProbabilityRampPerBeat - value / 100) < 0.0001)
+                    return;
+
+                _jukeboxSettingsModel.BranchProbabilityRampPerBeat = value / 100;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(JukeboxBranchRampText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public double JukeboxSeekLeadMs
+        {
+            get => _jukeboxSettingsModel.SeekLeadMs;
+            set
+            {
+                var rounded = (int)Math.Round(value);
+
+                if (_jukeboxSettingsModel.SeekLeadMs == rounded)
+                    return;
+
+                _jukeboxSettingsModel.SeekLeadMs = rounded;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(JukeboxSeekLeadMsText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string JukeboxSimilarityThresholdMaxText =>
+            $"{_jukeboxSettingsModel.BranchSimilarityThresholdMax:0}";
+
+        public string JukeboxBranchProbabilityMinText =>
+            $"{_jukeboxSettingsModel.BranchProbabilityMin * 100:0.#}%";
+
+        public string JukeboxBranchProbabilityMaxText =>
+            $"{_jukeboxSettingsModel.BranchProbabilityMax * 100:0.#}%";
+
+        public string JukeboxBranchRampText =>
+            $"{_jukeboxSettingsModel.BranchProbabilityRampPerBeat * 100:0.##}%";
+
+        public string JukeboxSeekLeadMsText =>
+            $"{_jukeboxSettingsModel.SeekLeadMs:0} ms";
+
+        public bool JukeboxAllowOnlyReverseBranches
+        {
+            get => _jukeboxSettingsModel.AllowOnlyReverseBranches;
+            set
+            {
+                if (_jukeboxSettingsModel.AllowOnlyReverseBranches == value)
+                    return;
+
+                _jukeboxSettingsModel.AllowOnlyReverseBranches = value;
+                RaisePropertyChanged();
+                PersistJukeboxSettings();
+            }
+        }
+
+        public bool JukeboxAllowOnlyLongBranches
+        {
+            get => _jukeboxSettingsModel.AllowOnlyLongBranches;
+            set
+            {
+                if (_jukeboxSettingsModel.AllowOnlyLongBranches == value)
+                    return;
+
+                _jukeboxSettingsModel.AllowOnlyLongBranches = value;
+                RaisePropertyChanged();
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string RingSegmentCountText
+        {
+            get => _ringSegmentCountText;
+            set => Set(ref _ringSegmentCountText, value);
+        }
+
+        private string _ringSegmentCountText = "No segments loaded";
+
+        public string JukeboxBranchChanceText
+        {
+            get => _jukeboxBranchChanceText;
+            set => Set(ref _jukeboxBranchChanceText, value);
+        }
+
+        private string _jukeboxBranchChanceText = "Branch chance: —";
+
+        public long RingDurationMs
+        {
+            get => _ringDurationMs;
+            set => Set(ref _ringDurationMs, value);
+        }
+
+        private long _ringDurationMs;
+
+        public IReadOnlyList<double> RingSegmentStartsSec
+        {
+            get => _ringSegmentStartsSec;
+            set => Set(ref _ringSegmentStartsSec, value);
+        }
+
+        private IReadOnlyList<double> _ringSegmentStartsSec = Array.Empty<double>();
+
+        public long? RingGlowFromMs
+        {
+            get => _ringGlowFromMs;
+            set => Set(ref _ringGlowFromMs, value);
+        }
+
+        private long? _ringGlowFromMs;
+
+        public long? RingGlowToMs
+        {
+            get => _ringGlowToMs;
+            set => Set(ref _ringGlowToMs, value);
+        }
+
+        private long? _ringGlowToMs;
 
         public ObservableCollection<ScoredTrack> Predictions { get; } =
             new ObservableCollection<ScoredTrack>();
@@ -580,6 +738,7 @@ namespace SpotifyWPF.ViewModel.Page
                 NowPlayingTitle = string.IsNullOrEmpty(state.TrackName) ? "Nothing playing" : state.TrackName;
                 NowPlayingArtist = state.ArtistNames ?? string.Empty;
                 DurationMs = state.DurationMs;
+                RingDurationMs = state.DurationMs;
                 PositionMs = state.PositionMs;
                 IsPaused = state.Paused;
             });
@@ -706,6 +865,8 @@ namespace SpotifyWPF.ViewModel.Page
             AnalysisStatusText = AnalysisCache.Exists(state.TrackId)
                 ? "Analysis cached for this track."
                 : "No analysis for this track yet.";
+
+            RefreshRingVisualization(state.TrackId);
         }
 
         /// <summary>Whether a loop mode was active (stamped on log entries).</summary>
@@ -774,6 +935,120 @@ namespace SpotifyWPF.ViewModel.Page
                 LoopStatusText = "Loop saved (disabled).";
             else
                 LoopStatusText = "No loop set for this track.";
+        }
+
+        private void OnJukeboxJump(object sender, JukeboxJumpEventArgs e)
+        {
+            RunOnUiThread(() =>
+            {
+                RingGlowFromMs = e.FromMs;
+                RingGlowToMs = e.ToMs;
+                JukeboxBranchChanceText = e.IsPlanned
+                    ? $"Branch chance: planning jump (sim-distance {e.BranchDistance:0})"
+                    : $"Branch chance: jumped (sim-distance {e.BranchDistance:0})";
+            });
+        }
+
+        private void SetJukeboxProbabilityMin(double value)
+        {
+            if (Math.Abs(_jukeboxSettingsModel.BranchProbabilityMin - value) < 0.0001)
+                return;
+
+            _jukeboxSettingsModel.BranchProbabilityMin = value;
+            RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinPercent));
+            RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinText));
+            PersistJukeboxSettings();
+        }
+
+        private void SetJukeboxProbabilityMax(double value)
+        {
+            if (Math.Abs(_jukeboxSettingsModel.BranchProbabilityMax - value) < 0.0001)
+                return;
+
+            _jukeboxSettingsModel.BranchProbabilityMax = value;
+            RaisePropertyChanged(nameof(JukeboxBranchProbabilityMaxPercent));
+            RaisePropertyChanged(nameof(JukeboxBranchProbabilityMaxText));
+            PersistJukeboxSettings();
+        }
+
+        private void PersistJukeboxSettings()
+        {
+            _jukeboxSettings.Save(_jukeboxSettingsModel);
+            _loopController.InvalidateGraphCache();
+
+            if (LoopEnabled && JukeboxModeEnabled)
+                ApplyLoopSettings();
+        }
+
+        private void RefreshRingVisualization(string trackId)
+        {
+            RingGlowFromMs = null;
+            RingGlowToMs = null;
+
+            if (string.IsNullOrEmpty(trackId))
+            {
+                RingSegmentStartsSec = Array.Empty<double>();
+                UpdateRingSegmentCountText(Array.Empty<double>());
+                return;
+            }
+
+            var analysis = AnalysisCache.Load(trackId);
+
+            if (analysis == null)
+            {
+                RingSegmentStartsSec = Array.Empty<double>();
+                UpdateRingSegmentCountText(Array.Empty<double>());
+                return;
+            }
+
+            RingDurationMs = (long)(analysis.DurationSec * 1000);
+            var segments = BuildRingSegments(analysis);
+            RingSegmentStartsSec = segments;
+            UpdateRingSegmentCountText(segments);
+        }
+
+        private static IReadOnlyList<double> BuildRingSegments(TrackAnalysis analysis)
+        {
+            var sources = new List<double>();
+
+            // Prefer analysis segments (overlapping windows) for a full ring; fall back to sections/beats.
+            if (analysis.Segments != null && analysis.Segments.Count >= 8)
+            {
+                sources.AddRange(analysis.Segments.Select(s => s.Start));
+            }
+            else if (analysis.Sections != null && analysis.Sections.Count >= 4)
+            {
+                sources.AddRange(analysis.Sections.Select(s => s.Start));
+            }
+            else if (analysis.Beats != null)
+            {
+                sources.AddRange(analysis.Beats.Select(b => b.Start));
+            }
+
+            if (sources.Count == 0)
+                return Array.Empty<double>();
+
+            sources.Sort();
+
+            const int maxSegments = 64;
+
+            if (sources.Count <= maxSegments)
+                return sources;
+
+            var step = sources.Count / (double)maxSegments;
+            var reduced = new List<double>();
+
+            for (var i = 0; i < maxSegments; i++)
+                reduced.Add(sources[(int)Math.Floor(i * step)]);
+
+            return reduced;
+        }
+
+        private void UpdateRingSegmentCountText(IReadOnlyList<double> segments)
+        {
+            RingSegmentCountText = segments == null || segments.Count == 0
+                ? "No segments — analyze track first"
+                : $"{segments.Count} ring segments (song map)";
         }
 
         /// <summary>Invoked when a track finishes without user intervention (non-loop mode).</summary>
@@ -917,6 +1192,8 @@ namespace SpotifyWPF.ViewModel.Page
         /// <summary>Re-arms the jukebox once analysis lands for the current track.</summary>
         private void OnAnalysisCompleted(string trackId, Model.Prediction.TrackAnalysis analysis)
         {
+            RefreshRingVisualization(trackId);
+
             if (LoopEnabled && JukeboxModeEnabled && trackId == _loopController.CurrentTrackId)
                 ApplyLoopSettings();
         }

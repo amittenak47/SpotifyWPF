@@ -35,12 +35,12 @@ namespace SpotifyWPF.Service.Prediction
 
             if (!string.IsNullOrWhiteSpace(configured))
             {
-                if (IsStorePythonAlias(configured))
+                if (IsStorePythonAlias(configured) || IsStorePythonInstall(configured))
                 {
-                    if (TryResolveFromLauncherVersion(ExtractVersionFromAlias(configured), out var fromAlias))
-                        return fromAlias;
+                    return ToLauncherToken(configured);
                 }
-                else if (File.Exists(configured))
+
+                if (File.Exists(configured))
                 {
                     return configured;
                 }
@@ -111,10 +111,31 @@ namespace SpotifyWPF.Service.Prediction
                 };
             }
 
+            if (IsStorePythonInstall(executable))
+            {
+                return CreateSidecarStartInfoForLauncher(ToLauncherToken(executable), arguments);
+            }
+
             return new ProcessStartInfo
             {
                 FileName = executable,
                 Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            };
+        }
+
+        private static ProcessStartInfo CreateSidecarStartInfoForLauncher(string launcherToken, string arguments)
+        {
+            if (!TryParseLauncherToken(launcherToken, out var launcher, out var versionFlag))
+                throw new InvalidOperationException($"Invalid Python launcher token: {launcherToken}");
+
+            return new ProcessStartInfo
+            {
+                FileName = launcher,
+                Arguments = $"{versionFlag} {arguments}",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true,
@@ -218,7 +239,7 @@ namespace SpotifyWPF.Service.Prediction
                     if (best == null)
                         return false;
 
-                    executablePath = best;
+                    executablePath = IsStorePythonInstall(best) ? ToLauncherToken(best) : best;
                     return true;
                 }
             }
@@ -264,7 +285,17 @@ namespace SpotifyWPF.Service.Prediction
 
                     executablePath = output.Trim();
 
-                    return !string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath);
+                    if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+                        return false;
+
+                    // Store installs live under WindowsApps and cannot be executed directly by child processes.
+                    if (IsStorePythonInstall(executablePath))
+                    {
+                        executablePath = ToLauncherToken(executablePath);
+                        return true;
+                    }
+
+                    return true;
                 }
             }
             catch (Exception ex)
@@ -304,6 +335,18 @@ namespace SpotifyWPF.Service.Prediction
             return !string.IsNullOrWhiteSpace(path) &&
                    path.IndexOf(@"AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation",
                        StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsStorePythonInstall(string path)
+        {
+            return !string.IsNullOrWhiteSpace(path) &&
+                   path.IndexOf(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                   path.IndexOf("PythonSoftwareFoundation", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string ToLauncherToken(string path)
+        {
+            return "py:-" + ExtractVersionFromAlias(path);
         }
 
         private static string ExtractVersionFromAlias(string path)

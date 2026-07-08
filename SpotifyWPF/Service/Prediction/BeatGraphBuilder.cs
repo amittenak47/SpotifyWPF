@@ -85,8 +85,11 @@ namespace SpotifyWPF.Service.Prediction
         /// <summary>Penalty for beats sitting at different positions within their bars.</summary>
         private const double DifferentBarPositionPenalty = 100;
 
-        public BeatGraph Build(TrackAnalysis analysis)
+        public BeatGraph Build(TrackAnalysis analysis, JukeboxSettings settings = null)
         {
+            settings = settings ?? JukeboxSettings.CreateDefaults();
+            var maxDistance = Math.Max(InitialBranchDistance, settings.BranchSimilarityThresholdMax);
+
             if (analysis == null)
                 throw new ArgumentNullException(nameof(analysis));
 
@@ -138,7 +141,7 @@ namespace SpotifyWPF.Service.Prediction
                 var branchableBeats = graph.Beats.Count(b => b.Neighbors.Count > 0);
 
                 if (branchableBeats >= Math.Max(2, count * TargetBranchableBeatRatio) ||
-                    threshold >= MaxBranchDistance)
+                    threshold >= maxDistance)
                 {
                     break;
                 }
@@ -146,7 +149,7 @@ namespace SpotifyWPF.Service.Prediction
                 threshold += BranchDistanceStep;
             }
 
-            graph.BranchDistanceThreshold = threshold;
+            graph.BranchDistanceThreshold = Math.Min(threshold, maxDistance);
 
             EnsureLastEdge(graph, distances);
 
