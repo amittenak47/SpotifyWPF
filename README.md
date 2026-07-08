@@ -110,3 +110,60 @@ Using the installer will keep SpotifyWPF up to date.
 # Running
 
 After installation, you can just search for "SpotifyWPF" in your start menu if you used the installer.
+
+# Experimental: Loop Lab (Prediction page)
+
+The `experimental` branch adds **Loop Lab** under **Experimental → Prediction**. It is an in-app Spotify player used for beat-aware looping and personalized next-track prediction experiments.
+
+**Requirements (all users):**
+
+- A **Spotify Premium** account (Web Playback SDK requirement)
+- **Re-login after upgrading** — Loop Lab needs extra OAuth scopes (`streaming`, playback state, etc.). Cached tokens from older builds will prompt you to sign in again.
+- **Microsoft Edge WebView2 Runtime** — hosts the embedded Spotify Web Playback SDK player.
+
+Install WebView2 Runtime (Windows):
+
+```powershell
+winget install --id Microsoft.EdgeWebView2Runtime --accept-package-agreements --accept-source-agreements
+```
+
+Or download the Evergreen Bootstrapper from [Microsoft's WebView2 page](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
+
+**Requirements (Path B local analysis only):**
+
+If Spotify's `/audio-analysis` endpoint is unavailable for your developer app (403 — common for apps registered after Nov 2024), Loop Lab falls back to **local analysis**: it records one full play-through via WASAPI loopback, then runs a Python sidecar (`tools/analyze_track.py`) with **librosa**.
+
+Install Python 3 and the sidecar dependencies:
+
+```powershell
+# Use the Windows Python launcher so you don't pick up an old Python 2.x on PATH
+py -3.12 -m pip install --upgrade pip
+py -3.12 -m pip install librosa soundfile
+```
+
+Verify:
+
+```powershell
+py -3.12 -c "import librosa, soundfile; print(librosa.__version__, soundfile.__version__)"
+```
+
+**Important:** If `python` on your PATH points to Python 2.x (common on Windows), tell SpotifyWPF which interpreter to use before running local analysis:
+
+```powershell
+# Current PowerShell session
+$env:SPOTIFYWPF_PYTHON = "py -3.12"
+
+# Persist for your user account
+[Environment]::SetEnvironmentVariable("SPOTIFYWPF_PYTHON", "py -3.12", "User")
+```
+
+Or set `SPOTIFYWPF_PYTHON` to the full path of `python.exe` (for example `C:\Users\You\AppData\Local\Programs\Python\Python312\python.exe`).
+
+**Using Loop Lab:**
+
+1. Log in (or re-login after upgrading).
+2. Open **Experimental → Prediction**, or right-click a playlist on the Playlists page and choose **Open in Loop Lab**.
+3. On first player start, the app probes Spotify's audio-analysis API once and saves the result under `%LocalAppData%\SpotifyWPF\Prediction\analysis-source.json`.
+4. Use the **Loop Lab** tab for playback/looping; use the **Predictions** tab for next-track scoring after a track finishes.
+
+**Local analysis tips:** mute other apps during capture (WASAPI records the system mix). Each track is captured and analyzed at most once; results are cached under `%LocalAppData%\SpotifyWPF\Prediction\`.
