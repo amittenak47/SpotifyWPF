@@ -2083,9 +2083,15 @@ namespace SpotifyWPF.ViewModel.Page
                 var currentUser = await _spotify.GetPrivateProfileAsync();
                 cancellationToken.ThrowIfCancellationRequested();
 
+                var fullPlaylist = await _spotify.Api.Playlists.Get(playlist.Id, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                playlist.OwnerId = fullPlaylist.Owner?.Id;
+                playlist.OwnerDisplayName = fullPlaylist.Owner?.DisplayName ?? fullPlaylist.Owner?.Id;
+
                 if (currentUser != null)
                 {
-                    Log($"Track load context: playlistOwner={playlist.OwnerDisplayName ?? playlist.OwnerId ?? "(unknown)"}, currentUser={currentUser.DisplayName ?? currentUser.Id} ({currentUser.Id}).", true);
+                    Log($"Track load context: playlistOwner={playlist.OwnerDisplayName ?? "(unknown)"} ({playlist.OwnerId ?? "no owner id"}), currentUser={currentUser.DisplayName ?? currentUser.Id} ({currentUser.Id}).", true);
 
                     if (!string.IsNullOrWhiteSpace(playlist.OwnerId) &&
                         !string.Equals(playlist.OwnerId, currentUser.Id, StringComparison.OrdinalIgnoreCase))
@@ -2096,39 +2102,38 @@ namespace SpotifyWPF.ViewModel.Page
 
                 await Application.Current.Dispatcher.InvokeAsync(() => Tracks.Clear());
 
-                var request = new PlaylistGetItemsRequest(PlaylistGetItemsRequest.AdditionalTypes.All)
-                {
-                    Limit = 100,
-                    Offset = 0
-                };
-
-                var page = await _spotify.Api.Playlists.GetItems(playlist.Id, request, cancellationToken);
                 var loadedCount = 0;
                 var position = 1;
+                var detailsResult = await TryLoadPlaylistTrackPagesAsync(
+                    GetPlaylistTrackPage(fullPlaylist),
+                    "Get Playlist",
+                    position,
+                    cancellationToken);
+                loadedCount += detailsResult.LoadedCount;
+                position = detailsResult.NextPosition;
 
-                while (page != null)
+                if (!detailsResult.LoadedAny)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    Log("Get Playlist did not return track items. Trying Get Playlist Items endpoint.", true);
 
-                    var mappedTracks = page.Items
-                        .Select(item => AutoMapperConfiguration.MapPlaylistItem(item, position++))
-                        .ToList();
-
-                    loadedCount += mappedTracks.Count;
-
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    var request = new PlaylistGetItemsRequest(PlaylistGetItemsRequest.AdditionalTypes.All)
                     {
-                        foreach (var track in mappedTracks)
-                            Tracks.Add(track);
-                    });
+                        Limit = 100,
+                        Offset = 0
+                    };
 
-                    Log($"Loaded playlist track page: offset={page.Offset?.ToString() ?? "unknown"}, items={mappedTracks.Count}, loadedTotal={loadedCount}.", true);
+                    var itemsResult = await TryLoadPlaylistTrackPagesAsync(
+                        await _spotify.Api.Playlists.GetItems(playlist.Id, request, cancellationToken),
+                        "Get Playlist Items",
+                        position,
+                        cancellationToken);
+                    loadedCount += itemsResult.LoadedCount;
+                }
 
-                    if (page.Next == null)
-                        break;
-
-                    await WaitForRequestSpacingAsync(cancellationToken);
-                    page = await _spotify.Api.NextPage(page);
+                if (loadedCount == 0 && (fullPlaylist.Tracks?.Total ?? fullPlaylist.Items?.Total) > 0)
+                {
+                    Log("Spotify reported tracks on this playlist, but no track rows were returned to the app.");
+                    Log("If this is your playlist, your developer app may be in Development Mode. Confirm your Spotify account email is added under User Management in the Spotify Developer Dashboard.");
                 }
 
                 Log($"Loaded {loadedCount} track(s) for playlist '{playlist.Name}'.");
@@ -2138,10 +2143,11 @@ namespace SpotifyWPF.ViewModel.Page
             }
             catch (APIException ex) when (IsPlaylistTracksForbidden(ex))
             {
-                Log("Spotify returned Forbidden for playlist tracks. Web Playback is not required for this feature.");
-                Log("Spotify only allows Get Playlist Items for playlists you own or where you are a collaborator. Followed/liked playlists from other users will return 403.");
+                Log("Spotify returned Forbidden while loading playlist tracks. Web Playback is not required for this feature.");
+                Log("This usually means the playlist is not owned by or shared with your account, or your developer app is restricted from playlist item access in Development Mode.");
+                Log("Confirm your Spotify email is listed in the app's User Management allowlist, then re-login. Owned playlists should load via Get Playlist before Get Playlist Items.");
                 Log($"Track load forbidden response: {ex.Message}", true);
-                Status = "Forbidden: track list only available for your own or collaborative playlists.";
+                Status = "Forbidden: Spotify blocked playlist track access for this app/account.";
             }
             catch (APITooManyRequestsException ex)
             {
@@ -2169,6 +2175,73 @@ namespace SpotifyWPF.ViewModel.Page
         private static bool IsPlaylistTracksForbidden(APIException ex)
         {
             return ex != null && ex.Message?.IndexOf("Forbidden", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static Paging<PlaylistTrack<IPlayableItem>> GetPlaylistTrackPage(FullPlaylist playlist)
+        {
+            return playlist?.Items ?? playlist?.Tracks;
+        }
+
+        private async Task<PlaylistTrackLoadResult> TryLoadPlaylistTrackPagesAsync(
+            Paging<PlaylistTrack<IPlayableItem>> page,
+            string source,
+            int position,
+            CancellationToken cancellationToken)
+        {
+            if (page?.Items == null || !page.Items.Any())
+                return PlaylistTrackLoadResult.Empty(position);
+
+            Log($"Loading playlist tracks via {source}.", true);
+
+            var loadedCount = 0;
+
+            while (page != null)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var mappedTracks = page.Items
+                    .Select(item => AutoMapperConfiguration.MapPlaylistItem(item, position++))
+                    .ToList();
+
+                loadedCount += mappedTracks.Count;
+
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    foreach (var track in mappedTracks)
+                        Tracks.Add(track);
+                });
+
+                Log($"Loaded playlist track page via {source}: offset={page.Offset?.ToString() ?? "unknown"}, items={mappedTracks.Count}, loadedTotal={loadedCount}.", true);
+
+                if (page.Next == null)
+                    break;
+
+                await WaitForRequestSpacingAsync(cancellationToken);
+                page = await _spotify.Api.NextPage(page);
+            }
+
+            return new PlaylistTrackLoadResult(loadedCount > 0, loadedCount, position);
+        }
+
+        private sealed class PlaylistTrackLoadResult
+        {
+            public PlaylistTrackLoadResult(bool loadedAny, int loadedCount, int nextPosition)
+            {
+                LoadedAny = loadedAny;
+                LoadedCount = loadedCount;
+                NextPosition = nextPosition;
+            }
+
+            public bool LoadedAny { get; }
+
+            public int LoadedCount { get; }
+
+            public int NextPosition { get; }
+
+            public static PlaylistTrackLoadResult Empty(int position)
+            {
+                return new PlaylistTrackLoadResult(false, 0, position);
+            }
         }
 
         public class PlaylistCacheItem
