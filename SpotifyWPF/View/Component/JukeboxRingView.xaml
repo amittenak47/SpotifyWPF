@@ -9,9 +9,15 @@
         <local:JukeboxRingCanvas x:Name="Ring"
                                  DurationMs="{Binding RingDurationMs, Mode=OneWay}"
                                  PositionMs="{Binding PositionMs, Mode=OneWay}"
-                                 SegmentStartsSec="{Binding RingSegmentStartsSec, Mode=OneWay}"
-                                 GlowFromMs="{Binding RingGlowFromMs, Mode=OneWay}"
-                                 GlowToMs="{Binding RingGlowToMs, Mode=OneWay}"
+                                 IsPaused="{Binding IsPaused, Mode=OneWay}"
+                                 Graph="{Binding RingGraph, Mode=OneWay}"
+                                 SectionStartsSec="{Binding RingSectionStartsSec, Mode=OneWay}"
+                                 PlannedFromBeatIndex="{Binding RingPlannedFromBeat, Mode=OneWay}"
+                                 PlannedToBeatIndex="{Binding RingPlannedToBeat, Mode=OneWay}"
+                                 JumpFlash="{Binding RingJumpFlash, Mode=OneWay}"
+                                 LockedBranches="{Binding RingLockedBranches, Mode=OneWay}"
+                                 ToggleLockCommand="{Binding ToggleRingLockCommand}"
+                                 ResetPlaysToken="{Binding RingResetPlaysToken, Mode=OneWay}"
                                  MiniPlayerMode="{Binding MiniPlayerMode, RelativeSource={RelativeSource AncestorType=local:JukeboxRingView}}"/>
     </Grid>
 </UserControl>

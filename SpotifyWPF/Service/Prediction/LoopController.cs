@@ -31,6 +31,13 @@ namespace SpotifyWPF.Service.Prediction
         event EventHandler ActiveLoopChanged;
 
         void InvalidateGraphCache();
+
+        /// <summary>
+        /// Returns the (cached) beat graph for a track, building it from the cached analysis when
+        /// needed. Null when no analysis exists yet. Used by the ring UI — the graph itself stays
+        /// service-side.
+        /// </summary>
+        BeatGraph GetGraphForTrack(string trackId);
     }
 
     /// <summary>
@@ -172,7 +179,7 @@ namespace SpotifyWPF.Service.Prediction
 
         private void RearmJukebox()
         {
-            var graph = GetGraphForCurrentTrack();
+            var graph = GetGraphForTrack(CurrentTrackId);
 
             if (graph == null)
             {
@@ -181,8 +188,8 @@ namespace SpotifyWPF.Service.Prediction
                 return;
             }
 
-            if (_navigator == null || !ReferenceEquals(_navigator.Graph, graph))
-                _navigator = new BeatNavigator(graph, _jukeboxSettings.Get());
+            // Recreate on every rearm so branch-lock edits on the profile take effect immediately.
+            _navigator = new BeatNavigator(graph, _jukeboxSettings.Get(), ActiveProfile);
 
             if (!_navigator.CanJump)
             {
@@ -260,10 +267,8 @@ namespace SpotifyWPF.Service.Prediction
             PlanAndArmJump(jump?.TargetBeatIndex ?? _navigator.FindBeatIndexAtMs(e.SeekToMs));
         }
 
-        private BeatGraph GetGraphForCurrentTrack()
+        public BeatGraph GetGraphForTrack(string trackId)
         {
-            var trackId = CurrentTrackId;
-
             if (trackId == null)
                 return null;
 

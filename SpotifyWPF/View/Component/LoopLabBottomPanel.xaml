@@ -125,6 +125,35 @@
                             </Border>
                         </TabItem>
 
+                        <TabItem Header="Ring">
+                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox Content="Locks only"
+                                                  VerticalAlignment="Center"
+                                                  Foreground="{StaticResource AppForegroundBrush}"
+                                                  IsChecked="{Binding JukeboxLocksOnly}"
+                                                  ToolTip="Jukebox jumps travel only the branches locked on the ring"/>
+                                        <Button Content="Clear locks" MinWidth="88" Margin="16,0,0,0"
+                                                Command="{Binding ClearRingLocksCommand}"/>
+                                        <Button Content="Reset plays" MinWidth="88" Margin="8,0,0,0"
+                                                Command="{Binding ResetRingPlaysCommand}"
+                                                ToolTip="Clear the ring's play-coverage bars"/>
+                                        <TextBlock Text="{Binding RingLockCountText}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="16,0,0,0"
+                                                   Foreground="#FFD166"/>
+                                    </StackPanel>
+
+                                    <TextBlock Text="hover a beat to inspect its branches · click to lock its best branch"
+                                               FontSize="11"
+                                               Margin="0,8,0,0"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </TabItem>
+
                         <TabItem Header="Session">
                             <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
                                 <Grid>

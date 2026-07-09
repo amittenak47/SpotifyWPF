@@ -35,19 +35,38 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly JukeboxSettings _settings;
 
+        /// <summary>Locked branches as packed (from &lt;&lt; 32 | to) keys for O(1) lookup.</summary>
+        private readonly HashSet<long> _lockedBranches = new HashSet<long>();
+
+        private readonly bool _locksOnly;
+
         private double _currentBranchChance;
 
         public BeatGraph Graph { get; }
 
         public double CurrentBranchChance => _currentBranchChance;
 
-        public BeatNavigator(BeatGraph graph, JukeboxSettings settings, int? randomSeed = null)
+        public BeatNavigator(BeatGraph graph, JukeboxSettings settings, LoopProfile profile = null,
+            int? randomSeed = null)
         {
             Graph = graph ?? throw new ArgumentNullException(nameof(graph));
             _settings = settings ?? JukeboxSettings.CreateDefaults();
             _currentBranchChance = ClampProbability(_settings.BranchProbabilityMin);
             _random = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
+
+            if (profile?.LockedBranches != null)
+            {
+                foreach (var branchLock in profile.LockedBranches)
+                    _lockedBranches.Add(PackBranch(branchLock.FromBeatIndex, branchLock.ToBeatIndex));
+            }
+
+            _locksOnly = profile?.LocksOnly == true && _lockedBranches.Count > 0;
         }
+
+        private static long PackBranch(int from, int to) => ((long)from << 32) | (uint)to;
+
+        private bool IsLocked(int from, BeatEdge edge) =>
+            _lockedBranches.Contains(PackBranch(from, edge.DestinationIndex));
 
         private double ClampProbability(double value)
         {
@@ -94,6 +113,28 @@ namespace SpotifyWPF.Service.Prediction
             for (var i = start; i < beats.Count; i++)
             {
                 var beat = beats[i];
+
+                // Locks-only mode: the ring's locked branches are rails — always taken on arrival,
+                // and no random branching happens anywhere else.
+                if (_locksOnly)
+                {
+                    var lockedEdges = beat.Neighbors.Where(e => IsLocked(i, e)).ToList();
+
+                    if (lockedEdges.Count > 0)
+                        return MakeJump(i, lockedEdges[_random.Next(lockedEdges.Count)]);
+
+                    // Still guard the point of no return so playback never falls off the end.
+                    if (i == Graph.LastBranchPointIndex)
+                    {
+                        var guardEdge = ChooseEdge(i,
+                            beat.Neighbors.Where(e => e.DestinationIndex < i).ToList());
+
+                        if (guardEdge != null)
+                            return MakeJump(i, guardEdge);
+                    }
+
+                    continue;
+                }
 
                 // Point of no return: always branch backwards here rather than running off the end.
                 if (i == Graph.LastBranchPointIndex)

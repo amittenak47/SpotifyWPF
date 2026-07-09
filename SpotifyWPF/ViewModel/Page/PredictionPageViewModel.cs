@@ -141,6 +141,9 @@ namespace SpotifyWPF.ViewModel.Page
             BrowsePythonCommand = new RelayCommand(BrowsePython);
             EnterMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = true, () => !IsMiniPlayerMode);
             ExitMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = false, () => IsMiniPlayerMode);
+            ToggleRingLockCommand = new RelayCommand<int>(ToggleRingLock);
+            ClearRingLocksCommand = new RelayCommand(ClearRingLocks);
+            ResetRingPlaysCommand = new RelayCommand(() => RingResetPlaysToken++);
 
             MessengerInstance.Register<string>(this, MessageType.OpenInLoopLab,
                 async contextUri => await HandleOpenInLoopLabAsync(contextUri));
@@ -507,7 +510,7 @@ namespace SpotifyWPF.ViewModel.Page
             set => Set(ref _ringSegmentCountText, value);
         }
 
-        private string _ringSegmentCountText = "No segments loaded";
+        private string _ringSegmentCountText = "No beat map loaded";
 
         public string JukeboxBranchChanceText
         {
@@ -525,29 +528,85 @@ namespace SpotifyWPF.ViewModel.Page
 
         private long _ringDurationMs;
 
-        public IReadOnlyList<double> RingSegmentStartsSec
+        /// <summary>Beat graph rendered by the ring; built service-side, UI state only here.</summary>
+        public BeatGraph RingGraph
         {
-            get => _ringSegmentStartsSec;
-            set => Set(ref _ringSegmentStartsSec, value);
+            get => _ringGraph;
+            set => Set(ref _ringGraph, value);
         }
 
-        private IReadOnlyList<double> _ringSegmentStartsSec = Array.Empty<double>();
+        private BeatGraph _ringGraph;
 
-        public long? RingGlowFromMs
+        /// <summary>Section start times used to tint the ring's beat bars and outer rim.</summary>
+        public IReadOnlyList<double> RingSectionStartsSec
         {
-            get => _ringGlowFromMs;
-            set => Set(ref _ringGlowFromMs, value);
+            get => _ringSectionStartsSec;
+            set => Set(ref _ringSectionStartsSec, value);
         }
 
-        private long? _ringGlowFromMs;
+        private IReadOnlyList<double> _ringSectionStartsSec = Array.Empty<double>();
 
-        public long? RingGlowToMs
+        public int RingPlannedFromBeat
         {
-            get => _ringGlowToMs;
-            set => Set(ref _ringGlowToMs, value);
+            get => _ringPlannedFromBeat;
+            set => Set(ref _ringPlannedFromBeat, value);
         }
 
-        private long? _ringGlowToMs;
+        private int _ringPlannedFromBeat = -1;
+
+        public int RingPlannedToBeat
+        {
+            get => _ringPlannedToBeat;
+            set => Set(ref _ringPlannedToBeat, value);
+        }
+
+        private int _ringPlannedToBeat = -1;
+
+        public JukeboxJumpFlash RingJumpFlash
+        {
+            get => _ringJumpFlash;
+            set => Set(ref _ringJumpFlash, value);
+        }
+
+        private JukeboxJumpFlash _ringJumpFlash;
+
+        public IReadOnlyList<BranchLock> RingLockedBranches
+        {
+            get => _ringLockedBranches;
+            set => Set(ref _ringLockedBranches, value);
+        }
+
+        private IReadOnlyList<BranchLock> _ringLockedBranches = Array.Empty<BranchLock>();
+
+        public string RingLockCountText
+        {
+            get => _ringLockCountText;
+            set => Set(ref _ringLockCountText, value);
+        }
+
+        private string _ringLockCountText = "no locks";
+
+        /// <summary>Bumped by "Reset plays" — the ring clears its coverage bars on change.</summary>
+        public int RingResetPlaysToken
+        {
+            get => _ringResetPlaysToken;
+            set => Set(ref _ringResetPlaysToken, value);
+        }
+
+        private int _ringResetPlaysToken;
+
+        private bool _jukeboxLocksOnly;
+
+        /// <summary>When true, jukebox jumps only travel the branches locked on the ring.</summary>
+        public bool JukeboxLocksOnly
+        {
+            get => _jukeboxLocksOnly;
+            set
+            {
+                if (Set(ref _jukeboxLocksOnly, value))
+                    ApplyLoopSettings();
+            }
+        }
 
         public ObservableCollection<ScoredTrack> Predictions { get; } =
             new ObservableCollection<ScoredTrack>();
@@ -676,6 +735,13 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand EnterMiniPlayerCommand { get; }
 
         public RelayCommand ExitMiniPlayerCommand { get; }
+
+        /// <summary>Ring click: lock/unlock the clicked beat's best branch.</summary>
+        public RelayCommand<int> ToggleRingLockCommand { get; }
+
+        public RelayCommand ClearRingLocksCommand { get; }
+
+        public RelayCommand ResetRingPlaysCommand { get; }
 
         private bool CanUsePlayer()
         {
@@ -1016,16 +1082,21 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void RefreshLoopSettingsFromStore(string trackId)
         {
+            var profile = _loopController.GetProfileForTrack(trackId);
+
             _suppressLoopApply = true;
 
             try
             {
                 // Infinite Jukebox is always the default; profile is applied in ApplyLoopSettings.
+                JukeboxLocksOnly = profile != null && profile.LocksOnly;
             }
             finally
             {
                 _suppressLoopApply = false;
             }
+
+            RefreshRingLocks(profile);
         }
 
         private void ApplyLoopSettings()
@@ -1041,6 +1112,7 @@ namespace SpotifyWPF.ViewModel.Page
             var profile = _loopController.GetProfileForTrack(trackId);
             profile.Enabled = !_jukeboxSuppressedForCapture;
             profile.Mode = LoopModes.Jukebox;
+            profile.LocksOnly = JukeboxLocksOnly;
 
             _loopController.ApplyProfile(profile);
         }
@@ -1049,12 +1121,93 @@ namespace SpotifyWPF.ViewModel.Page
         {
             RunOnUiThread(() =>
             {
-                RingGlowFromMs = e.FromMs;
-                RingGlowToMs = e.ToMs;
+                if (e.IsPlanned)
+                {
+                    RingPlannedFromBeat = e.FromBeatIndex;
+                    RingPlannedToBeat = e.ToBeatIndex;
+                }
+                else
+                {
+                    RingJumpFlash = new JukeboxJumpFlash(e.FromBeatIndex, e.ToBeatIndex);
+                }
+
                 JukeboxBranchChanceText = e.IsPlanned
                     ? $"Branch chance: planning jump (sim-distance {e.BranchDistance:0})"
                     : $"Branch chance: jumped (sim-distance {e.BranchDistance:0})";
             });
+        }
+
+        private void ToggleRingLock(int beatIndex)
+        {
+            var graph = RingGraph;
+            var trackId = _loopController.CurrentTrackId;
+
+            if (graph == null || trackId == null || beatIndex < 0 || beatIndex >= graph.Beats.Count)
+                return;
+
+            var profile = _loopController.GetProfileForTrack(trackId);
+
+            if (profile.LockedBranches == null)
+                profile.LockedBranches = new List<BranchLock>();
+
+            var existing = profile.LockedBranches
+                .Where(l => l.FromBeatIndex == beatIndex)
+                .ToList();
+
+            if (existing.Count > 0)
+            {
+                foreach (var branchLock in existing)
+                    profile.LockedBranches.Remove(branchLock);
+
+                Log($"Ring: unlocked branch at beat {beatIndex}.");
+            }
+            else
+            {
+                var best = graph.Beats[beatIndex].Neighbors
+                    .OrderBy(edge => edge.Distance)
+                    .FirstOrDefault();
+
+                if (best == null)
+                    return;
+
+                profile.LockedBranches.Add(new BranchLock
+                {
+                    FromBeatIndex = beatIndex,
+                    ToBeatIndex = best.DestinationIndex
+                });
+
+                Log($"Ring: locked branch beat {beatIndex} → {best.DestinationIndex}.");
+            }
+
+            _loopController.ApplyProfile(profile);
+            RefreshRingLocks(profile);
+        }
+
+        private void ClearRingLocks()
+        {
+            var trackId = _loopController.CurrentTrackId;
+
+            if (trackId == null)
+                return;
+
+            var profile = _loopController.GetProfileForTrack(trackId);
+
+            if (profile.LockedBranches == null || profile.LockedBranches.Count == 0)
+                return;
+
+            profile.LockedBranches.Clear();
+            _loopController.ApplyProfile(profile);
+            RefreshRingLocks(profile);
+            Log("Ring: cleared all locked branches.");
+        }
+
+        private void RefreshRingLocks(LoopProfile profile)
+        {
+            RingLockedBranches = profile?.LockedBranches?.ToList()
+                                 ?? (IReadOnlyList<BranchLock>)Array.Empty<BranchLock>();
+            RingLockCountText = RingLockedBranches.Count == 0
+                ? "no locks"
+                : $"{RingLockedBranches.Count} locked";
         }
 
         private void SetJukeboxProbabilityMin(double value)
@@ -1090,13 +1243,14 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void RefreshRingVisualization(string trackId)
         {
-            RingGlowFromMs = null;
-            RingGlowToMs = null;
+            RingPlannedFromBeat = -1;
+            RingPlannedToBeat = -1;
 
             if (string.IsNullOrEmpty(trackId))
             {
-                RingSegmentStartsSec = Array.Empty<double>();
-                UpdateRingSegmentCountText(Array.Empty<double>());
+                RingGraph = null;
+                RingSectionStartsSec = Array.Empty<double>();
+                RingSegmentCountText = "No track playing";
                 return;
             }
 
@@ -1104,59 +1258,31 @@ namespace SpotifyWPF.ViewModel.Page
 
             if (analysis == null)
             {
-                RingSegmentStartsSec = Array.Empty<double>();
-                UpdateRingSegmentCountText(Array.Empty<double>());
+                RingGraph = null;
+                RingSectionStartsSec = Array.Empty<double>();
+                RingSegmentCountText = "No beat map — analyze track first";
                 return;
             }
 
             RingDurationMs = (long)(analysis.DurationSec * 1000);
-            var segments = BuildRingSegments(analysis);
-            RingSegmentStartsSec = segments;
-            UpdateRingSegmentCountText(segments);
-        }
+            RingSectionStartsSec = analysis.Sections != null && analysis.Sections.Count > 0
+                ? analysis.Sections.Select(s => s.Start).ToList()
+                : (IReadOnlyList<double>)Array.Empty<double>();
+            RingSegmentCountText = "Building beat graph…";
 
-        private static IReadOnlyList<double> BuildRingSegments(TrackAnalysis analysis)
-        {
-            var sources = new List<double>();
+            // The graph is O(beats²) to build; keep the UI thread free.
+            Task.Run(() => _loopController.GetGraphForTrack(trackId)).ContinueWith(task =>
+                RunOnUiThread(() =>
+                {
+                    if (trackId != _loopController.CurrentTrackId)
+                        return;
 
-            // Prefer analysis segments (overlapping windows) for a full ring; fall back to sections/beats.
-            if (analysis.Segments != null && analysis.Segments.Count >= 8)
-            {
-                sources.AddRange(analysis.Segments.Select(s => s.Start));
-            }
-            else if (analysis.Sections != null && analysis.Sections.Count >= 4)
-            {
-                sources.AddRange(analysis.Sections.Select(s => s.Start));
-            }
-            else if (analysis.Beats != null)
-            {
-                sources.AddRange(analysis.Beats.Select(b => b.Start));
-            }
-
-            if (sources.Count == 0)
-                return Array.Empty<double>();
-
-            sources.Sort();
-
-            const int maxSegments = 64;
-
-            if (sources.Count <= maxSegments)
-                return sources;
-
-            var step = sources.Count / (double)maxSegments;
-            var reduced = new List<double>();
-
-            for (var i = 0; i < maxSegments; i++)
-                reduced.Add(sources[(int)Math.Floor(i * step)]);
-
-            return reduced;
-        }
-
-        private void UpdateRingSegmentCountText(IReadOnlyList<double> segments)
-        {
-            RingSegmentCountText = segments == null || segments.Count == 0
-                ? "No segments — analyze track first"
-                : $"{segments.Count} ring segments (song map)";
+                    var graph = task.Status == TaskStatus.RanToCompletion ? task.Result : null;
+                    RingGraph = graph;
+                    RingSegmentCountText = graph == null
+                        ? "No beat map — analyze track first"
+                        : $"{graph.Beats.Count} beats · {graph.TotalBranchCount} branches";
+                }));
         }
 
         /// <summary>Invoked when a track finishes without user intervention (non-loop mode).</summary>

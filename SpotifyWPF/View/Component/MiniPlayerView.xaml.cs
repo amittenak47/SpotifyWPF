@@ -24,7 +24,8 @@ namespace SpotifyWPF.View.Component
         {
             while (source != null)
             {
-                if (source is Button)
+                // ButtonBase covers the transport buttons plus the ring-lock CheckBox.
+                if (source is System.Windows.Controls.Primitives.ButtonBase)
                     return true;
 
                 source = VisualTreeHelper.GetParent(source);
