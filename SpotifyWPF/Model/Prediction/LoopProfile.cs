@@ -16,6 +16,27 @@ namespace SpotifyWPF.Model.Prediction
         public int ToBeatIndex { get; set; }
     }
 
+    /// <summary>Named snapshot of ring branch locks for a track (multiple per track).</summary>
+    public class BranchLockPreset
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+
+        [JsonPropertyName("locksOnly")]
+        public bool LocksOnly { get; set; }
+
+        [JsonPropertyName("lockedBranches")]
+        public List<BranchLock> LockedBranches { get; set; } = new List<BranchLock>();
+    }
+
+    /// <summary>Beat-to-beat target passed from the ring canvas when locking a specific branch chord.</summary>
+    public class RingBranchClick
+    {
+        public int FromBeatIndex { get; set; }
+
+        public int ToBeatIndex { get; set; }
+    }
+
     /// <summary>
     /// Per-track loop settings persisted in loop-regions.json. Simple mode seeks back to
     /// LoopStartMs whenever playback reaches LoopEndMs (e.g. to skip an outro/dialogue).
@@ -45,6 +66,10 @@ namespace SpotifyWPF.Model.Prediction
         /// <summary>When true, jukebox jumps happen only via <see cref="LockedBranches"/>.</summary>
         [JsonPropertyName("locksOnly")]
         public bool LocksOnly { get; set; }
+
+        /// <summary>Saved branch-lock layouts for this track (load from session dropdown).</summary>
+        [JsonPropertyName("lockPresets")]
+        public List<BranchLockPreset> LockPresets { get; set; } = new List<BranchLockPreset>();
 
         [JsonIgnore]
         public bool IsValidRegion => LoopEndMs > LoopStartMs && LoopStartMs >= 0;

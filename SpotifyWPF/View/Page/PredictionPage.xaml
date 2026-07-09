@@ -176,14 +176,12 @@
                                             Margin="8,0,0,0"
                                             VerticalAlignment="Center">
                                     <Button Style="{StaticResource TransportIconButtonStyle}"
-                                            Command="{Binding PreviousSessionTrackCommand}"
-                                            ToolTip="Previous session track">
+                                            Command="{Binding PreviousSessionTrackCommand}">
                                         <TextBlock Text="&#xE892;" Style="{StaticResource TransportGlyphStyle}"/>
                                     </Button>
 
                                     <Button Style="{StaticResource TransportIconButtonStyle}"
-                                            Command="{Binding TogglePlayPauseCommand}"
-                                            ToolTip="Play / Pause">
+                                            Command="{Binding TogglePlayPauseCommand}">
                                         <TextBlock>
                                             <TextBlock.Style>
                                                 <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource TransportGlyphStyle}">
@@ -199,22 +197,24 @@
                                     </Button>
 
                                     <Button Style="{StaticResource TransportIconButtonStyle}"
-                                            Command="{Binding NextSessionTrackCommand}"
-                                            ToolTip="Next session track">
+                                            Command="{Binding StopPlaybackCommand}">
+                                        <TextBlock Text="&#xE71A;" Style="{StaticResource TransportGlyphStyle}"/>
+                                    </Button>
+
+                                    <Button Style="{StaticResource TransportIconButtonStyle}"
+                                            Command="{Binding NextSessionTrackCommand}">
                                         <TextBlock Text="&#xE893;" Style="{StaticResource TransportGlyphStyle}"/>
                                     </Button>
 
                                     <Button Style="{StaticResource TransportIconButtonStyle}"
-                                            Command="{Binding EnterMiniPlayerCommand}"
-                                            ToolTip="Mini player (ring only)">
+                                            Command="{Binding EnterMiniPlayerCommand}">
                                         <TextBlock Text="&#xE919;" Style="{StaticResource TransportGlyphStyle}"/>
                                     </Button>
 
                                     <Button Content="Analyze"
                                             MinWidth="72"
                                             Margin="8,0,0,0"
-                                            Command="{Binding AnalyzeInputCommand}"
-                                            ToolTip="Analyze the track ID in the search box"/>
+                                            Command="{Binding AnalyzeInputCommand}"/>
                                 </StackPanel>
                             </Grid>
 
@@ -246,17 +246,13 @@
                         </Grid>
                     </Border>
 
-                    <!-- Large centered ring -->
-                    <Grid Grid.Row="3" Margin="0,0,0,8">
-                        <Viewbox Stretch="Uniform"
-                                 HorizontalAlignment="Center"
-                                 VerticalAlignment="Center"
-                                 MaxWidth="420"
-                                 MaxHeight="420">
-                            <StackPanel HorizontalAlignment="Center">
-                                <component:JukeboxRingView Width="380" Height="380"
-                                                             DataContext="{Binding}"/>
-                                <TextBlock Text="{Binding RingSegmentCountText}"
+                    <!-- Large centered ring (scroll wheel zooms in/out; mini player has no zoom) -->
+                    <Grid Grid.Row="3" Margin="0,0,0,8" ClipToBounds="False">
+                        <StackPanel HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                            <component:JukeboxRingView Width="380" Height="380"
+                                                         DataContext="{Binding}"/>
+                            <TextBlock Text="{Binding RingSegmentCountText}"
                                            FontSize="11" TextAlignment="Center"
                                            Margin="0,6,0,0"
                                            Foreground="{StaticResource AppMutedForegroundBrush}"/>
@@ -264,8 +260,7 @@
                                            FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
                                            Margin="0,4,0,0"
                                            Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                            </StackPanel>
-                        </Viewbox>
+                        </StackPanel>
 
                         <Border x:Name="PlayerHostBorder"
                                 Width="1" Height="1"

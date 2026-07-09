@@ -141,9 +141,14 @@ namespace SpotifyWPF.ViewModel.Page
             BrowsePythonCommand = new RelayCommand(BrowsePython);
             EnterMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = true, () => !IsMiniPlayerMode);
             ExitMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = false, () => IsMiniPlayerMode);
-            ToggleRingLockCommand = new RelayCommand<int>(ToggleRingLock);
+            ToggleRingLockCommand = new RelayCommand<RingBranchClick>(ToggleRingLock);
             ClearRingLocksCommand = new RelayCommand(ClearRingLocks);
             ResetRingPlaysCommand = new RelayCommand(() => RingResetPlaysToken++);
+            StopPlaybackCommand = new RelayCommand(async () => await StopPlaybackAsync(), CanUsePlayer);
+            LoadBranchPresetCommand = new RelayCommand(LoadSelectedBranchPreset,
+                () => SelectedBranchPreset != null && SelectedSessionTrack != null);
+            SaveBranchPresetCommand = new RelayCommand(SaveBranchPreset,
+                () => (SelectedSessionTrack != null || _loopController.CurrentTrackId != null));
 
             MessengerInstance.Register<string>(this, MessageType.OpenInLoopLab,
                 async contextUri => await HandleOpenInLoopLabAsync(contextUri));
@@ -319,12 +324,30 @@ namespace SpotifyWPF.ViewModel.Page
                     if (value != null)
                         TrackInput = value.TrackId;
 
+                    RefreshBranchPresetsForSelection();
                     AnalyzeSessionTrackCommand.RaiseCanExecuteChanged();
                     PlaySessionTrackCommand.RaiseCanExecuteChanged();
                     RemoveSessionTrackCommand.RaiseCanExecuteChanged();
                     PreviousSessionTrackCommand.RaiseCanExecuteChanged();
                     NextSessionTrackCommand.RaiseCanExecuteChanged();
+                    LoadBranchPresetCommand.RaiseCanExecuteChanged();
+                    SaveBranchPresetCommand.RaiseCanExecuteChanged();
                 }
+            }
+        }
+
+        public ObservableCollection<BranchLockPreset> BranchPresets { get; } =
+            new ObservableCollection<BranchLockPreset>();
+
+        private BranchLockPreset _selectedBranchPreset;
+
+        public BranchLockPreset SelectedBranchPreset
+        {
+            get => _selectedBranchPreset;
+            set
+            {
+                if (Set(ref _selectedBranchPreset, value))
+                    LoadBranchPresetCommand.RaiseCanExecuteChanged();
             }
         }
 
@@ -737,11 +760,17 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand ExitMiniPlayerCommand { get; }
 
         /// <summary>Ring click: lock/unlock the clicked beat's best branch.</summary>
-        public RelayCommand<int> ToggleRingLockCommand { get; }
+        public RelayCommand<RingBranchClick> ToggleRingLockCommand { get; }
 
         public RelayCommand ClearRingLocksCommand { get; }
 
         public RelayCommand ResetRingPlaysCommand { get; }
+
+        public RelayCommand StopPlaybackCommand { get; }
+
+        public RelayCommand LoadBranchPresetCommand { get; }
+
+        public RelayCommand SaveBranchPresetCommand { get; }
 
         private bool CanUsePlayer()
         {
@@ -832,6 +861,25 @@ namespace SpotifyWPF.ViewModel.Page
             _playbackHost.Seek(_scrubPositionMs);
             RaisePropertyChanged(nameof(ScrubberPositionMs));
             RaisePropertyChanged(nameof(PositionText));
+        }
+
+        public async Task StopPlaybackAsync()
+        {
+            if (!_playbackHost.IsReady)
+                return;
+
+            try
+            {
+                _playbackHost.DisarmAction();
+                _playbackHost.Pause();
+                _playbackHost.Seek(0);
+                await _playbackService.PauseAsync(_playbackHost.DeviceId);
+                Log("Playback stopped.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Stop failed: {ex.Message}");
+            }
         }
 
         /// <summary>Plays a track on the in-app SDK device. Source tags the listening-log entry.</summary>
@@ -1137,12 +1185,18 @@ namespace SpotifyWPF.ViewModel.Page
             });
         }
 
-        private void ToggleRingLock(int beatIndex)
+        private void ToggleRingLock(RingBranchClick click)
         {
+            if (click == null)
+                return;
+
             var graph = RingGraph;
             var trackId = _loopController.CurrentTrackId;
+            var fromBeat = click.FromBeatIndex;
+            var toBeat = click.ToBeatIndex;
 
-            if (graph == null || trackId == null || beatIndex < 0 || beatIndex >= graph.Beats.Count)
+            if (graph == null || trackId == null || fromBeat < 0 || fromBeat >= graph.Beats.Count ||
+                toBeat < 0 || toBeat >= graph.Beats.Count)
                 return;
 
             var profile = _loopController.GetProfileForTrack(trackId);
@@ -1151,32 +1205,22 @@ namespace SpotifyWPF.ViewModel.Page
                 profile.LockedBranches = new List<BranchLock>();
 
             var existing = profile.LockedBranches
-                .Where(l => l.FromBeatIndex == beatIndex)
-                .ToList();
+                .FirstOrDefault(l => l.FromBeatIndex == fromBeat && l.ToBeatIndex == toBeat);
 
-            if (existing.Count > 0)
+            if (existing != null)
             {
-                foreach (var branchLock in existing)
-                    profile.LockedBranches.Remove(branchLock);
-
-                Log($"Ring: unlocked branch at beat {beatIndex}.");
+                profile.LockedBranches.Remove(existing);
+                Log($"Ring: unlocked branch beat {fromBeat} → {toBeat}.");
             }
             else
             {
-                var best = graph.Beats[beatIndex].Neighbors
-                    .OrderBy(edge => edge.Distance)
-                    .FirstOrDefault();
-
-                if (best == null)
-                    return;
-
                 profile.LockedBranches.Add(new BranchLock
                 {
-                    FromBeatIndex = beatIndex,
-                    ToBeatIndex = best.DestinationIndex
+                    FromBeatIndex = fromBeat,
+                    ToBeatIndex = toBeat
                 });
 
-                Log($"Ring: locked branch beat {beatIndex} → {best.DestinationIndex}.");
+                Log($"Ring: locked branch beat {fromBeat} → {toBeat}.");
             }
 
             _loopController.ApplyProfile(profile);
@@ -1208,6 +1252,87 @@ namespace SpotifyWPF.ViewModel.Page
             RingLockCountText = RingLockedBranches.Count == 0
                 ? "no locks"
                 : $"{RingLockedBranches.Count} locked";
+            RefreshBranchPresetsForSelection();
+        }
+
+        private void RefreshBranchPresetsForSelection()
+        {
+            BranchPresets.Clear();
+            SelectedBranchPreset = null;
+
+            var track = SelectedSessionTrack;
+
+            if (track == null)
+                return;
+
+            var profile = _loopController.GetProfileForTrack(track.TrackId);
+
+            if (profile?.LockPresets == null)
+                return;
+
+            foreach (var preset in profile.LockPresets.OrderBy(p => p.Name))
+                BranchPresets.Add(preset);
+        }
+
+        private void LoadSelectedBranchPreset()
+        {
+            var preset = SelectedBranchPreset;
+            var track = SelectedSessionTrack;
+
+            if (preset == null || track == null)
+                return;
+
+            var profile = _loopController.GetProfileForTrack(track.TrackId);
+            profile.LockedBranches = preset.LockedBranches?
+                .Select(l => new BranchLock
+                {
+                    FromBeatIndex = l.FromBeatIndex,
+                    ToBeatIndex = l.ToBeatIndex
+                }).ToList() ?? new List<BranchLock>();
+            profile.LocksOnly = preset.LocksOnly;
+
+            _loopRegionStore.Save(profile);
+
+            if (track.TrackId == _loopController.CurrentTrackId)
+            {
+                _loopController.ApplyProfile(profile);
+                JukeboxLocksOnly = preset.LocksOnly;
+            }
+
+            RefreshRingLocks(profile);
+            Log($"Loaded branch preset \"{preset.Name}\" for {track.DisplayName}.");
+        }
+
+        private void SaveBranchPreset()
+        {
+            var trackId = SelectedSessionTrack?.TrackId ?? _loopController.CurrentTrackId;
+
+            if (trackId == null)
+                return;
+
+            var profile = _loopController.GetProfileForTrack(trackId);
+
+            if (profile.LockPresets == null)
+                profile.LockPresets = new List<BranchLockPreset>();
+
+            var name = $"Setup {profile.LockPresets.Count + 1}";
+            var preset = new BranchLockPreset
+            {
+                Name = name,
+                LocksOnly = JukeboxLocksOnly,
+                LockedBranches = profile.LockedBranches?
+                    .Select(l => new BranchLock
+                    {
+                        FromBeatIndex = l.FromBeatIndex,
+                        ToBeatIndex = l.ToBeatIndex
+                    }).ToList() ?? new List<BranchLock>()
+            };
+
+            profile.LockPresets.Add(preset);
+            _loopRegionStore.Save(profile);
+            RefreshBranchPresetsForSelection();
+            SelectedBranchPreset = preset;
+            Log($"Saved branch preset \"{name}\" ({preset.LockedBranches.Count} locks).");
         }
 
         private void SetJukeboxProbabilityMin(double value)
@@ -1389,6 +1514,14 @@ namespace SpotifyWPF.ViewModel.Page
             }
 
             TrackInput = trackId;
+            UpsertSessionTrack(trackId, trackId, "");
+
+            if (!AnalysisCache.Exists(trackId))
+            {
+                await StopPlaybackAsync();
+                Log($"Stopped playback to analyze {trackId}.");
+            }
+
             await AnalyzeTrackByIdAsync(trackId, trackId);
         }
 
@@ -1543,8 +1676,7 @@ namespace SpotifyWPF.ViewModel.Page
             if (provider.Source == AnalysisSource.Local && !provider.IsCached(trackId) &&
                 trackId != _loopController.CurrentTrackId)
             {
-                AnalysisStatusText = "Local analysis requires playing the track — select it and press Play first.";
-                return;
+                Log("Local analysis will play the new track once for capture.");
             }
 
             IsAnalyzing = true;
@@ -1558,6 +1690,11 @@ namespace SpotifyWPF.ViewModel.Page
                     _jukeboxSuppressedForCapture = true;
                     ApplyLoopSettings();
                     Log("Jukebox disabled during the capture pass.");
+                }
+                else if (provider.Source == AnalysisSource.Local && !provider.IsCached(trackId))
+                {
+                    _jukeboxSuppressedForCapture = true;
+                    Log("Jukebox disabled during capture of a new track.");
                 }
 
                 if (provider.Source == AnalysisSource.Local && !provider.IsCached(trackId))

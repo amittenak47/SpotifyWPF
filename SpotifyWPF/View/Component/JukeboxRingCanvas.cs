@@ -54,9 +54,17 @@ namespace SpotifyWPF.View.Component
 
         private int _hoverBeatIndex = -1;
 
+        private int _hoverToBeatIndex = -1;
+
         private long _lastPositionMs;
 
         private double _positionStampMs;
+
+        private double _zoom = 1.0;
+
+        private const double MinZoom = 0.75;
+
+        private const double MaxZoom = 2.5;
 
         public JukeboxRingCanvas()
         {
@@ -243,6 +251,7 @@ namespace SpotifyWPF.View.Component
             _trail.Clear();
             _flashes.Clear();
             _hoverBeatIndex = -1;
+            _hoverToBeatIndex = -1;
         }
 
         private void OnAnimationTick()
@@ -383,11 +392,27 @@ namespace SpotifyWPF.View.Component
         {
             base.OnMouseMove(e);
 
-            var hit = HitTestBeat(e.GetPosition(this));
+            var point = e.GetPosition(this);
+            var hit = HitTestBeat(point);
+            var toBeat = -1;
 
-            if (hit != _hoverBeatIndex)
+            if (hit >= 0)
+            {
+                var graph = Graph;
+
+                if (graph != null)
+                {
+                    var inspect = NearestBeatWithBranches(graph, hit, 2);
+
+                    if (inspect >= 0)
+                        toBeat = HitTestBranchEdge(point, graph, inspect);
+                }
+            }
+
+            if (hit != _hoverBeatIndex || toBeat != _hoverToBeatIndex)
             {
                 _hoverBeatIndex = hit;
+                _hoverToBeatIndex = toBeat;
                 InvalidateVisual();
             }
 
@@ -398,6 +423,7 @@ namespace SpotifyWPF.View.Component
         {
             base.OnMouseLeave(e);
             _hoverBeatIndex = -1;
+            _hoverToBeatIndex = -1;
             InvalidateVisual();
         }
 
@@ -416,13 +442,41 @@ namespace SpotifyWPF.View.Component
             if (hit < 0)
                 return;
 
-            // Lock clicks must never fall through and start a window drag in the mini player.
+            var inspect = NearestBeatWithBranches(graph, hit, 3);
+
+            if (inspect < 0)
+                return;
+
+            var toBeat = _hoverToBeatIndex;
+
+            if (toBeat < 0 || toBeat >= graph.Beats.Count)
+                return;
+
             e.Handled = MiniPlayerMode;
 
-            var beatIndex = NearestBeatWithBranches(graph, hit, 3);
+            var click = new RingBranchClick
+            {
+                FromBeatIndex = inspect,
+                ToBeatIndex = toBeat
+            };
 
-            if (beatIndex >= 0 && command.CanExecute(beatIndex))
-                command.Execute(beatIndex);
+            if (command.CanExecute(click))
+                command.Execute(click);
+        }
+
+        protected override void OnMouseWheel(MouseWheelEventArgs e)
+        {
+            base.OnMouseWheel(e);
+
+            if (MiniPlayerMode)
+                return;
+
+            var factor = e.Delta > 0 ? 1.1 : 1.0 / 1.1;
+            _zoom = Math.Max(MinZoom, Math.Min(MaxZoom, _zoom * factor));
+
+            RenderTransformOrigin = new Point(0.5, 0.5);
+            RenderTransform = new ScaleTransform(_zoom, _zoom);
+            e.Handled = true;
         }
 
         /// <summary>Beat under the cursor, or -1 outside the bar band.</summary>
@@ -474,6 +528,112 @@ namespace SpotifyWPF.View.Component
             }
 
             return -1;
+        }
+
+        /// <summary>Branch chord under the cursor for a beat, or -1 if none is close enough.</summary>
+        private int HitTestBranchEdge(Point point, BeatGraph graph, int fromBeatIndex)
+        {
+            var beats = graph.Beats;
+
+            if (fromBeatIndex < 0 || fromBeatIndex >= beats.Count)
+                return -1;
+
+            var center = new Point(ActualWidth / 2, ActualHeight / 2);
+            var outer = Math.Min(ActualWidth, ActualHeight) / 2 - 2;
+            var rChord = outer * BarBandInnerRatio - outer * 0.04;
+            var total = TotalMs();
+            var bestDest = -1;
+            var bestDist = 14.0;
+
+            foreach (var edge in beats[fromBeatIndex].Neighbors)
+            {
+                var dest = edge.DestinationIndex;
+
+                if (dest < 0 || dest >= beats.Count)
+                    continue;
+
+                var a1 = BeatAngle(beats[fromBeatIndex], total);
+                var a2 = BeatAngle(beats[dest], total);
+                var dist = DistanceToChord(point, center, rChord, a1, a2);
+
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    bestDest = dest;
+                }
+            }
+
+            return bestDest;
+        }
+
+        private static double DistanceToChord(Point point, Point center, double radius,
+            double angle1, double angle2)
+        {
+            var p0 = Polar(center, radius, angle1);
+            var p2 = Polar(center, radius, angle2);
+            var p1 = ChordControlPoint(center, angle1, angle2, p0, p2);
+            var best = double.MaxValue;
+
+            for (var i = 0; i <= 24; i++)
+            {
+                var t = i / 24.0;
+                var oneMinus = 1 - t;
+                var bx = oneMinus * oneMinus * p0.X + 2 * oneMinus * t * p1.X + t * t * p2.X;
+                var by = oneMinus * oneMinus * p0.Y + 2 * oneMinus * t * p1.Y + t * t * p2.Y;
+                var dx = point.X - bx;
+                var dy = point.Y - by;
+                var dist = Math.Sqrt(dx * dx + dy * dy);
+
+                if (dist < best)
+                    best = dist;
+            }
+
+            return best;
+        }
+
+        /// <summary>Closer branches are hotter (red/orange); farther branches are cooler (blue).</summary>
+        private static Color DistanceBranchColor(double distance, double minDistance, double maxDistance)
+        {
+            var span = Math.Max(0.0001, maxDistance - minDistance);
+            var t = Math.Max(0, Math.Min(1, (distance - minDistance) / span));
+            var hue = t * 220;
+            return FromHsl(hue, 0.78, 0.56);
+        }
+
+        private static void GetNeighborDistanceRange(IReadOnlyList<BeatEdge> neighbors,
+            out double minDistance, out double maxDistance)
+        {
+            minDistance = double.MaxValue;
+            maxDistance = double.MinValue;
+
+            foreach (var edge in neighbors)
+            {
+                if (edge.Distance < minDistance)
+                    minDistance = edge.Distance;
+
+                if (edge.Distance > maxDistance)
+                    maxDistance = edge.Distance;
+            }
+
+            if (minDistance == double.MaxValue)
+            {
+                minDistance = 0;
+                maxDistance = 1;
+            }
+        }
+
+        private static bool IsBranchLocked(IReadOnlyList<BranchLock> locks, int from, int to)
+        {
+            if (locks == null)
+                return false;
+
+            foreach (var branchLock in locks)
+            {
+                if (branchLock.FromBeatIndex == from && branchLock.ToBeatIndex == to)
+                    return true;
+            }
+
+            return false;
         }
 
         #endregion
@@ -576,6 +736,7 @@ namespace SpotifyWPF.View.Component
 
             var sectionColors = BuildSectionColors();
             var currentIndex = FindBeatIndex(graph, EstimatedPositionMs());
+            var locks = LockedBranches;
 
             DrawSectionRim(dc, center, outer - 4, total, sectionColors);
 
@@ -603,7 +764,7 @@ namespace SpotifyWPF.View.Component
                         continue;
 
                     DrawRadialLine(dc, center, outer - 1, edgeDist, angle,
-                        MakePen(BeatColor(beats[i], sectionColors), barWidth, 0.45));
+                        MakePen(BeatColor(beats[i], sectionColors), barWidth, 0.22));
                 }
             }
 
@@ -652,7 +813,7 @@ namespace SpotifyWPF.View.Component
                     MakePen(HotColor, barWidth + 1.5));
             }
 
-            // Hover: fan out the beat's branches without drawing the whole web.
+            // Hover: fan out branches colored by similarity distance; preview one hop ahead.
             string hoverText = null;
 
             if (_hoverBeatIndex >= 0)
@@ -662,15 +823,53 @@ namespace SpotifyWPF.View.Component
                 if (inspect >= 0)
                 {
                     var edges = beats[inspect].Neighbors;
+                    GetNeighborDistanceRange(edges, out var minDist, out var maxDist);
                     hoverText = $"beat {inspect} · {edges.Count} branch{(edges.Count == 1 ? "" : "es")}";
 
                     foreach (var edge in edges)
                     {
-                        DrawChord(dc, center, rChord, BeatAngle(beats[inspect], total),
-                            BeatAngle(beats[edge.DestinationIndex], total),
-                            MakePen(GhostColor, 1.3, 0.6));
-                        var dot = Polar(center, rChord, BeatAngle(beats[edge.DestinationIndex], total));
-                        dc.DrawEllipse(MakeBrush(GhostColor, 0.85), null, dot, 3, 3);
+                        var dest = edge.DestinationIndex;
+
+                        if (dest < 0 || dest >= beats.Count)
+                            continue;
+
+                        var a1 = BeatAngle(beats[inspect], total);
+                        var a2 = BeatAngle(beats[dest], total);
+                        var branchColor = DistanceBranchColor(edge.Distance, minDist, maxDist);
+                        var locked = IsBranchLocked(locks, inspect, dest);
+                        var isHovered = dest == _hoverToBeatIndex;
+                        var width = isHovered ? 2.4 : locked ? 2.0 : 1.4;
+                        var alpha = isHovered ? 1.0 : locked ? 0.85 : 0.72;
+
+                        DrawChord(dc, center, rChord, a1, a2,
+                            MakePen(locked ? LockColor : branchColor, width, alpha));
+
+                        var dot = Polar(center, rChord, a2);
+                        dc.DrawEllipse(MakeBrush(locked ? LockColor : branchColor, alpha), null, dot,
+                            isHovered ? 4.2 : 3, isHovered ? 4.2 : 3);
+
+                        // Second hop: where this branch lands, show its outgoing options faintly.
+                        if (isHovered)
+                        {
+                            var hopEdges = beats[dest].Neighbors;
+                            GetNeighborDistanceRange(hopEdges, out var hopMin, out var hopMax);
+
+                            foreach (var hop in hopEdges)
+                            {
+                                var hopDest = hop.DestinationIndex;
+
+                                if (hopDest < 0 || hopDest >= beats.Count || hopDest == inspect)
+                                    continue;
+
+                                var hopA1 = BeatAngle(beats[dest], total);
+                                var hopA2 = BeatAngle(beats[hopDest], total);
+                                var hopColor = DistanceBranchColor(hop.Distance, hopMin, hopMax);
+                                DrawChord(dc, center, rChord * 0.92, hopA1, hopA2,
+                                    MakePen(hopColor, 1.1, 0.35));
+                                var hopDot = Polar(center, rChord * 0.92, hopA2);
+                                dc.DrawEllipse(MakeBrush(hopColor, 0.4), null, hopDot, 2.2, 2.2);
+                            }
+                        }
                     }
 
                     var origin = Polar(center, rChord, BeatAngle(beats[inspect], total));
@@ -700,10 +899,8 @@ namespace SpotifyWPF.View.Component
                     BeatAngle(beats[to], total), MakePen(HotColor, 1 + 2.4 * alpha, alpha * 0.9));
             }
 
-            // Locked branches: permanent gold rails.
-            var locks = LockedBranches;
-
-            if (locks != null)
+            // Locked branches while hovering are drawn in the hover fan-out above.
+            if (locks != null && _hoverBeatIndex < 0)
             {
                 foreach (var branchLock in locks)
                 {
@@ -717,6 +914,23 @@ namespace SpotifyWPF.View.Component
 
                     var mid = ChordMidpoint(center, rChord, a1, a2);
                     dc.DrawEllipse(MakeBrush(LockColor, 1), null, mid, 3.4, 3.4);
+                }
+            }
+            else if (locks != null && _hoverBeatIndex >= 0)
+            {
+                // Draw locks from other beats while inspecting one beat.
+                foreach (var branchLock in locks)
+                {
+                    if (branchLock.FromBeatIndex == NearestBeatWithBranches(graph, _hoverBeatIndex, 2))
+                        continue;
+
+                    if (branchLock.FromBeatIndex >= beats.Count || branchLock.ToBeatIndex >= beats.Count ||
+                        branchLock.FromBeatIndex < 0 || branchLock.ToBeatIndex < 0)
+                        continue;
+
+                    var a1 = BeatAngle(beats[branchLock.FromBeatIndex], total);
+                    var a2 = BeatAngle(beats[branchLock.ToBeatIndex], total);
+                    DrawChord(dc, center, rChord, a1, a2, MakePen(LockColor, 1.6, 0.55));
                 }
             }
 

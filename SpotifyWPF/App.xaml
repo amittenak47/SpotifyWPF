@@ -8,6 +8,10 @@
       <vm:ViewModelLocator x:Key="Locator" d:IsDataSource="True" xmlns:vm="clr-namespace:SpotifyWPF.ViewModel" />
       <converter:StatusActionConverter x:Key="StatusActionConverter"/>
 
+      <Style TargetType="{x:Type FrameworkElement}">
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
+      </Style>
+
       <Style TargetType="{x:Type Window}">
         <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
@@ -43,10 +47,6 @@
                                   RecognizesAccessKey="True"/>
               </Border>
               <ControlTemplate.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                  <Setter TargetName="Border" Property="Background" Value="{StaticResource AppHoverBrush}"/>
-                  <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
-                </Trigger>
                 <Trigger Property="IsPressed" Value="True">
                   <Setter TargetName="Border" Property="Background" Value="{StaticResource AppSelectedBrush}"/>
                   <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
