@@ -6,6 +6,7 @@ using SpotifyWPF.Service;
 using SpotifyWPF.Service.Audio;
 using SpotifyWPF.Service.MessageBoxes;
 using SpotifyWPF.Service.Playback;
+using SpotifyWPF.Service.Theme;
 using SpotifyWPF.Service.Prediction;
 using SpotifyWPF.ViewModel.Page;
 
@@ -22,6 +23,7 @@ namespace SpotifyWPF.ViewModel
             // Infrastructure
             SimpleIoc.Default.Register(() => AutoMapperConfiguration.Configure().CreateMapper());
             SimpleIoc.Default.Register<ISettingsProvider, SettingsProvider>();
+            SimpleIoc.Default.Register<IAppThemeStore, AppThemeStore>();
             SimpleIoc.Default.Register<IMessageBoxService, MessageBoxService>();
 
             // Services
