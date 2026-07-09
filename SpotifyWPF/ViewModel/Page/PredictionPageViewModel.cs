@@ -622,6 +622,12 @@ namespace SpotifyWPF.ViewModel.Page
 
         private int _ringPreviewHopDepth = 2;
 
+        private int _sliderDragDepth;
+
+        private bool _jukeboxSettingsDirty;
+
+        private bool _weightsDirty;
+
         /// <summary>Branch hops to preview when hovering the ring (1–3).</summary>
         public int RingPreviewHopDepth
         {
@@ -669,7 +675,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 _weights.Transition = value;
                 RaisePropertyChanged();
-                _predictor.SaveWeights(_weights);
+                SaveWeightsDeferred();
             }
         }
 
@@ -680,7 +686,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 _weights.RepeatAffinity = value;
                 RaisePropertyChanged();
-                _predictor.SaveWeights(_weights);
+                SaveWeightsDeferred();
             }
         }
 
@@ -691,7 +697,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 _weights.SameArtist = value;
                 RaisePropertyChanged();
-                _predictor.SaveWeights(_weights);
+                SaveWeightsDeferred();
             }
         }
 
@@ -702,7 +708,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 _weights.TempoSimilarity = value;
                 RaisePropertyChanged();
-                _predictor.SaveWeights(_weights);
+                SaveWeightsDeferred();
             }
         }
 
@@ -713,7 +719,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 _weights.RecencyPenalty = value;
                 RaisePropertyChanged();
-                _predictor.SaveWeights(_weights);
+                SaveWeightsDeferred();
             }
         }
 
@@ -724,7 +730,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 _weights.Pinned = value;
                 RaisePropertyChanged();
-                _predictor.SaveWeights(_weights);
+                SaveWeightsDeferred();
             }
         }
 
@@ -895,6 +901,33 @@ namespace SpotifyWPF.ViewModel.Page
             _playbackHost.Seek(_scrubPositionMs);
             RaisePropertyChanged(nameof(ScrubberPositionMs));
             RaisePropertyChanged(nameof(PositionText));
+        }
+
+        /// <summary>Defer disk writes while a tuning slider is being dragged.</summary>
+        public void BeginSliderDrag() => _sliderDragDepth++;
+
+        /// <summary>Flush any settings/weights deferred during slider drag.</summary>
+        public void EndSliderDrag()
+        {
+            if (_sliderDragDepth <= 0)
+                return;
+
+            _sliderDragDepth--;
+
+            if (_sliderDragDepth > 0)
+                return;
+
+            if (_jukeboxSettingsDirty)
+            {
+                _jukeboxSettingsDirty = false;
+                PersistJukeboxSettingsNow();
+            }
+
+            if (_weightsDirty)
+            {
+                _weightsDirty = false;
+                _predictor.SaveWeights(_weights);
+            }
         }
 
         public async Task StopPlaybackAsync()
@@ -1393,11 +1426,33 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void PersistJukeboxSettings()
         {
+            if (_sliderDragDepth > 0)
+            {
+                _jukeboxSettingsDirty = true;
+                return;
+            }
+
+            PersistJukeboxSettingsNow();
+        }
+
+        private void PersistJukeboxSettingsNow()
+        {
             _jukeboxSettings.Save(_jukeboxSettingsModel);
             _loopController.InvalidateGraphCache();
 
             if (!_jukeboxSuppressedForCapture && _loopController.CurrentTrackId != null)
                 ApplyLoopSettings();
+        }
+
+        private void SaveWeightsDeferred()
+        {
+            if (_sliderDragDepth > 0)
+            {
+                _weightsDirty = true;
+                return;
+            }
+
+            _predictor.SaveWeights(_weights);
         }
 
         private void RefreshRingVisualization(string trackId)

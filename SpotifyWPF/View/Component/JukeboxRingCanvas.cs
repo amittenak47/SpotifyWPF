@@ -666,7 +666,7 @@ namespace SpotifyWPF.View.Component
             var rChord = outer * BarBandInnerRatio - outer * 0.04;
             var total = TotalMs();
             var bestDest = -1;
-            var bestDist = 14.0;
+            var bestDist = 22.0;
 
             foreach (var edge in beats[fromBeatIndex].Neighbors)
             {
@@ -894,24 +894,27 @@ namespace SpotifyWPF.View.Component
             var edgeCount = beats[inspect].Neighbors.Count;
             var path = hopText.Count > 0 ? " · " + string.Join(" · ", hopText) : string.Empty;
 
+            if (edgeCount == 0)
+                return $"beat {inspect} · no branches — try another beat";
+
             return $"beat {inspect} · {edgeCount} branch{(edgeCount == 1 ? "" : "es")}{path}";
         }
 
-        private Color CoverageBarColor(BeatNode beat, double playNorm, Color[] sectionColors)
+        private string BuildHoverHint(BeatGraph graph, int hoveredBeatIndex, int[] chain)
         {
-            var section = BeatColor(beat, sectionColors);
-            var heat = FromHsl(28 - playNorm * 28, 0.72, 0.42 + playNorm * 0.18);
-            var blend = 0.25 + playNorm * 0.55;
-            return BlendColors(section, heat, blend);
-        }
+            if (hoveredBeatIndex < 0 || graph == null)
+                return null;
 
-        private static Color BlendColors(Color a, Color b, double t)
-        {
-            t = Math.Max(0, Math.Min(1, t));
-            return Color.FromRgb(
-                (byte)(a.R + (b.R - a.R) * t),
-                (byte)(a.G + (b.G - a.G) * t),
-                (byte)(a.B + (b.B - a.B) * t));
+            if (chain != null && chain[0] >= 0)
+                return null;
+
+            if (hoveredBeatIndex >= graph.Beats.Count)
+                return null;
+
+            if (graph.Beats[hoveredBeatIndex].Neighbors.Count == 0)
+                return $"beat {hoveredBeatIndex} · no branches here";
+
+            return "no branchable beat near cursor";
         }
 
         #endregion
@@ -1025,10 +1028,10 @@ namespace SpotifyWPF.View.Component
                 var length = minLen + t * ext;
                 var angle = BeatAngle(beats[i], total);
                 DrawRadialLine(dc, center, rIn, rIn + length, angle,
-                    MakePen(CoverageBarColor(beats[i], t, sectionColors), barWidth));
+                    MakePen(BeatColor(beats[i], sectionColors), barWidth));
             }
 
-            // Mini player: neutral grey extensions to the square edges (no section tint bleed).
+            // Mini player: extend beat bars to the square edges with section tint.
             if (MiniPlayerMode)
             {
                 for (var i = 0; i < beats.Count; i++)
@@ -1040,7 +1043,7 @@ namespace SpotifyWPF.View.Component
                         continue;
 
                     DrawRadialLine(dc, center, outer - 1, edgeDist, angle,
-                        MakePen(RimColor, barWidth, 0.28));
+                        MakePen(BeatColor(beats[i], sectionColors), barWidth, 0.45));
                 }
             }
 
@@ -1095,6 +1098,8 @@ namespace SpotifyWPF.View.Component
 
             if (previewChain[0] >= 0)
                 hoverText = DrawChainedBranchPreview(dc, graph, center, rChord, total, locks, previewChain);
+            else
+                hoverText = BuildHoverHint(graph, _hoverBeatIndex, previewChain);
 
             // The predictor's mind: one pulsing chord for the planned jump.
             if (plannedFrom >= 0 && plannedTo >= 0 && plannedFrom < beats.Count && plannedTo < beats.Count)
@@ -1166,7 +1171,9 @@ namespace SpotifyWPF.View.Component
 
                 if (hoverText != null)
                     DrawCenteredText(dc, center, rIn * 0.72, hoverText, 9.5,
-                        MakeColor(GhostColor, 0.9), FontWeights.Normal);
+                        MakeColor(hoverText.IndexOf("no branch", StringComparison.OrdinalIgnoreCase) >= 0
+                            ? MutedTextColor
+                            : GhostColor, 0.9), FontWeights.Normal);
 
                 return;
             }
@@ -1177,7 +1184,10 @@ namespace SpotifyWPF.View.Component
                 FontWeights.Normal);
 
             if (hoverText != null)
-                DrawCenteredText(dc, center, 38, hoverText, 9.5, MakeColor(GhostColor, 0.9),
+                DrawCenteredText(dc, center, 38, hoverText, 9.5,
+                    MakeColor(hoverText.IndexOf("no branch", StringComparison.OrdinalIgnoreCase) >= 0
+                        ? MutedTextColor
+                        : GhostColor, 0.9),
                     FontWeights.Normal);
         }
 
