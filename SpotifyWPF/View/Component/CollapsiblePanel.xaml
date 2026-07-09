@@ -8,17 +8,17 @@
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
     </UserControl.Resources>
 
-    <Border Background="{StaticResource AppSurfaceBrush}"
-            BorderBrush="{StaticResource AppBorderBrush}"
+    <Border Background="{DynamicResource AppSurfaceBrush}"
+            BorderBrush="{DynamicResource AppBorderBrush}"
             BorderThickness="1">
         <DockPanel>
             <ToggleButton DockPanel.Dock="Top"
                           IsChecked="{Binding IsExpanded, ElementName=Root, Mode=TwoWay}"
                           HorizontalContentAlignment="Stretch"
                           Padding="8,6"
-                          Background="{StaticResource AppSurfaceAltBrush}"
-                          BorderBrush="{StaticResource AppBorderBrush}"
-                          Foreground="{StaticResource AppForegroundBrush}">
+                          Background="{DynamicResource AppSurfaceBrush}"
+                          BorderBrush="{DynamicResource AppBorderBrush}"
+                          Foreground="{DynamicResource AppForegroundBrush}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding Header, ElementName=Root}"
                                FontWeight="SemiBold"

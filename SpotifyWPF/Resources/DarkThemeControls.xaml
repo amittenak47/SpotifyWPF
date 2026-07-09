@@ -16,8 +16,8 @@
   </Style>
 
   <Style x:Key="DarkComboBoxItemStyle" TargetType="{x:Type ComboBoxItem}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
     <Setter Property="Padding" Value="8,4"/>
     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
     <Setter Property="Template">
@@ -36,25 +36,25 @@
                 <Condition Property="IsHighlighted" Value="True"/>
                 <Condition Property="IsSelected" Value="True"/>
               </MultiTrigger.Conditions>
-              <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource SpotifyGreenBrush}"/>
-              <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+              <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource AppSelectedBrush}"/>
+              <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
             </MultiTrigger>
             <MultiTrigger>
               <MultiTrigger.Conditions>
                 <Condition Property="IsHighlighted" Value="True"/>
                 <Condition Property="IsSelected" Value="False"/>
               </MultiTrigger.Conditions>
-              <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+              <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
             </MultiTrigger>
             <MultiTrigger>
               <MultiTrigger.Conditions>
                 <Condition Property="IsSelected" Value="True"/>
                 <Condition Property="IsHighlighted" Value="False"/>
               </MultiTrigger.Conditions>
-              <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource AppSelectedBrush}"/>
+              <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource AppSelectedBrush}"/>
             </MultiTrigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+              <Setter Property="Foreground" Value="{DynamicResource AppDisabledForegroundBrush}"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -63,9 +63,9 @@
   </Style>
 
   <Style x:Key="DarkComboBoxStyle" TargetType="{x:Type ComboBox}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="MinHeight" Value="28"/>
     <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItemStyle}"/>
     <Setter Property="Template">
@@ -99,8 +99,8 @@
                    AllowsTransparency="True"
                    Focusable="False"
                    PopupAnimation="Fade">
-              <Border Background="{StaticResource AppSurfaceAltBrush}"
-                      BorderBrush="{StaticResource SpotifyGreenBrush}"
+              <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                      BorderBrush="{DynamicResource AppBorderBrush}"
                       BorderThickness="1,0,1,1"
                       CornerRadius="0,0,2,2"
                       MinWidth="{Binding ActualWidth, ElementName=MainBorder}">
@@ -112,15 +112,15 @@
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
             </Trigger>
             <Trigger Property="IsDropDownOpen" Value="True">
-              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
               <Setter TargetName="MainBorder" Property="BorderThickness" Value="1,1,1,0"/>
               <Setter TargetName="MainBorder" Property="CornerRadius" Value="2,2,0,0"/>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+              <Setter Property="Foreground" Value="{DynamicResource AppDisabledForegroundBrush}"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -146,12 +146,12 @@
               <TextBox x:Name="PART_EditableTextBox"
                        Grid.Column="0"
                        Background="Transparent"
-                       Foreground="{StaticResource AppForegroundBrush}"
+                       Foreground="{DynamicResource AppForegroundBrush}"
                        BorderThickness="0"
                        Padding="{TemplateBinding Padding}"
                        VerticalContentAlignment="Center"
-                       CaretBrush="{StaticResource AppForegroundBrush}"
-                       SelectionBrush="{StaticResource AppSelectedBrush}"
+                       CaretBrush="{DynamicResource AppForegroundBrush}"
+                       SelectionBrush="{DynamicResource AppSelectedBrush}"
                        IsReadOnly="{Binding IsReadOnly, RelativeSource={RelativeSource TemplatedParent}}"/>
               <ToggleButton Grid.Column="1"
                             Style="{StaticResource DarkComboBoxToggleButtonStyle}"
@@ -166,8 +166,8 @@
                    AllowsTransparency="True"
                    Focusable="False"
                    PopupAnimation="Fade">
-              <Border Background="{StaticResource AppSurfaceAltBrush}"
-                      BorderBrush="{StaticResource SpotifyGreenBrush}"
+              <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                      BorderBrush="{DynamicResource AppBorderBrush}"
                       BorderThickness="1,0,1,1"
                       CornerRadius="0,0,2,2"
                       MinWidth="{Binding ActualWidth, ElementName=MainBorder}">
@@ -179,15 +179,15 @@
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
             </Trigger>
             <Trigger Property="IsDropDownOpen" Value="True">
-              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+              <Setter TargetName="MainBorder" Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
               <Setter TargetName="MainBorder" Property="BorderThickness" Value="1,1,1,0"/>
               <Setter TargetName="MainBorder" Property="CornerRadius" Value="2,2,0,0"/>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+              <Setter Property="Foreground" Value="{DynamicResource AppDisabledForegroundBrush}"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -198,9 +198,9 @@
   <Style TargetType="{x:Type ComboBox}" BasedOn="{StaticResource DarkComboBoxStyle}"/>
 
   <Style TargetType="{x:Type ContextMenu}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="Padding" Value="2"/>
     <Setter Property="Template">
@@ -219,7 +219,7 @@
 
   <Style TargetType="{x:Type MenuItem}">
     <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
     <Setter Property="Padding" Value="10,6"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -237,7 +237,7 @@
                       VerticalAlignment="Center"
                       Visibility="Collapsed"
                       Data="M 0,0 L 4,4 L 0,8 Z"
-                      Fill="{StaticResource AppForegroundBrush}"
+                      Fill="{DynamicResource AppForegroundBrush}"
                       Margin="12,0,4,0"/>
               </Grid>
             </Border>
@@ -247,8 +247,8 @@
                    Placement="Bottom"
                    IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
                    PopupAnimation="Fade">
-              <Border Background="{StaticResource AppSurfaceBrush}"
-                      BorderBrush="{StaticResource SpotifyGreenBrush}"
+              <Border Background="{DynamicResource AppSurfaceBrush}"
+                      BorderBrush="{DynamicResource AppBorderBrush}"
                       BorderThickness="1"
                       Padding="2">
                 <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
@@ -261,10 +261,10 @@
               <Setter TargetName="PART_Popup" Property="Placement" Value="Right"/>
             </Trigger>
             <Trigger Property="IsHighlighted" Value="True">
-              <Setter TargetName="Border" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+              <Setter TargetName="Border" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+              <Setter Property="Foreground" Value="{DynamicResource AppDisabledForegroundBrush}"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -273,9 +273,9 @@
   </Style>
 
   <Style TargetType="{x:Type GroupBox}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="Padding" Value="6"/>
     <Setter Property="Template">
@@ -309,9 +309,9 @@
   </Style>
 
   <Style TargetType="{x:Type ListBox}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -330,8 +330,8 @@
   </Style>
 
   <Style TargetType="{x:Type ListBoxItem}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
     <Setter Property="Padding" Value="4,2"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -343,11 +343,11 @@
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="Border" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+              <Setter TargetName="Border" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
             </Trigger>
             <Trigger Property="IsSelected" Value="True">
-              <Setter TargetName="Border" Property="Background" Value="{StaticResource AppSelectedBrush}"/>
-              <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+              <Setter TargetName="Border" Property="Background" Value="{DynamicResource AppSelectedBrush}"/>
+              <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -356,13 +356,13 @@
   </Style>
 
   <Style TargetType="{x:Type Menu}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type Menu}">
           <Border Background="{TemplateBinding Background}"
-                  BorderBrush="{StaticResource SpotifyGreenBrush}"
+                  BorderBrush="{DynamicResource AppBorderBrush}"
                   BorderThickness="0,0,0,1">
             <ItemsPresenter Margin="0,2,0,2"/>
           </Border>
@@ -372,13 +372,13 @@
   </Style>
 
   <Style TargetType="{x:Type StatusBar}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppMutedForegroundBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppMutedForegroundBrush}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type StatusBar}">
           <Border Background="{TemplateBinding Background}"
-                  BorderBrush="{StaticResource SpotifyGreenBrush}"
+                  BorderBrush="{DynamicResource AppBorderBrush}"
                   BorderThickness="1,1,0,0">
             <ItemsPresenter/>
           </Border>
@@ -388,36 +388,36 @@
   </Style>
 
   <Style TargetType="{x:Type DataGrid}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="RowBackground" Value="{StaticResource AppSurfaceBrush}"/>
-    <Setter Property="AlternatingRowBackground" Value="{StaticResource AppSurfaceAltBrush}"/>
+    <Setter Property="RowBackground" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="AlternatingRowBackground" Value="{DynamicResource AppSurfaceAltBrush}"/>
     <Setter Property="GridLinesVisibility" Value="Horizontal"/>
-    <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
-    <Setter Property="VerticalGridLinesBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="RowHeaderWidth" Value="0"/>
   </Style>
 
   <Style TargetType="{x:Type DataGridRow}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
     <Style.Triggers>
       <Trigger Property="IsMouseOver" Value="True">
-        <Setter Property="Background" Value="{StaticResource AppHoverBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource AppHoverBrush}"/>
       </Trigger>
       <Trigger Property="IsSelected" Value="True">
-        <Setter Property="Background" Value="{StaticResource AppSelectedBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource AppSelectedBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
       </Trigger>
     </Style.Triggers>
   </Style>
 
   <Style TargetType="{x:Type DataGridCell}">
     <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Padding" Value="4,2"/>
     <Setter Property="Template">
@@ -432,8 +432,8 @@
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsSelected" Value="True">
-              <Setter TargetName="CellBorder" Property="Background" Value="{StaticResource AppSelectedBrush}"/>
-              <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+              <Setter TargetName="CellBorder" Property="Background" Value="{DynamicResource AppSelectedBrush}"/>
+              <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -442,9 +442,9 @@
   </Style>
 
   <Style TargetType="{x:Type DataGridColumnHeader}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="BorderThickness" Value="0,0,1,1"/>
     <Setter Property="Padding" Value="6,4"/>
     <Setter Property="Template">
@@ -466,7 +466,7 @@
                     Height="5"
                     Margin="8,0,0,0"
                     Stretch="Fill"
-                    Fill="{StaticResource SpotifyGreenBrush}"
+                    Fill="{DynamicResource AppBorderBrush}"
                     Visibility="Collapsed"/>
             </Grid>
           </Border>
@@ -486,12 +486,12 @@
   </Style>
 
   <Style TargetType="{x:Type Thumb}">
-    <Setter Property="Background" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type Thumb}">
           <Border Background="{TemplateBinding Background}"
-                  BorderBrush="{StaticResource SpotifyGreenBrush}"
+                  BorderBrush="{DynamicResource AppBorderBrush}"
                   BorderThickness="1"
                   CornerRadius="3"/>
         </ControlTemplate>
@@ -501,7 +501,7 @@
 
   <Style x:Key="DarkScrollBarLineButtonStyle" TargetType="{x:Type RepeatButton}">
     <Setter Property="Focusable" Value="False"/>
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type RepeatButton}">
@@ -512,8 +512,8 @@
   </Style>
 
   <Style TargetType="{x:Type ScrollBar}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}"/>
     <Setter Property="Width" Value="12"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -526,7 +526,7 @@
                               Style="{StaticResource DarkScrollBarLineButtonStyle}"/>
               </Track.DecreaseRepeatButton>
               <Track.Thumb>
-                <Thumb Background="{StaticResource SpotifyGreenLineBrush}"/>
+                <Thumb Background="{DynamicResource AppBorderBrush}"/>
               </Track.Thumb>
               <Track.IncreaseRepeatButton>
                 <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}"
@@ -547,9 +547,9 @@
   </Style>
 
   <Style TargetType="{x:Type ProgressBar}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource SpotifyGreenBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -575,7 +575,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type RepeatButton}">
-          <Border Background="{StaticResource SpotifyGreenBrush}"
+          <Border Background="{DynamicResource AppAccentBrush}"
                   Height="6"
                   CornerRadius="3,0,0,3"/>
         </ControlTemplate>
@@ -597,8 +597,8 @@
 
   <Style x:Key="DarkMediaSliderStyle" TargetType="{x:Type Slider}">
     <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="Foreground" Value="{StaticResource SpotifyGreenBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="Height" Value="22"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -607,8 +607,8 @@
             <Border x:Name="TrackBackground"
                     Height="6"
                     VerticalAlignment="Center"
-                    Background="{StaticResource AppSurfaceAltBrush}"
-                    BorderBrush="{StaticResource SpotifyGreenLineBrush}"
+                    Background="{DynamicResource AppSurfaceAltBrush}"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="3"/>
             <Track x:Name="PART_Track">
@@ -624,8 +624,8 @@
                 <Thumb Width="12" Height="12">
                   <Thumb.Template>
                     <ControlTemplate TargetType="{x:Type Thumb}">
-                      <Ellipse Fill="{StaticResource SpotifyGreenBrush}"
-                               Stroke="{StaticResource SpotifyGreenLineBrush}"
+                      <Ellipse Fill="{DynamicResource AppBorderBrush}"
+                               Stroke="{DynamicResource AppBorderBrush}"
                                StrokeThickness="1"/>
                     </ControlTemplate>
                   </Thumb.Template>
@@ -644,19 +644,19 @@
   </Style>
 
   <Style TargetType="{x:Type TextBox}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
-    <Setter Property="CaretBrush" Value="{StaticResource AppForegroundBrush}"/>
-    <Setter Property="SelectionBrush" Value="{StaticResource AppSelectedBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="CaretBrush" Value="{DynamicResource AppForegroundBrush}"/>
+    <Setter Property="SelectionBrush" Value="{DynamicResource AppSelectedBrush}"/>
   </Style>
 
   <Style x:Key="ControlPanelHeaderToggleStyle" TargetType="{x:Type ToggleButton}">
     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
     <Setter Property="Padding" Value="8,6"/>
-    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type ToggleButton}">
@@ -670,11 +670,11 @@
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+              <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
             </Trigger>
             <Trigger Property="IsChecked" Value="True">
-              <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-              <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+              <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+              <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -683,8 +683,8 @@
   </Style>
 
   <Style x:Key="ControlPanelTabItemStyle" TargetType="{x:Type TabItem}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-    <Setter Property="Foreground" Value="{StaticResource AppMutedForegroundBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppMutedForegroundBrush}"/>
     <Setter Property="Padding" Value="14,6"/>
     <Setter Property="Margin" Value="0,0,4,0"/>
     <Setter Property="Template">
@@ -692,8 +692,8 @@
         <ControlTemplate TargetType="{x:Type TabItem}">
           <Border x:Name="TabBorder"
                   Background="{TemplateBinding Background}"
-                  BorderBrush="{StaticResource AppBorderBrush}"
-                  BorderThickness="1,1,1,0"
+                  BorderBrush="{DynamicResource AppBorderBrush}"
+                  BorderThickness="1,1,1,1"
                   CornerRadius="4,4,0,0"
                   Padding="{TemplateBinding Padding}"
                   Margin="{TemplateBinding Margin}">
@@ -705,16 +705,17 @@
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsSelected" Value="True">
-              <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
-              <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
-              <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+              <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+              <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+              <Setter TargetName="TabBorder" Property="BorderThickness" Value="1,1,1,0"/>
+              <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
               <Setter Property="Panel.ZIndex" Value="1"/>
             </Trigger>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+              <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+              <Setter Property="Foreground" Value="{DynamicResource AppDisabledForegroundBrush}"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -723,7 +724,7 @@
   </Style>
 
   <Style x:Key="ControlPanelTabControlStyle" TargetType="{x:Type TabControl}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Padding" Value="0"/>
     <Setter Property="ItemContainerStyle" Value="{StaticResource ControlPanelTabItemStyle}"/>
@@ -731,22 +732,30 @@
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type TabControl}">
           <Grid KeyboardNavigation.TabNavigation="Local">
-            <Grid.RowDefinitions>
-              <RowDefinition Height="Auto"/>
-              <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-            <TabPanel IsItemsHost="True"
-                      Grid.Row="0"
-                      Background="Transparent"
-                      Margin="8,4,8,0"
-                      KeyboardNavigation.TabIndex="1"/>
-            <Border Grid.Row="1"
-                    Margin="8,4,8,8"
-                    Background="Transparent"
-                    BorderThickness="0">
-              <ContentPresenter ContentSource="SelectedContent"
-                                VerticalAlignment="Stretch"
-                                HorizontalAlignment="Stretch"/>
+            <Border Margin="8,4,8,8"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
+                    BorderThickness="1"
+                    Background="{DynamicResource AppSurfaceBrush}">
+              <Grid>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TabPanel IsItemsHost="True"
+                          Grid.Row="0"
+                          Background="Transparent"
+                          Margin="4,4,4,0"
+                          KeyboardNavigation.TabIndex="1"/>
+                <Border Grid.Row="1"
+                        BorderBrush="{DynamicResource AppBorderBrush}"
+                        BorderThickness="0,1,0,0"
+                        Padding="8"
+                        Background="{DynamicResource AppSurfaceBrush}">
+                  <ContentPresenter ContentSource="SelectedContent"
+                                    VerticalAlignment="Stretch"
+                                    HorizontalAlignment="Stretch"/>
+                </Border>
+              </Grid>
             </Border>
           </Grid>
         </ControlTemplate>
@@ -755,10 +764,9 @@
   </Style>
 
   <Style x:Key="ControlPanelTabContentBorderStyle" TargetType="{x:Type Border}">
-    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
-    <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="Padding" Value="8"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
     <Setter Property="MinHeight" Value="120"/>
     <Setter Property="VerticalAlignment" Value="Stretch"/>
     <Setter Property="HorizontalAlignment" Value="Stretch"/>
@@ -773,8 +781,8 @@
   </Style>
 
   <Style x:Key="SettingValueBadgeStyle" TargetType="{x:Type Border}">
-    <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="Padding" Value="6,2"/>
     <Setter Property="Margin" Value="8,0,0,0"/>

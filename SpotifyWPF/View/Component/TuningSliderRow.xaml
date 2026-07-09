@@ -6,11 +6,11 @@
     <StackPanel Margin="0,0,0,14">
         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
             <TextBlock Text="{Binding Label, ElementName=Root}"
-                       Foreground="{StaticResource AppMutedForegroundBrush}"
+                       Foreground="{DynamicResource AppMutedForegroundBrush}"
                        VerticalAlignment="Center"/>
             <Border Style="{StaticResource SettingValueBadgeStyle}">
                 <TextBlock Text="{Binding ValueText, ElementName=Root}"
-                           Foreground="{StaticResource AppForegroundBrush}"
+                           Foreground="{DynamicResource AppForegroundBrush}"
                            FontFamily="Consolas"
                            FontSize="11"/>
             </Border>

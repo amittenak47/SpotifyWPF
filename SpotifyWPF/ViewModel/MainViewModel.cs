@@ -10,6 +10,10 @@ using GalaSoft.MvvmLight;
 
 using GalaSoft.MvvmLight.Command;
 
+using SpotifyWPF.Service.Theme;
+
+using SpotifyWPF.View;
+
 using SpotifyWPF.ViewModel.Component;
 
 using SpotifyWPF.ViewModel.Page;
@@ -36,6 +40,8 @@ namespace SpotifyWPF.ViewModel
 
         private readonly PredictionPageViewModel _predictionPageViewModel;
 
+        private readonly IAppThemeStore _themeStore;
+
 
 
         private ViewModelBase _currentPage;
@@ -54,7 +60,9 @@ namespace SpotifyWPF.ViewModel
 
             SearchPageViewModel searchPageViewModel,
 
-            PredictionPageViewModel predictionPageViewModel)
+            PredictionPageViewModel predictionPageViewModel,
+
+            IAppThemeStore themeStore)
 
         {
 
@@ -69,6 +77,8 @@ namespace SpotifyWPF.ViewModel
             _searchPageViewModel = searchPageViewModel;
 
             _predictionPageViewModel = predictionPageViewModel;
+
+            _themeStore = themeStore;
 
 
 
@@ -111,6 +121,8 @@ namespace SpotifyWPF.ViewModel
                             }
 
                         },
+
+                        new MenuItemViewModel("Preferences", new RelayCommand(OpenPreferences)),
 
                         new MenuItemViewModel("Exit", new RelayCommand(Exit))
 
@@ -454,6 +466,21 @@ namespace SpotifyWPF.ViewModel
 
             }
 
+        }
+
+
+
+        private void OpenPreferences()
+        {
+            if (Application.Current?.MainWindow == null)
+                return;
+
+            var window = new PreferencesWindow(_themeStore)
+            {
+                Owner = Application.Current.MainWindow
+            };
+
+            window.ShowDialog();
         }
 
 
