@@ -6,10 +6,10 @@
 
     <UserControl.Resources>
         <Style x:Key="TransportIconButtonStyle" TargetType="{x:Type Button}">
-            <Setter Property="Width" Value="30"/>
-            <Setter Property="Height" Value="30"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="Margin" Value="1,0"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
@@ -22,7 +22,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="15">
+                                CornerRadius="12">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -36,14 +36,26 @@
         </Style>
 
         <Style x:Key="MiniPlayerChromeButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource TransportIconButtonStyle}">
-            <Setter Property="Width" Value="24"/>
-            <Setter Property="Height" Value="24"/>
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
             <Setter Property="Margin" Value="0"/>
+        </Style>
+
+        <Style x:Key="MiniPlayerFooterButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+            <Setter Property="Cursor" Value="Arrow"/>
         </Style>
 
         <Style x:Key="TransportGlyphStyle" TargetType="{x:Type TextBlock}">
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="10"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
@@ -63,43 +75,58 @@
                 Panel.ZIndex="2"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Background="{DynamicResource AppSurfaceBrush}"
-                BorderBrush="{DynamicResource AppBorderBrush}"
+                Background="#66141414"
+                BorderBrush="#55FFFFFF"
                 BorderThickness="1"
                 CornerRadius="8"
-                Padding="6,5"
+                Padding="5,4"
                 Cursor="Arrow"
+                MinWidth="108"
                 RenderTransformOrigin="0.5,0.5"
                 PreviewMouseLeftButtonDown="ControlsBackdrop_PreviewMouseLeftButtonDown">
             <Border.RenderTransform>
-                <ScaleTransform ScaleX="0.78" ScaleY="0.78"/>
+                <ScaleTransform ScaleX="0.62" ScaleY="0.62"/>
             </Border.RenderTransform>
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="6"
-                                  ShadowDepth="1"
-                                  Opacity="0.35"
-                                  Color="Black"/>
-            </Border.Effect>
-            <StackPanel MinWidth="132">
-                <Button Style="{StaticResource MiniPlayerChromeButtonStyle}"
-                        HorizontalAlignment="Left"
-                        Command="{Binding ExitMiniPlayerCommand}">
-                    <TextBlock Text="&#xE918;" Style="{StaticResource TransportGlyphStyle}" FontSize="10"/>
+            <Grid Width="132" Height="72">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <CheckBox Grid.Row="0"
+                          HorizontalAlignment="Left"
+                          VerticalAlignment="Top"
+                          Content="🔒"
+                          ToolTip="Locks only"
+                          FontSize="11"
+                          Padding="0"
+                          Margin="0"
+                          Foreground="{DynamicResource AppForegroundBrush}"
+                          IsChecked="{Binding JukeboxLocksOnly}"/>
+
+                <Button Grid.Row="0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Style="{StaticResource MiniPlayerChromeButtonStyle}"
+                        Command="{Binding ExitMiniPlayerCommand}"
+                        ToolTip="Restore window">
+                    <TextBlock Text="&#xE922;" Style="{StaticResource TransportGlyphStyle}" FontSize="9"/>
                 </Button>
 
-                <StackPanel Orientation="Horizontal"
+                <StackPanel Grid.Row="1"
+                            Orientation="Horizontal"
                             HorizontalAlignment="Center"
-                            Margin="0,4,0,0">
+                            VerticalAlignment="Center">
                     <Button Style="{StaticResource TransportIconButtonStyle}"
-                            Width="36" Height="36"
                             Command="{Binding PreviousSessionTrackCommand}">
-                        <TextBlock Text="&#xE892;" Style="{StaticResource TransportGlyphStyle}" FontSize="14"/>
+                        <TextBlock Text="&#xE892;" Style="{StaticResource TransportGlyphStyle}"/>
                     </Button>
                     <Button Style="{StaticResource TransportIconButtonStyle}"
-                            Width="42" Height="42"
-                            Margin="6,0"
+                            Width="28" Height="28"
+                            Margin="4,0"
                             Command="{Binding TogglePlayPauseCommand}">
-                        <TextBlock FontSize="16">
+                        <TextBlock FontSize="12">
                             <TextBlock.Style>
                                 <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource TransportGlyphStyle}">
                                     <Setter Property="Text" Value="&#xE768;"/>
@@ -113,44 +140,39 @@
                         </TextBlock>
                     </Button>
                     <Button Style="{StaticResource TransportIconButtonStyle}"
-                            Width="34" Height="34"
-                            Margin="4,0"
                             Command="{Binding StopPlaybackCommand}">
-                        <TextBlock Text="&#xE71A;" Style="{StaticResource TransportGlyphStyle}" FontSize="13"/>
+                        <TextBlock Text="&#xE71A;" Style="{StaticResource TransportGlyphStyle}"/>
                     </Button>
                     <Button Style="{StaticResource TransportIconButtonStyle}"
-                            Width="36" Height="36"
                             Command="{Binding NextSessionTrackCommand}">
-                        <TextBlock Text="&#xE893;" Style="{StaticResource TransportGlyphStyle}" FontSize="14"/>
+                        <TextBlock Text="&#xE893;" Style="{StaticResource TransportGlyphStyle}"/>
                     </Button>
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal"
-                            HorizontalAlignment="Center"
-                            Margin="0,5,0,0">
-                    <CheckBox Content="Locks only"
-                              VerticalAlignment="Center"
-                              FontSize="10"
-                              Foreground="{DynamicResource AppForegroundBrush}"
-                              IsChecked="{Binding JukeboxLocksOnly}"/>
-                    <TextBlock Text="{Binding RingLockCountText}"
-                               VerticalAlignment="Center"
-                               FontSize="10"
-                               Margin="8,0,0,0"
-                               Foreground="#FFD166"/>
-                </StackPanel>
-
-                <StackPanel Orientation="Horizontal"
-                            HorizontalAlignment="Center"
-                            Margin="0,4,0,0">
-                    <Button Content="Clear locks" MinWidth="56" Height="20"
-                            FontSize="10" Padding="4,0"
-                            Command="{Binding ClearRingLocksCommand}"/>
-                    <Button Content="Reset plays" MinWidth="56" Height="20" Margin="6,0,0,0"
-                            FontSize="10" Padding="4,0"
+                <Grid Grid.Row="2" VerticalAlignment="Bottom">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0"
+                            Style="{StaticResource MiniPlayerFooterButtonStyle}"
+                            HorizontalAlignment="Left"
+                            Command="{Binding ClearRingLocksCommand}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Clear" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding RingLockCount}"
+                                       Margin="4,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="#FFD166"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="1"
+                            Style="{StaticResource MiniPlayerFooterButtonStyle}"
+                            HorizontalAlignment="Right"
+                            Content="Reset"
                             Command="{Binding ResetRingPlaysCommand}"/>
-                </StackPanel>
-            </StackPanel>
+                </Grid>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

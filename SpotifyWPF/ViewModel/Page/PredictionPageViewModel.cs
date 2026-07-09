@@ -611,6 +611,8 @@ namespace SpotifyWPF.ViewModel.Page
 
         private string _ringLockCountText = "no locks";
 
+        public int RingLockCount => RingLockedBranches?.Count ?? 0;
+
         /// <summary>Bumped by "Reset plays" — the ring clears its coverage bars on change.</summary>
         public int RingResetPlaysToken
         {
@@ -1319,6 +1321,7 @@ namespace SpotifyWPF.ViewModel.Page
             RingLockCountText = RingLockedBranches.Count == 0
                 ? "no locks"
                 : $"{RingLockedBranches.Count} locked";
+            RaisePropertyChanged(nameof(RingLockCount));
             RefreshBranchPresetsForSelection();
         }
 

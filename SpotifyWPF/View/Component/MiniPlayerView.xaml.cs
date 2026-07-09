@@ -28,6 +28,9 @@ namespace SpotifyWPF.View.Component
                 if (source is System.Windows.Controls.Primitives.ButtonBase)
                     return true;
 
+                if (source is System.Windows.Controls.CheckBox)
+                    return true;
+
                 source = VisualTreeHelper.GetParent(source);
             }
 

@@ -93,6 +93,21 @@
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
+                <TextBlock Text="{Binding ElementName=RingView, Path=Ring.HudText}"
+                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding RingSegmentCountText}"
+                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding JukeboxBranchChanceText}"
+                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
                 <Label Content="{Binding AnalysisSourceText}"/>
             </StatusBarItem>
             <Separator/>
@@ -246,31 +261,28 @@
                         </Grid>
                     </Border>
 
-                    <!-- Large centered ring (scroll wheel zooms in/out; mini player has no zoom) -->
-                    <Grid Grid.Row="3" Margin="0,0,0,8" ClipToBounds="False">
-                        <StackPanel HorizontalAlignment="Center"
-                                    VerticalAlignment="Center">
-                            <component:JukeboxRingView Width="380" Height="380"
-                                                         DataContext="{Binding}"/>
-                            <TextBlock Text="{Binding RingSegmentCountText}"
-                                           FontSize="11" TextAlignment="Center"
-                                           Margin="0,6,0,0"
-                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                                <TextBlock Text="{Binding JukeboxBranchChanceText}"
-                                           FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
-                                           Margin="0,4,0,0"
-                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                        </StackPanel>
-
-                        <Border x:Name="PlayerHostBorder"
-                                Width="1" Height="1"
-                                Opacity="0"
-                                IsHitTestVisible="False"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Bottom"/>
-                    </Grid>
+                    <!-- Large centered ring (scroll wheel zooms in/out on the black area; clipped above control panel) -->
+                    <Border Grid.Row="3"
+                            Margin="0,0,0,8"
+                            Background="{DynamicResource AppBackgroundBrush}"
+                            ClipToBounds="True"
+                            Panel.ZIndex="0">
+                        <Grid>
+                            <component:JukeboxRingView x:Name="RingView"
+                                                       HorizontalAlignment="Stretch"
+                                                       VerticalAlignment="Stretch"
+                                                       DataContext="{Binding}"/>
+                            <Border x:Name="PlayerHostBorder"
+                                    Width="1" Height="1"
+                                    Opacity="0"
+                                    IsHitTestVisible="False"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Bottom"/>
+                        </Grid>
+                    </Border>
 
                     <component:LoopLabBottomPanel Grid.Row="4"
+                                                    Panel.ZIndex="2"
                                                     ActivityLog="{Binding ActivityLog}"
                                                     IsExpanded="{Binding IsBottomPanelExpanded, Mode=TwoWay}"
                                                     ExpandedHeight="{Binding BottomPanelHeight, Mode=TwoWay}"

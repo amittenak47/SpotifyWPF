@@ -4,23 +4,32 @@
              xmlns:local="clr-namespace:SpotifyWPF.View.Component"
              MinHeight="160"
              MinWidth="160"
+             ClipToBounds="True"
              Background="{x:Null}">
-    <Grid>
-        <local:JukeboxRingCanvas x:Name="Ring"
-                                 DurationMs="{Binding RingDurationMs, Mode=OneWay}"
-                                 PositionMs="{Binding PositionMs, Mode=OneWay}"
-                                 IsPaused="{Binding IsPaused, Mode=OneWay}"
-                                 Graph="{Binding RingGraph, Mode=OneWay}"
-                                 SectionStartsSec="{Binding RingSectionStartsSec, Mode=OneWay}"
-                                 PlannedFromBeatIndex="{Binding RingPlannedFromBeat, Mode=OneWay}"
-                                 PlannedToBeatIndex="{Binding RingPlannedToBeat, Mode=OneWay}"
-                                 JumpFlash="{Binding RingJumpFlash, Mode=OneWay}"
-                                 LockedBranches="{Binding RingLockedBranches, Mode=OneWay}"
-                                 ToggleLockCommand="{Binding ToggleRingLockCommand}"
-                                 ScrubToMsCommand="{Binding RingScrubToCommand}"
-                                 EndScrubCommand="{Binding EndRingScrubCommand}"
-                                 ResetPlaysToken="{Binding RingResetPlaysToken, Mode=OneWay}"
-                                 PreviewHopDepth="{Binding RingPreviewHopDepth, Mode=OneWay}"
-                                 MiniPlayerMode="{Binding MiniPlayerMode, RelativeSource={RelativeSource AncestorType=local:JukeboxRingView}}"/>
+    <Grid x:Name="ZoomHost"
+          ClipToBounds="True"
+          Background="Transparent"
+          PreviewMouseWheel="ZoomHost_PreviewMouseWheel">
+        <Grid x:Name="ZoomContent"
+              RenderTransformOrigin="0.5,0.5">
+            <local:JukeboxRingCanvas x:Name="Ring"
+                                     HorizontalAlignment="Stretch"
+                                     VerticalAlignment="Stretch"
+                                     DurationMs="{Binding RingDurationMs, Mode=OneWay}"
+                                     PositionMs="{Binding PositionMs, Mode=OneWay}"
+                                     IsPaused="{Binding IsPaused, Mode=OneWay}"
+                                     Graph="{Binding RingGraph, Mode=OneWay}"
+                                     SectionStartsSec="{Binding RingSectionStartsSec, Mode=OneWay}"
+                                     PlannedFromBeatIndex="{Binding RingPlannedFromBeat, Mode=OneWay}"
+                                     PlannedToBeatIndex="{Binding RingPlannedToBeat, Mode=OneWay}"
+                                     JumpFlash="{Binding RingJumpFlash, Mode=OneWay}"
+                                     LockedBranches="{Binding RingLockedBranches, Mode=OneWay}"
+                                     ToggleLockCommand="{Binding ToggleRingLockCommand}"
+                                     ScrubToMsCommand="{Binding RingScrubToCommand}"
+                                     EndScrubCommand="{Binding EndRingScrubCommand}"
+                                     ResetPlaysToken="{Binding RingResetPlaysToken, Mode=OneWay}"
+                                     PreviewHopDepth="{Binding RingPreviewHopDepth, Mode=OneWay}"
+                                     MiniPlayerMode="{Binding MiniPlayerMode, RelativeSource={RelativeSource AncestorType=local:JukeboxRingView}}"/>
+        </Grid>
     </Grid>
 </UserControl>

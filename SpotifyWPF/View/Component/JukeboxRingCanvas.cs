@@ -66,13 +66,9 @@ namespace SpotifyWPF.View.Component
 
         private double _positionStampMs;
 
-        private double _zoom = 1.0;
-
         private bool _isRingScrubbing;
 
-        private const double MinZoom = 0.75;
-
-        private const double MaxZoom = 2.5;
+        private string _lastHudText = string.Empty;
 
         public JukeboxRingCanvas()
         {
@@ -154,6 +150,10 @@ namespace SpotifyWPF.View.Component
         public static readonly DependencyProperty PreviewHopDepthProperty =
             DependencyProperty.Register(nameof(PreviewHopDepth), typeof(int), typeof(JukeboxRingCanvas),
                 new FrameworkPropertyMetadata(2, FrameworkPropertyMetadataOptions.AffectsRender));
+
+        public static readonly DependencyProperty HudTextProperty =
+            DependencyProperty.Register(nameof(HudText), typeof(string), typeof(JukeboxRingCanvas),
+                new FrameworkPropertyMetadata(string.Empty));
 
         public long DurationMs
         {
@@ -251,6 +251,13 @@ namespace SpotifyWPF.View.Component
             set => SetValue(PreviewHopDepthProperty, value);
         }
 
+        /// <summary>Coverage, play count, and hover hint for the status bar.</summary>
+        public string HudText
+        {
+            get => (string)GetValue(HudTextProperty);
+            private set => SetValue(HudTextProperty, value);
+        }
+
         private static void OnPositionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var canvas = (JukeboxRingCanvas)d;
@@ -303,7 +310,56 @@ namespace SpotifyWPF.View.Component
                 return;
 
             UpdatePlayCounts(EstimatedPositionMs());
+            SyncHudText();
             InvalidateVisual();
+        }
+
+        private void SyncHudText()
+        {
+            if (MiniPlayerMode)
+            {
+                PublishHudText(string.Empty);
+                return;
+            }
+
+            var graph = Graph;
+
+            if (graph == null || graph.Beats.Count == 0)
+            {
+                PublishHudText(string.Empty);
+                return;
+            }
+
+            var covered = 0;
+
+            for (var i = 0; i < _playCounts.Length; i++)
+            {
+                if (_playCounts[i] > 0)
+                    covered++;
+            }
+
+            var coverage = (int)Math.Round(covered * 100.0 / graph.Beats.Count);
+            var baseLine = coverage + "% coverage · " + _totalPlays + " beats played";
+            var previewChain = ActivePreviewChain();
+            string hover;
+
+            if (previewChain[0] >= 0)
+                hover = BuildChainPreviewText(graph, previewChain);
+            else
+                hover = BuildHoverHint(graph, _hoverBeatIndex, previewChain);
+
+            PublishHudText(hover != null ? baseLine + " · " + hover : baseLine);
+        }
+
+        private void PublishHudText(string text)
+        {
+            text = text ?? string.Empty;
+
+            if (_lastHudText == text)
+                return;
+
+            _lastHudText = text;
+            HudText = text;
         }
 
         /// <summary>
@@ -451,6 +507,7 @@ namespace SpotifyWPF.View.Component
             if (hit != _hoverBeatIndex || before != after)
             {
                 _hoverBeatIndex = hit;
+                SyncHudText();
                 InvalidateVisual();
             }
 
@@ -585,21 +642,6 @@ namespace SpotifyWPF.View.Component
             var fraction = (Math.Atan2(dy, dx) + Math.PI / 2) / (Math.PI * 2);
             fraction = ((fraction % 1) + 1) % 1;
             return (long)Math.Round(fraction * total);
-        }
-
-        protected override void OnMouseWheel(MouseWheelEventArgs e)
-        {
-            base.OnMouseWheel(e);
-
-            if (MiniPlayerMode)
-                return;
-
-            var factor = e.Delta > 0 ? 1.1 : 1.0 / 1.1;
-            _zoom = Math.Max(MinZoom, Math.Min(MaxZoom, _zoom * factor));
-
-            RenderTransformOrigin = new Point(0.5, 0.5);
-            RenderTransform = new ScaleTransform(_zoom, _zoom);
-            e.Handled = true;
         }
 
         /// <summary>Beat under the cursor, or -1 outside the bar band.</summary>
@@ -827,11 +869,56 @@ namespace SpotifyWPF.View.Component
                 _hoverToBeatIndex = _hoverChain[1];
         }
 
-        private string DrawChainedBranchPreview(DrawingContext dc, BeatGraph graph, Point center,
-            double rChord, long total, IReadOnlyList<BranchLock> locks, int[] chain)
+        private static string FormatChainPreviewText(int inspect, int edgeCount, List<string> hopText)
+        {
+            var path = hopText.Count > 0 ? " · " + string.Join(" · ", hopText) : string.Empty;
+
+            if (edgeCount == 0)
+                return $"beat {inspect} · no branches — try another beat";
+
+            return $"beat {inspect} · {edgeCount} branch{(edgeCount == 1 ? "" : "es")}{path}";
+        }
+
+        private string BuildChainPreviewText(BeatGraph graph, int[] chain)
         {
             if (chain == null || chain[0] < 0)
                 return null;
+
+            var beats = graph.Beats;
+            var inspect = chain[0];
+            var depth = EffectivePreviewHopDepth();
+            var hopText = new List<string>();
+
+            for (var hop = 1; hop <= depth; hop++)
+            {
+                if (hop > 1 && chain[hop - 1] < 0)
+                    break;
+
+                var parent = hop == 1 ? chain[0] : chain[hop - 1];
+
+                if (parent < 0 || parent >= beats.Count)
+                    break;
+
+                if (beats[parent].Neighbors.Count == 0)
+                    break;
+
+                var highlight = chain[hop];
+
+                if (highlight >= 0)
+                    hopText.Add($"hop{hop}: {parent}→{highlight}");
+
+                if (highlight < 0)
+                    break;
+            }
+
+            return FormatChainPreviewText(inspect, beats[inspect].Neighbors.Count, hopText);
+        }
+
+        private void DrawChainedBranchPreview(DrawingContext dc, BeatGraph graph, Point center,
+            double rChord, long total, IReadOnlyList<BranchLock> locks, int[] chain)
+        {
+            if (chain == null || chain[0] < 0)
+                return;
 
             var beats = graph.Beats;
             var inspect = chain[0];
@@ -890,14 +977,6 @@ namespace SpotifyWPF.View.Component
 
             var origin = Polar(center, rChord, BeatAngle(beats[inspect], total));
             dc.DrawEllipse(MakeBrush(HotColor, 0.9), null, origin, 4, 4);
-
-            var edgeCount = beats[inspect].Neighbors.Count;
-            var path = hopText.Count > 0 ? " · " + string.Join(" · ", hopText) : string.Empty;
-
-            if (edgeCount == 0)
-                return $"beat {inspect} · no branches — try another beat";
-
-            return $"beat {inspect} · {edgeCount} branch{(edgeCount == 1 ? "" : "es")}{path}";
         }
 
         private string BuildHoverHint(BeatGraph graph, int hoveredBeatIndex, int[] chain)
@@ -1093,13 +1172,10 @@ namespace SpotifyWPF.View.Component
             }
 
             // Chained branch preview (distance-colored); pinned after lock so options stay visible.
-            string hoverText = null;
             var previewChain = ActivePreviewChain();
 
             if (previewChain[0] >= 0)
-                hoverText = DrawChainedBranchPreview(dc, graph, center, rChord, total, locks, previewChain);
-            else
-                hoverText = BuildHoverHint(graph, _hoverBeatIndex, previewChain);
+                DrawChainedBranchPreview(dc, graph, center, rChord, total, locks, previewChain);
 
             // The predictor's mind: one pulsing chord for the planned jump.
             if (plannedFrom >= 0 && plannedTo >= 0 && plannedFrom < beats.Count && plannedTo < beats.Count)
@@ -1149,46 +1225,6 @@ namespace SpotifyWPF.View.Component
                     }
                 }
             }
-
-            // Center stats: play coverage, like the reference.
-            var covered = 0;
-
-            for (var i = 0; i < _playCounts.Length; i++)
-            {
-                if (_playCounts[i] > 0)
-                    covered++;
-            }
-
-            var coverage = beats.Count > 0 ? (int)Math.Round(covered * 100.0 / beats.Count) : 0;
-
-            if (MiniPlayerMode)
-            {
-                // The transport backdrop sits over the center: keep the stats to one compact line
-                // above it (and hover info below) so text stays readable on the transparent window.
-                DrawCenteredText(dc, center, -rIn * 0.72,
-                    coverage + "% coverage · " + _totalPlays + " beats", 10, TextColor,
-                    FontWeights.SemiBold);
-
-                if (hoverText != null)
-                    DrawCenteredText(dc, center, rIn * 0.72, hoverText, 9.5,
-                        MakeColor(hoverText.IndexOf("no branch", StringComparison.OrdinalIgnoreCase) >= 0
-                            ? MutedTextColor
-                            : GhostColor, 0.9), FontWeights.Normal);
-
-                return;
-            }
-
-            DrawCenteredText(dc, center, -14, coverage + "%", 22, TextColor, FontWeights.SemiBold);
-            DrawCenteredText(dc, center, 8, "coverage", 9.5, MutedTextColor, FontWeights.Normal);
-            DrawCenteredText(dc, center, 22, _totalPlays + " beats played", 9.5, MutedTextColor,
-                FontWeights.Normal);
-
-            if (hoverText != null)
-                DrawCenteredText(dc, center, 38, hoverText, 9.5,
-                    MakeColor(hoverText.IndexOf("no branch", StringComparison.OrdinalIgnoreCase) >= 0
-                        ? MutedTextColor
-                        : GhostColor, 0.9),
-                    FontWeights.Normal);
         }
 
         private Color[] BuildSectionColors()
