@@ -6,8 +6,8 @@
 
     <UserControl.Resources>
         <Style x:Key="TransportIconButtonStyle" TargetType="{x:Type Button}">
-            <Setter Property="Width" Value="24"/>
-            <Setter Property="Height" Value="24"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="1,0"/>
             <Setter Property="Background" Value="Transparent"/>
@@ -35,6 +35,37 @@
             </Setter>
         </Style>
 
+        <Style x:Key="MiniPlayerLockToggleStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Arrow"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="12">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#FFD166"/>
+                                <Setter TargetName="Border" Property="Background" Value="#33FFD166"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="MiniPlayerChromeButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource TransportIconButtonStyle}">
             <Setter Property="Width" Value="20"/>
             <Setter Property="Height" Value="20"/>
@@ -43,9 +74,9 @@
 
         <Style x:Key="MiniPlayerFooterButtonStyle" TargetType="{x:Type Button}">
             <Setter Property="MinWidth" Value="0"/>
-            <Setter Property="Height" Value="18"/>
-            <Setter Property="Padding" Value="4,0"/>
-            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Padding" Value="6,0"/>
+            <Setter Property="FontSize" Value="10"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
@@ -79,31 +110,35 @@
                 BorderBrush="#55FFFFFF"
                 BorderThickness="1"
                 CornerRadius="8"
-                Padding="5,4"
+                Padding="8,6"
                 Cursor="Arrow"
-                MinWidth="108"
+                MinWidth="148"
                 RenderTransformOrigin="0.5,0.5"
                 PreviewMouseLeftButtonDown="ControlsBackdrop_PreviewMouseLeftButtonDown">
             <Border.RenderTransform>
-                <ScaleTransform ScaleX="0.62" ScaleY="0.62"/>
+                <ScaleTransform ScaleX="0.88" ScaleY="0.88"/>
             </Border.RenderTransform>
-            <Grid Width="132" Height="72">
+            <Grid Width="156" Height="92">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <CheckBox Grid.Row="0"
-                          HorizontalAlignment="Left"
-                          VerticalAlignment="Top"
-                          Content="🔒"
-                          ToolTip="Locks only"
-                          FontSize="11"
-                          Padding="0"
-                          Margin="0"
-                          Foreground="{DynamicResource AppForegroundBrush}"
-                          IsChecked="{Binding JukeboxLocksOnly}"/>
+                <StackPanel Grid.Row="0"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top">
+                    <ToggleButton Style="{StaticResource MiniPlayerLockToggleStyle}"
+                                  Content="🔒"
+                                  ToolTip="Locks only"
+                                  IsChecked="{Binding JukeboxLocksOnly}"/>
+                    <TextBlock Text="{Binding RingLockCount}"
+                               VerticalAlignment="Center"
+                               Margin="4,0,0,0"
+                               FontSize="10"
+                               Foreground="#FFD166"/>
+                </StackPanel>
 
                 <Button Grid.Row="0"
                         HorizontalAlignment="Right"
@@ -123,10 +158,10 @@
                         <TextBlock Text="&#xE892;" Style="{StaticResource TransportGlyphStyle}"/>
                     </Button>
                     <Button Style="{StaticResource TransportIconButtonStyle}"
-                            Width="28" Height="28"
-                            Margin="4,0"
+                            Width="34" Height="34"
+                            Margin="5,0"
                             Command="{Binding TogglePlayPauseCommand}">
-                        <TextBlock FontSize="12">
+                        <TextBlock FontSize="14">
                             <TextBlock.Style>
                                 <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource TransportGlyphStyle}">
                                     <Setter Property="Text" Value="&#xE768;"/>
@@ -157,15 +192,8 @@
                     <Button Grid.Column="0"
                             Style="{StaticResource MiniPlayerFooterButtonStyle}"
                             HorizontalAlignment="Left"
-                            Command="{Binding ClearRingLocksCommand}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Clear" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding RingLockCount}"
-                                       Margin="4,0,0,0"
-                                       VerticalAlignment="Center"
-                                       Foreground="#FFD166"/>
-                        </StackPanel>
-                    </Button>
+                            Content="Clear"
+                            Command="{Binding ClearRingLocksCommand}"/>
                     <Button Grid.Column="1"
                             Style="{StaticResource MiniPlayerFooterButtonStyle}"
                             HorizontalAlignment="Right"

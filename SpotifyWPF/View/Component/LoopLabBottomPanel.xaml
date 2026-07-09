@@ -116,7 +116,7 @@
                                                   IsChecked="{Binding JukeboxAllowOnlyLongBranches}"
                                                   Margin="0,0,0,8"/>
 
-                                        <TextBlock Text="Re-analyze after changing segments; graph rebuilds when sliders change."
+                                        <TextBlock Text="Sliders rebuild the beat graph from cached analysis (no re-capture). Use Analyze for a new track; Delete cache + Analyze to re-capture audio."
                                                    FontSize="11"
                                                    TextWrapping="Wrap"
                                                    Foreground="{DynamicResource AppMutedForegroundBrush}"/>
@@ -174,7 +174,8 @@
                                         <Button Content="Play" MinWidth="56"
                                                 Command="{Binding PlaySessionTrackCommand}"/>
                                         <Button Content="Analyze" MinWidth="72" Margin="8,0,0,0"
-                                                Command="{Binding AnalyzeSessionTrackCommand}"/>
+                                                Command="{Binding AnalyzeSessionTrackCommand}"
+                                                ToolTip="New track: capture audio and run analysis. Cached track: rebuild beat graph from tuning only."/>
                                         <Button Content="Refresh" MinWidth="72" Margin="8,0,0,0"
                                                 Command="{Binding RefreshSessionCommand}"/>
                                         <Button Content="Delete cache" MinWidth="88" Margin="8,0,0,0"

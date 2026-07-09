@@ -28,7 +28,7 @@ namespace SpotifyWPF.View.Component
                 if (source is System.Windows.Controls.Primitives.ButtonBase)
                     return true;
 
-                if (source is System.Windows.Controls.CheckBox)
+                if (source is System.Windows.Controls.Primitives.ToggleButton)
                     return true;
 
                 source = VisualTreeHelper.GetParent(source);

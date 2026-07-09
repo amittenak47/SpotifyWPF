@@ -1548,10 +1548,37 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void PersistJukeboxSettingsNow()
         {
+            // Save raises SettingsChanged → LoopController.InvalidateGraphCache (rearms jukebox).
             _jukeboxSettings.Save(_jukeboxSettingsModel);
-            _loopController.InvalidateGraphCache();
 
-            if (!_jukeboxSuppressedForCapture && _loopController.CurrentTrackId != null)
+            var trackId = _loopController.CurrentTrackId;
+
+            if (!_jukeboxSuppressedForCapture && trackId != null)
+                RebuildBeatGraphForTrack(trackId, invalidateCache: false);
+        }
+
+        /// <summary>
+        /// Rebuilds the beat graph from cached analysis using current tuning — no audio capture or librosa.
+        /// </summary>
+        private void RebuildBeatGraphForTrack(string trackId, bool invalidateCache = true)
+        {
+            if (string.IsNullOrEmpty(trackId))
+                return;
+
+            var analysis = AnalysisCache.Load(trackId);
+
+            if (analysis == null)
+                return;
+
+            if (invalidateCache)
+                _loopController.InvalidateGraphCache();
+
+            if (trackId != _loopController.CurrentTrackId)
+                return;
+
+            RefreshRingVisualization(trackId);
+
+            if (!_jukeboxSuppressedForCapture)
                 ApplyLoopSettings();
         }
 
@@ -1910,6 +1937,18 @@ namespace SpotifyWPF.ViewModel.Page
                 return;
             }
 
+            var cachedAnalysis = AnalysisCache.Load(trackId);
+
+            if (cachedAnalysis != null)
+            {
+                RebuildBeatGraphForTrack(trackId);
+                ReportAnalysisMessage(
+                    $"Beat graph rebuilt: {cachedAnalysis.Beats.Count} beats, " +
+                    $"{cachedAnalysis.Segments.Count} segments (cached analysis, tuning applied).");
+                UpdateSessionTrackAnalysisStatus(trackId, SessionAnalysisStatus.Ready);
+                return;
+            }
+
             if (!await _playbackSessionGate.WaitAsync(0).ConfigureAwait(true))
             {
                 ReportAnalysisMessage(
@@ -2081,10 +2120,7 @@ namespace SpotifyWPF.ViewModel.Page
         /// <summary>Re-arms the jukebox once analysis lands for the current track.</summary>
         private void OnAnalysisCompleted(string trackId, Model.Prediction.TrackAnalysis analysis)
         {
-            RefreshRingVisualization(trackId);
-
-            if (trackId == _loopController.CurrentTrackId)
-                ApplyLoopSettings();
+            RebuildBeatGraphForTrack(trackId);
 
             if (trackId == _loopController.CurrentTrackId && NowPlayingTitle != "Nothing playing")
                 UpsertSessionTrack(trackId, NowPlayingTitle, NowPlayingArtist);

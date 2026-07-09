@@ -54,8 +54,14 @@ namespace SpotifyWPF.Service.Prediction
     /// </summary>
     public class BeatGraphBuilder
     {
-        /// <summary>Max outgoing branches kept per beat (nearest first).</summary>
-        public int MaxNeighbors { get; set; } = 4;
+        /// <summary>Max outgoing branches kept per beat (mix of nearest and farthest under threshold).</summary>
+        public int MaxNeighbors { get; set; } = 6;
+
+        /// <summary>Closest similarity matches kept per beat (hot/red on the ring).</summary>
+        public int MaxNearestNeighbors { get; set; } = 3;
+
+        /// <summary>Farthest similarity matches kept per beat (cool/blue long hops on the ring).</summary>
+        public int MaxFarthestNeighbors { get; set; } = 3;
 
         /// <summary>Hard ceiling for the tuning loop; matches the original's maxBranchDistance.</summary>
         public double MaxBranchDistance { get; set; } = 80;
@@ -178,9 +184,48 @@ namespace SpotifyWPF.Service.Prediction
                         edges.Add(new BeatEdge { DestinationIndex = j, Distance = distances[i][j] });
                 }
 
-                graph.Beats[i].Neighbors.AddRange(
-                    edges.OrderBy(e => e.Distance).Take(MaxNeighbors));
+                graph.Beats[i].Neighbors.AddRange(SelectDiverseNeighbors(edges));
             }
+        }
+
+        /// <summary>
+        /// Keeps both tight matches and looser long-hop matches so the ring shows red and blue chords.
+        /// </summary>
+        private List<BeatEdge> SelectDiverseNeighbors(List<BeatEdge> edges)
+        {
+            if (edges.Count == 0)
+                return edges;
+
+            var ordered = edges.OrderBy(e => e.Distance).ToList();
+            var selected = new List<BeatEdge>();
+            var seen = new HashSet<int>();
+
+            void AddEdge(BeatEdge edge)
+            {
+                if (edge == null || !seen.Add(edge.DestinationIndex))
+                    return;
+
+                selected.Add(edge);
+            }
+
+            foreach (var edge in ordered.Take(MaxNearestNeighbors))
+                AddEdge(edge);
+
+            foreach (var edge in ordered.Skip(Math.Max(0, ordered.Count - MaxFarthestNeighbors)))
+                AddEdge(edge);
+
+            if (selected.Count < MaxNeighbors)
+            {
+                foreach (var edge in ordered)
+                {
+                    AddEdge(edge);
+
+                    if (selected.Count >= MaxNeighbors)
+                        break;
+                }
+            }
+
+            return selected.Take(MaxNeighbors).ToList();
         }
 
         /// <summary>

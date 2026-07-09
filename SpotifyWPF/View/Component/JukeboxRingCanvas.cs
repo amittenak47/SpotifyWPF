@@ -348,7 +348,7 @@ namespace SpotifyWPF.View.Component
             else
                 hover = BuildHoverHint(graph, _hoverBeatIndex, previewChain);
 
-            PublishHudText(hover != null ? baseLine + " · " + hover : baseLine);
+            PublishHudText(hover != null ? baseLine + " · " + hover : baseLine + " · click a branch line to lock that hop");
         }
 
         private void PublishHudText(string text)
@@ -535,24 +535,11 @@ namespace SpotifyWPF.View.Component
             var command = ToggleLockCommand;
             var point = e.GetPosition(this);
 
-            if (graph != null && command != null && HitTestBeat(point) >= 0)
+            if (graph != null && command != null)
             {
                 var chain = ActivePreviewChain();
-                var depth = EffectivePreviewHopDepth();
-                var fromBeat = -1;
-                var toBeat = -1;
 
-                for (var hop = depth; hop >= 1; hop--)
-                {
-                    if (chain[hop] >= 0 && chain[hop - 1] >= 0)
-                    {
-                        fromBeat = chain[hop - 1];
-                        toBeat = chain[hop];
-                        break;
-                    }
-                }
-
-                if (fromBeat >= 0 && toBeat >= 0)
+                if (TryGetClickedBranch(point, graph, chain, out var fromBeat, out var toBeat))
                 {
                     e.Handled = MiniPlayerMode;
 
@@ -708,7 +695,7 @@ namespace SpotifyWPF.View.Component
             var rChord = outer * BarBandInnerRatio - outer * 0.04;
             var total = TotalMs();
             var bestDest = -1;
-            var bestDist = 22.0;
+            var bestDist = 26.0;
 
             foreach (var edge in beats[fromBeatIndex].Neighbors)
             {
@@ -826,6 +813,48 @@ namespace SpotifyWPF.View.Component
             return _pinnedChain ?? _hoverChain;
         }
 
+        /// <summary>Lock the branch chord under the cursor, not always the deepest hop.</summary>
+        private bool TryGetClickedBranch(Point point, BeatGraph graph, int[] chain, out int fromBeat,
+            out int toBeat)
+        {
+            fromBeat = -1;
+            toBeat = -1;
+
+            if (graph == null || chain == null)
+                return false;
+
+            var depth = EffectivePreviewHopDepth();
+
+            for (var hop = 1; hop <= depth; hop++)
+            {
+                if (chain[hop] < 0 || chain[hop - 1] < 0)
+                    break;
+
+                var parent = chain[hop - 1];
+
+                if (HitTestBranchEdge(point, graph, parent) == chain[hop])
+                {
+                    fromBeat = parent;
+                    toBeat = chain[hop];
+                    return true;
+                }
+            }
+
+            if (chain[0] >= 0)
+            {
+                var dest = HitTestBranchEdge(point, graph, chain[0]);
+
+                if (dest >= 0)
+                {
+                    fromBeat = chain[0];
+                    toBeat = dest;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private void UpdateHoverChain(Point point)
         {
             ClearChain(_hoverChain);
@@ -867,6 +896,59 @@ namespace SpotifyWPF.View.Component
 
             if (_hoverChain[1] >= 0)
                 _hoverToBeatIndex = _hoverChain[1];
+        }
+
+        private void DrawBranchLandmarks(DrawingContext dc, BeatGraph graph, Point center, double rChord,
+            long total, IReadOnlyList<BranchLock> locks, int inspectBeat, int playheadBeat, int[] chain)
+        {
+            var beats = graph.Beats;
+            var drawn = new HashSet<long>();
+
+            void DrawDest(int from, int dest, double alpha, double size, Color color)
+            {
+                if (from < 0 || dest < 0 || from >= beats.Count || dest >= beats.Count)
+                    return;
+
+                var key = ((long)from << 32) | (uint)dest;
+
+                if (!drawn.Add(key))
+                    return;
+
+                var dot = Polar(center, rChord, BeatAngle(beats[dest], total));
+                dc.DrawEllipse(MakeBrush(color, alpha), null, dot, size, size);
+            }
+
+            if (locks != null)
+            {
+                foreach (var branchLock in locks)
+                {
+                    DrawDest(branchLock.FromBeatIndex, branchLock.ToBeatIndex, 0.9, 3.4, LockColor);
+                }
+            }
+
+            if (inspectBeat >= 0)
+            {
+                foreach (var edge in beats[inspectBeat].Neighbors)
+                    DrawDest(inspectBeat, edge.DestinationIndex, 0.42, 3.0, GhostColor);
+            }
+
+            if (playheadBeat >= 0 && playheadBeat != inspectBeat)
+            {
+                foreach (var edge in beats[playheadBeat].Neighbors)
+                    DrawDest(playheadBeat, edge.DestinationIndex, 0.24, 2.6, GhostColor);
+            }
+
+            if (chain != null)
+            {
+                for (var hop = 1; hop < chain.Length; hop++)
+                {
+                    if (chain[hop - 1] < 0)
+                        break;
+
+                    foreach (var edge in beats[chain[hop - 1]].Neighbors)
+                        DrawDest(chain[hop - 1], edge.DestinationIndex, 0.3, 2.8, GhostColor);
+                }
+            }
         }
 
         private static string FormatChainPreviewText(int inspect, int edgeCount, List<string> hopText)
@@ -964,8 +1046,10 @@ namespace SpotifyWPF.View.Component
                         MakePen(locked ? LockColor : branchColor, width, alpha));
 
                     var dot = Polar(center, layerRadius, a2);
-                    dc.DrawEllipse(MakeBrush(locked ? LockColor : branchColor, alpha), null, dot,
-                        isHighlighted ? 4.2 : 3, isHighlighted ? 4.2 : 3);
+                    var dotAlpha = isHighlighted ? 1.0 : locked ? 0.9 : Math.Max(alpha, 0.42);
+                    var dotSize = isHighlighted ? 4.2 : locked ? 3.4 : 3.0;
+                    dc.DrawEllipse(MakeBrush(locked ? LockColor : branchColor, dotAlpha), null, dot,
+                        dotSize, dotSize);
                 }
 
                 if (highlight >= 0)
@@ -1173,6 +1257,10 @@ namespace SpotifyWPF.View.Component
 
             // Chained branch preview (distance-colored); pinned after lock so options stay visible.
             var previewChain = ActivePreviewChain();
+            var inspectBeat = previewChain[0] >= 0 ? previewChain[0] : currentIndex;
+
+            DrawBranchLandmarks(dc, graph, center, rChord, total, locks, inspectBeat, currentIndex,
+                previewChain);
 
             if (previewChain[0] >= 0)
                 DrawChainedBranchPreview(dc, graph, center, rChord, total, locks, previewChain);
