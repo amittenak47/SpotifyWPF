@@ -7,8 +7,8 @@
         MinHeight="320"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="{StaticResource AppBackgroundBrush}"
-        Foreground="{StaticResource AppForegroundBrush}">
+        Background="{DynamicResource AppBackgroundBrush}"
+        Foreground="{DynamicResource AppForegroundBrush}">
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -26,7 +26,7 @@
         <TextBlock Grid.Row="1"
                    Text="Customize the dark theme palette. Enter six-digit hex colors (for example, #750013)."
                    TextWrapping="Wrap"
-                   Foreground="{StaticResource AppMutedForegroundBrush}"
+                   Foreground="{DynamicResource AppMutedForegroundBrush}"
                    Margin="0,0,0,12"/>
 
         <ScrollViewer Grid.Row="2"
@@ -44,7 +44,7 @@
         <TextBlock x:Name="ValidationMessage"
                    Grid.Row="3"
                    Margin="0,8,0,0"
-                   Foreground="{StaticResource AppAccentBrush}"
+                   Foreground="{DynamicResource AppAccentBrush}"
                    TextWrapping="Wrap"
                    Visibility="Collapsed"/>
 

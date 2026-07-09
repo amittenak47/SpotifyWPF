@@ -11,9 +11,9 @@
         <Style x:Key="ActivityHeaderToggleStyle" TargetType="{x:Type ToggleButton}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="Padding" Value="8,6"/>
-            <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type ToggleButton}">
@@ -27,11 +27,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-                                <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+                                <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -40,8 +40,8 @@
         </Style>
     </UserControl.Resources>
 
-    <Border Background="{StaticResource AppSurfaceBrush}"
-            BorderBrush="{StaticResource AppBorderBrush}"
+    <Border Background="{DynamicResource AppSurfaceBrush}"
+            BorderBrush="{DynamicResource AppBorderBrush}"
             BorderThickness="1">
         <DockPanel>
             <ToggleButton DockPanel.Dock="Top"
@@ -51,11 +51,11 @@
                     <TextBlock Text="Activity"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource AppForegroundBrush}"/>
+                               Foreground="{DynamicResource AppForegroundBrush}"/>
                     <TextBlock Margin="8,0,0,0"
                                FontFamily="Segoe UI Symbol"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource AppMutedForegroundBrush}">
+                               Foreground="{DynamicResource AppMutedForegroundBrush}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Text" Value="▶"/>

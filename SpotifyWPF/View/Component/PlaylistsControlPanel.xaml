@@ -10,8 +10,8 @@
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
     </UserControl.Resources>
 
-    <Border Background="{StaticResource AppSurfaceBrush}"
-            BorderBrush="{StaticResource AppBorderBrush}"
+    <Border Background="{DynamicResource AppSurfaceBrush}"
+            BorderBrush="{DynamicResource AppBorderBrush}"
             BorderThickness="1">
         <DockPanel LastChildFill="True">
             <ToggleButton DockPanel.Dock="Top"
@@ -21,11 +21,11 @@
                     <TextBlock Text="Controls"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource AppForegroundBrush}"/>
+                               Foreground="{DynamicResource AppForegroundBrush}"/>
                     <TextBlock Margin="8,0,0,0"
                                FontFamily="Segoe UI Symbol"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource AppMutedForegroundBrush}">
+                               Foreground="{DynamicResource AppMutedForegroundBrush}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Text" Value="▶"/>
@@ -88,7 +88,7 @@
                                 <TextBlock Text="Double-click a playlist or use Load Tracks."
                                            VerticalAlignment="Center"
                                            Margin="0,0,8,0"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                 <Button Content="Load Tracks"
                                         Command="{Binding LoadTracksCommand}"
                                         CommandParameter="{Binding SelectedPlaylist}"

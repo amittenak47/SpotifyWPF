@@ -9,25 +9,25 @@
       <converter:StatusActionConverter x:Key="StatusActionConverter"/>
 
       <Style TargetType="{x:Type Window}">
-        <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-        <Setter Property="TextElement.Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource AppForegroundBrush}"/>
       </Style>
       <Style TargetType="{x:Type UserControl}">
-        <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-        <Setter Property="TextElement.Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource AppForegroundBrush}"/>
       </Style>
       <Style TargetType="{x:Type TextBlock}">
-        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
       </Style>
       <Style TargetType="{x:Type Label}">
-        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
       </Style>
       <Style TargetType="{x:Type Button}">
-        <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
         <Setter Property="Padding" Value="12,4"/>
         <Setter Property="Template">
           <Setter.Value>
@@ -44,16 +44,16 @@
               </Border>
               <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                  <Setter TargetName="Border" Property="Background" Value="{StaticResource AppHoverBrush}"/>
-                  <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+                  <Setter TargetName="Border" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
+                  <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                  <Setter TargetName="Border" Property="Background" Value="{StaticResource AppSelectedBrush}"/>
-                  <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+                  <Setter TargetName="Border" Property="Background" Value="{DynamicResource AppSelectedBrush}"/>
+                  <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                  <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-                  <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+                  <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+                  <Setter Property="Foreground" Value="{DynamicResource AppDisabledForegroundBrush}"/>
                   <Setter TargetName="Border" Property="BorderBrush" Value="#4A5258"/>
                 </Trigger>
               </ControlTemplate.Triggers>
@@ -62,17 +62,17 @@
         </Setter>
       </Style>
       <Style TargetType="{x:Type CheckBox}">
-        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
       </Style>
       <Style TargetType="{x:Type TabControl}">
-        <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
         <Setter Property="Padding" Value="0"/>
       </Style>
       <Style TargetType="{x:Type TabItem}">
-        <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource AppMutedForegroundBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppMutedForegroundBrush}"/>
         <Setter Property="Padding" Value="14,6"/>
         <Setter Property="Margin" Value="0,0,4,0"/>
         <Setter Property="Template">
@@ -80,7 +80,7 @@
             <ControlTemplate TargetType="{x:Type TabItem}">
               <Border x:Name="TabBorder"
                       Background="{TemplateBinding Background}"
-                      BorderBrush="{StaticResource AppBorderBrush}"
+                      BorderBrush="{DynamicResource AppBorderBrush}"
                       BorderThickness="1,1,1,0"
                       CornerRadius="4,4,0,0"
                       Padding="{TemplateBinding Padding}"
@@ -93,16 +93,16 @@
               </Border>
               <ControlTemplate.Triggers>
                 <Trigger Property="IsSelected" Value="True">
-                  <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
-                  <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
-                  <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+                  <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+                  <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+                  <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
                   <Setter Property="Panel.ZIndex" Value="1"/>
                 </Trigger>
                 <Trigger Property="IsMouseOver" Value="True">
-                  <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+                  <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                  <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+                  <Setter Property="Foreground" Value="{DynamicResource AppDisabledForegroundBrush}"/>
                 </Trigger>
               </ControlTemplate.Triggers>
             </ControlTemplate>
@@ -111,20 +111,15 @@
       </Style>
       <Style TargetType="{x:Type TreeView}">
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
         <Setter Property="BorderThickness" Value="0"/>
       </Style>
       <Style TargetType="{x:Type TreeViewItem}">
-        <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
         <Setter Property="Padding" Value="2"/>
-        <Style.Resources>
-          <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#750013"/>
-          <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFF"/>
-          <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#242424"/>
-        </Style.Resources>
       </Style>
       <Style TargetType="{x:Type StatusBarItem}">
-        <Setter Property="Foreground" Value="{StaticResource AppMutedForegroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppMutedForegroundBrush}"/>
       </Style>
     </ResourceDictionary>
   </Application.Resources>

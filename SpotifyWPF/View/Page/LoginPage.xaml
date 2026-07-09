@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="SpotifyWPF.View.Page.LoginPage"
+<UserControl x:Class="SpotifyWPF.View.Page.LoginPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -11,7 +11,7 @@
     </UserControl.Resources>
 
     <!-- DataContext comes from MainWindow DataTemplate (LoginPageViewModel). Do not override here. -->
-    <Grid Background="{StaticResource AppBackgroundBrush}">
+    <Grid Background="{DynamicResource AppBackgroundBrush}">
         <StackPanel HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     MaxWidth="480"
@@ -26,7 +26,7 @@
                 <Run Text="Enter your personal Spotify Client ID to log in."/>
                 <LineBreak/>
                 <Hyperlink NavigateUri="https://developer.spotify.com/dashboard"
-                           Foreground="{StaticResource AppAccentBrush}"
+                           Foreground="{DynamicResource AppAccentBrush}"
                            RequestNavigate="Hyperlink_RequestNavigate">
                     Get your Client ID from the Spotify Developer Dashboard
                 </Hyperlink>
@@ -73,14 +73,14 @@
                 <ProgressBar IsIndeterminate="True" Height="8" Margin="0,0,0,16"/>
                 <TextBlock Text="{Binding LoginStatusText}"
                            HorizontalAlignment="Center"
-                           Foreground="{StaticResource AppForegroundBrush}"
+                           Foreground="{DynamicResource AppForegroundBrush}"
                            TextWrapping="Wrap"
                            TextAlignment="Center"/>
             </StackPanel>
         </Border>
 
         <Border Panel.ZIndex="2"
-                Background="{StaticResource AppBackgroundBrush}"
+                Background="{DynamicResource AppBackgroundBrush}"
                 Visibility="{Binding ShowLoginBridge,
                                      Converter={StaticResource BooleanToVisibilityConverter},
                                      FallbackValue=Collapsed,
@@ -90,11 +90,11 @@
                            FontSize="28"
                            FontWeight="SemiBold"
                            HorizontalAlignment="Center"
-                           Foreground="{StaticResource AppForegroundBrush}"/>
-                <TextBlock Text="Loading your library…"
+                           Foreground="{DynamicResource AppForegroundBrush}"/>
+                <TextBlock Text="Loading your library..."
                            Margin="0,8,0,0"
                            HorizontalAlignment="Center"
-                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
             </StackPanel>
         </Border>
     </Grid>

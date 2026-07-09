@@ -20,9 +20,9 @@
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="2,0"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -36,7 +36,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.4"/>
@@ -52,18 +52,18 @@
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
         </Style>
     </UserControl.Resources>
 
-    <DockPanel Margin="8" Background="{StaticResource AppBackgroundBrush}">
+    <DockPanel Margin="8" Background="{DynamicResource AppBackgroundBrush}">
         <StatusBar DockPanel.Dock="Bottom"
                    Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StatusBarItem Width="300">
                 <Grid Height="18" ClipToBounds="True">
                     <TextBlock Text="{Binding Status}"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource AppMutedForegroundBrush}">
+                               Foreground="{DynamicResource AppMutedForegroundBrush}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Visibility" Value="Visible"/>
@@ -77,7 +77,7 @@
                     </TextBlock>
                     <component:MarqueeTextBlock Text="{Binding NowPlayingMarqueeText}"
                                                 Height="18"
-                                                Foreground="{StaticResource AppForegroundBrush}">
+                                                Foreground="{DynamicResource AppForegroundBrush}">
                         <component:MarqueeTextBlock.Style>
                             <Style TargetType="{x:Type component:MarqueeTextBlock}">
                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -116,17 +116,17 @@
                     <TextBlock Text="Infinite Jukebox"
                                FontSize="24"
                                FontWeight="SemiBold"
-                               Foreground="{StaticResource AppForegroundBrush}"/>
+                               Foreground="{DynamicResource AppForegroundBrush}"/>
                     <TextBlock Text=" by "
                                FontSize="13"
                                Margin="6,0,0,4"
                                VerticalAlignment="Bottom"
-                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                     <TextBlock FontSize="13"
                                Margin="0,0,0,4"
                                VerticalAlignment="Bottom">
                         <Hyperlink NavigateUri="https://musicmachinery.com/2012/11/12/the-infinite-jukebox/"
-                                   Foreground="{StaticResource AppAccentBrush}"
+                                   Foreground="{DynamicResource AppAccentBrush}"
                                    RequestNavigate="PaulLamereLink_RequestNavigate">
                             Paul Lamere
                         </Hyperlink>
@@ -135,8 +135,8 @@
             </StackPanel>
 
             <Border Grid.Row="1"
-                            Background="{StaticResource AppSurfaceAltBrush}"
-                            BorderBrush="{StaticResource AppBorderBrush}"
+                            Background="{DynamicResource AppSurfaceAltBrush}"
+                            BorderBrush="{DynamicResource AppBorderBrush}"
                             BorderThickness="1"
                             Padding="8"
                             Margin="0,0,0,8"
@@ -144,12 +144,12 @@
                                                  Converter={StaticResource BooleanToVisibilityConverter}}">
                         <TextBlock Text="{Binding PlayerInitializationError}"
                                    TextWrapping="Wrap"
-                                   Foreground="{StaticResource AppAccentBrush}"/>
+                                   Foreground="{DynamicResource AppAccentBrush}"/>
                     </Border>
 
                     <Border Grid.Row="2"
-                            Background="{StaticResource AppSurfaceBrush}"
-                            BorderBrush="{StaticResource AppBorderBrush}"
+                            Background="{DynamicResource AppSurfaceBrush}"
+                            BorderBrush="{DynamicResource AppBorderBrush}"
                             BorderThickness="1"
                             Padding="8"
                             Margin="0,0,0,8"
@@ -241,7 +241,7 @@
                                            Text="{Binding PositionText}"
                                            Margin="10,0,0,0"
                                            VerticalAlignment="Center"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                             </Grid>
                         </Grid>
                     </Border>
@@ -259,11 +259,11 @@
                                 <TextBlock Text="{Binding RingSegmentCountText}"
                                            FontSize="11" TextAlignment="Center"
                                            Margin="0,6,0,0"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                 <TextBlock Text="{Binding JukeboxBranchChanceText}"
                                            FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
                                            Margin="0,4,0,0"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                             </StackPanel>
                         </Viewbox>
 

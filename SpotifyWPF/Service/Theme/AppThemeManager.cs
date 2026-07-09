@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Media;
@@ -57,8 +58,7 @@ namespace SpotifyWPF.Service.Theme
         }
 
         /// <summary>
-        /// Updates the existing theme brush in place so StaticResource bindings refresh
-        /// without restarting the app.
+        /// Replaces theme brushes in the resource dictionary so DynamicResource bindings refresh live.
         /// </summary>
         private static void SetBrush(ResourceDictionary root, object key, string hex)
         {
@@ -66,19 +66,16 @@ namespace SpotifyWPF.Service.Theme
                 return;
 
             var color = (Color)ColorConverter.ConvertFromString(normalized);
-            var owner = FindResourceDictionary(root, key);
+            var owner = FindResourceDictionary(root, key) ?? root;
+            owner[key] = new SolidColorBrush(color);
+        }
 
-            if (owner != null && owner[key] is SolidColorBrush existing)
-            {
-                if (existing.IsFrozen)
-                    owner[key] = CreateMutableBrush(color);
-                else
-                    existing.Color = color;
-
+        public static void EnsureMutableThemeBrushes()
+        {
+            if (Application.Current == null)
                 return;
-            }
 
-            root[key] = CreateMutableBrush(color);
+            Apply(AppThemePalette.CreateDefaults());
         }
 
         private static ResourceDictionary FindResourceDictionary(ResourceDictionary dictionary, object key)
@@ -97,11 +94,6 @@ namespace SpotifyWPF.Service.Theme
             }
 
             return null;
-        }
-
-        private static SolidColorBrush CreateMutableBrush(Color color)
-        {
-            return new SolidColorBrush(color);
         }
 
         public static Color ParseColorOrDefault(string hex, string fallbackHex)

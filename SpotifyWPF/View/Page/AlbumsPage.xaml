@@ -6,7 +6,7 @@
              mc:Ignorable="d"
              DataContext="{Binding AlbumsPage, Source={StaticResource Locator}}"
              d:DesignHeight="450" d:DesignWidth="800">
-    <DockPanel Margin="8" Background="{StaticResource AppBackgroundBrush}">
+    <DockPanel Margin="8" Background="{DynamicResource AppBackgroundBrush}">
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem>
                 <Label Content="{Binding Status, Converter={StaticResource StatusActionConverter}}"/>

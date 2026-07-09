@@ -10,8 +10,8 @@
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
     </UserControl.Resources>
 
-    <Border Background="{StaticResource AppSurfaceBrush}"
-            BorderBrush="{StaticResource AppBorderBrush}"
+    <Border Background="{DynamicResource AppSurfaceBrush}"
+            BorderBrush="{DynamicResource AppBorderBrush}"
             BorderThickness="1"
             ClipToBounds="False">
         <Grid ClipToBounds="False">
@@ -23,11 +23,11 @@
                         <TextBlock Text="Control Panel"
                                    FontWeight="SemiBold"
                                    VerticalAlignment="Center"
-                                   Foreground="{StaticResource AppForegroundBrush}"/>
+                                   Foreground="{DynamicResource AppForegroundBrush}"/>
                         <TextBlock Margin="8,0,0,0"
                                    FontFamily="Segoe UI Symbol"
                                    VerticalAlignment="Center"
-                                   Foreground="{StaticResource AppMutedForegroundBrush}">
+                                   Foreground="{DynamicResource AppMutedForegroundBrush}">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Text" Value="▶"/>
@@ -51,8 +51,8 @@
                     <Border x:Name="ResizeBar"
                             Grid.Row="0"
                             Height="6"
-                            Background="{StaticResource AppSurfaceBrush}"
-                            BorderBrush="{StaticResource AppBorderBrush}"
+                            Background="{DynamicResource AppSurfaceBrush}"
+                            BorderBrush="{DynamicResource AppBorderBrush}"
                             BorderThickness="0,0,0,1"
                             Cursor="SizeNS"
                             ToolTip="Drag to resize panel height"
@@ -63,7 +63,7 @@
                                 CornerRadius="2"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Background="{StaticResource AppBorderBrush}"/>
+                                Background="{DynamicResource AppBorderBrush}"/>
                     </Border>
 
                     <TabControl Grid.Row="1"
@@ -108,18 +108,18 @@
                                                                Value="{Binding JukeboxSeekLeadMs}"/>
 
                                         <CheckBox Content="Allow only reverse branches"
-                                                  Foreground="{StaticResource AppForegroundBrush}"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding JukeboxAllowOnlyReverseBranches}"
                                                   Margin="0,0,0,4"/>
                                         <CheckBox Content="Allow only long branches (16+ beats apart)"
-                                                  Foreground="{StaticResource AppForegroundBrush}"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding JukeboxAllowOnlyLongBranches}"
                                                   Margin="0,0,0,8"/>
 
                                         <TextBlock Text="Re-analyze after changing segments; graph rebuilds when sliders change."
                                                    FontSize="11"
                                                    TextWrapping="Wrap"
-                                                   Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                     </StackPanel>
                                 </ScrollViewer>
                             </Border>
@@ -167,17 +167,17 @@
                                                     <TextBlock Text="{Binding DisplayName}"
                                                                FontWeight="SemiBold"
                                                                TextTrimming="CharacterEllipsis"
-                                                               Foreground="{StaticResource AppForegroundBrush}"/>
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
                                                     <TextBlock Text="{Binding Artist}"
                                                                FontSize="11"
                                                                TextTrimming="CharacterEllipsis"
-                                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                                 </StackPanel>
                                                 <TextBlock Grid.Column="1"
                                                            Text="{Binding StatusText}"
                                                            VerticalAlignment="Center"
                                                            Margin="12,0,0,0"
-                                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                             </Grid>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
@@ -187,7 +187,7 @@
                                                Text="{Binding AnalysisStatusText}"
                                                Margin="0,8,0,0"
                                                TextTrimming="CharacterEllipsis"
-                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                 </Grid>
                             </Border>
                         </TabItem>
@@ -209,12 +209,12 @@
                                             Command="{Binding RefreshPredictionsCommand}"/>
                                     <CheckBox DockPanel.Dock="Right" Content="Auto-play next"
                                               Margin="0,0,12,0" VerticalAlignment="Center"
-                                              Foreground="{StaticResource AppForegroundBrush}"
+                                              Foreground="{DynamicResource AppForegroundBrush}"
                                               IsChecked="{Binding AutoPlayNext}"
                                               ToolTip="When a track ends naturally (jukebox off), start the top prediction"/>
                                     <TextBlock Text="{Binding PredictionStatusText}"
                                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                 </DockPanel>
 
                                 <ListBox Grid.Row="1" Grid.Column="0" Margin="0,0,8,0"
@@ -237,14 +237,14 @@
                                                 <StackPanel Grid.Column="0">
                                                     <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
                                                                TextTrimming="CharacterEllipsis"
-                                                               Foreground="{StaticResource AppForegroundBrush}"/>
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
                                                     <TextBlock Text="{Binding Reason}" FontSize="11"
                                                                TextTrimming="CharacterEllipsis"
-                                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                                 </StackPanel>
                                                 <TextBlock Grid.Column="1" Text="{Binding Score, StringFormat={}{0:0.00}}"
                                                            VerticalAlignment="Center" Margin="8,0"
-                                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                                 <Button Grid.Column="2" Content="Play" MinWidth="56" Margin="0,0,6,0"
                                                         Command="{Binding DataContext.PlayPredictionCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                         CommandParameter="{Binding}"/>
@@ -272,7 +272,7 @@
                                     <TextBlock Text="Scoring weights"
                                                FontWeight="SemiBold"
                                                Margin="0,0,0,8"
-                                               Foreground="{StaticResource AppForegroundBrush}"/>
+                                               Foreground="{DynamicResource AppForegroundBrush}"/>
                                     <local:TuningSliderRow Label="Recency penalty"
                                                            ValueText="{Binding WeightRecencyPenalty, StringFormat={}{0:0.00}}"
                                                            Minimum="0"
@@ -296,15 +296,15 @@
                                     <StackPanel MaxWidth="640">
                                     <TextBlock Text="Local analysis (Path B)"
                                                FontSize="16" FontWeight="SemiBold"
-                                               Foreground="{StaticResource AppForegroundBrush}"
+                                               Foreground="{DynamicResource AppForegroundBrush}"
                                                Margin="0,0,0,8"/>
                                     <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
-                                               Foreground="{StaticResource AppMutedForegroundBrush}">
+                                               Foreground="{DynamicResource AppMutedForegroundBrush}">
                                         Configure the Python interpreter used for librosa-based beat analysis when Spotify's audio-analysis API is unavailable.
                                     </TextBlock>
 
                                     <TextBlock Text="Python executable" Margin="0,0,0,4"
-                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                     <Grid Margin="0,0,0,12">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -329,10 +329,10 @@
 
                                     <TextBlock Text="Window"
                                                FontSize="16" FontWeight="SemiBold"
-                                               Foreground="{StaticResource AppForegroundBrush}"
+                                               Foreground="{DynamicResource AppForegroundBrush}"
                                                Margin="0,16,0,8"/>
                                     <CheckBox Content="Ring mini player mode"
-                                              Foreground="{StaticResource AppForegroundBrush}"
+                                              Foreground="{DynamicResource AppForegroundBrush}"
                                               IsChecked="{Binding IsMiniPlayerMode, Mode=TwoWay}"
                                               ToolTip="Show only the jukebox ring in a compact window (use the diagonal-arrow buttons on the transport bar to enter/exit)"/>
                                     </StackPanel>
@@ -349,7 +349,7 @@
                     Panel.ZIndex="20">
                 <Border x:Name="ResizePreviewGhost"
                         Background="#CC000000"
-                        BorderBrush="{StaticResource AppBorderBrush}"
+                        BorderBrush="{DynamicResource AppBorderBrush}"
                         BorderThickness="1"
                         Visibility="Collapsed">
                     <Border.Effect>
