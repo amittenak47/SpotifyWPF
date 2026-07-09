@@ -16,7 +16,7 @@
                           IsChecked="{Binding IsExpanded, ElementName=Root, Mode=TwoWay}"
                           HorizontalContentAlignment="Stretch"
                           Padding="8,6"
-                          Background="{StaticResource AppSurfaceAltBrush}"
+                          Background="{StaticResource AppSurfaceBrush}"
                           BorderBrush="{StaticResource AppBorderBrush}"
                           Foreground="{StaticResource AppForegroundBrush}">
                 <StackPanel Orientation="Horizontal">

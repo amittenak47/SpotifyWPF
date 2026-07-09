@@ -27,7 +27,7 @@
       <Style TargetType="{x:Type Button}">
         <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
         <Setter Property="Padding" Value="12,4"/>
         <Setter Property="Template">
           <Setter.Value>
@@ -45,16 +45,16 @@
               <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                   <Setter TargetName="Border" Property="Background" Value="{StaticResource AppHoverBrush}"/>
-                  <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+                  <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
                   <Setter TargetName="Border" Property="Background" Value="{StaticResource AppSelectedBrush}"/>
-                  <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+                  <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
                   <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
                   <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
-                  <Setter TargetName="Border" Property="BorderBrush" Value="#2B2B2B"/>
+                  <Setter TargetName="Border" Property="BorderBrush" Value="#4A5258"/>
                 </Trigger>
               </ControlTemplate.Triggers>
             </ControlTemplate>
@@ -93,8 +93,8 @@
               </Border>
               <ControlTemplate.Triggers>
                 <Trigger Property="IsSelected" Value="True">
-                  <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
-                  <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+                  <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+                  <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
                   <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
                   <Setter Property="Panel.ZIndex" Value="1"/>
                 </Trigger>
@@ -118,9 +118,9 @@
         <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
         <Setter Property="Padding" Value="2"/>
         <Style.Resources>
-          <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#1F6F43"/>
-          <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#F5F5F5"/>
-          <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#2D2D2D"/>
+          <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#750013"/>
+          <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFF"/>
+          <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#242424"/>
         </Style.Resources>
       </Style>
       <Style TargetType="{x:Type StatusBarItem}">

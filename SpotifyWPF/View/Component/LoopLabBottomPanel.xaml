@@ -51,7 +51,7 @@
                     <Border x:Name="ResizeBar"
                             Grid.Row="0"
                             Height="6"
-                            Background="{StaticResource AppSurfaceAltBrush}"
+                            Background="{StaticResource AppSurfaceBrush}"
                             BorderBrush="{StaticResource AppBorderBrush}"
                             BorderThickness="0,0,0,1"
                             Cursor="SizeNS"
@@ -348,8 +348,8 @@
                     IsHitTestVisible="False"
                     Panel.ZIndex="20">
                 <Border x:Name="ResizePreviewGhost"
-                        Background="#CC121212"
-                        BorderBrush="{StaticResource SpotifyGreenBrush}"
+                        Background="#CC000000"
+                        BorderBrush="{StaticResource AppBorderBrush}"
                         BorderThickness="1"
                         Visibility="Collapsed">
                     <Border.Effect>

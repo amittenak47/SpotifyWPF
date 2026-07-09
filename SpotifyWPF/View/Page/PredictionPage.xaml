@@ -126,7 +126,7 @@
                                Margin="0,0,0,4"
                                VerticalAlignment="Bottom">
                         <Hyperlink NavigateUri="https://musicmachinery.com/2012/11/12/the-infinite-jukebox/"
-                                   Foreground="{StaticResource SpotifyGreenBrush}"
+                                   Foreground="{StaticResource AppAccentBrush}"
                                    RequestNavigate="PaulLamereLink_RequestNavigate">
                             Paul Lamere
                         </Hyperlink>
@@ -144,7 +144,7 @@
                                                  Converter={StaticResource BooleanToVisibilityConverter}}">
                         <TextBlock Text="{Binding PlayerInitializationError}"
                                    TextWrapping="Wrap"
-                                   Foreground="#E05545"/>
+                                   Foreground="{StaticResource AppAccentBrush}"/>
                     </Border>
 
                     <Border Grid.Row="2"

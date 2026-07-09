@@ -108,7 +108,7 @@ namespace SpotifyWPF.View.Component
             var innerRadius = radius * InnerRadiusRatio;
 
             if (!MiniPlayerMode)
-                dc.DrawEllipse(new SolidColorBrush(Color.FromRgb(0x1a, 0x1a, 0x1a)), null, center, radius, radius);
+                dc.DrawEllipse(new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x14)), null, center, radius, radius);
 
             var durationSec = DurationMs > 0 ? DurationMs / 1000.0 : 0;
             var segments = SegmentStartsSec;
@@ -128,13 +128,13 @@ namespace SpotifyWPF.View.Component
                 var endTime = i + 1 < segments.Count ? segments[i + 1] : durationSec;
                 var endAngle = TimeToAngle(endTime, durationSec);
 
-                var baseHue = (byte)(40 + (i * 37) % 120);
-                var fill = new SolidColorBrush(Color.FromRgb((byte)(0x30 + baseHue / 4), (byte)(0x38 + baseHue / 3), (byte)(0x50 + baseHue / 2)));
+                var baseHue = (byte)(20 + (i * 37) % 80);
+                var fill = new SolidColorBrush(Color.FromRgb((byte)(0x55 + baseHue / 3), (byte)(baseHue / 12), (byte)(0x0F + baseHue / 5)));
 
                 if (i == glowFromIndex || i == glowToIndex)
-                    fill = new SolidColorBrush(Color.FromRgb(0xe0, 0x8a, 0x1a));
+                    fill = new SolidColorBrush(Color.FromRgb(0xFF, 0x13, 0x23));
 
-                var separator = new Pen(new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55)), 0.75);
+                var separator = new Pen(new SolidColorBrush(Color.FromRgb(0x8B, 0x95, 0x9E)), 0.75);
                 DrawWedge(dc, center, innerRadius, radius, startAngle, endAngle, fill, separator);
 
                 if (MiniPlayerMode)
@@ -145,12 +145,12 @@ namespace SpotifyWPF.View.Component
             {
                 var playAngle = TimeToAngle(PositionMs / 1000.0, durationSec);
                 DrawRadialLine(dc, center, innerRadius * 0.92, radius + 5, playAngle,
-                    new Pen(new SolidColorBrush(Color.FromRgb(0x1d, 0xb9, 0x54)), 3));
+                    new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0x13, 0x23)), 3));
             }
 
-            dc.DrawEllipse(null, new Pen(new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)), 1.5),
+            dc.DrawEllipse(null, new Pen(new SolidColorBrush(Color.FromRgb(0x8B, 0x95, 0x9E)), 1.5),
                 center, radius, radius);
-            dc.DrawEllipse(null, new Pen(new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)), 1),
+            dc.DrawEllipse(null, new Pen(new SolidColorBrush(Color.FromRgb(0x75, 0x00, 0x13)), 1),
                 center, innerRadius, innerRadius);
         }
 
@@ -221,7 +221,7 @@ namespace SpotifyWPF.View.Component
                 cornerFill = new SolidColorBrush(Color.FromArgb(0xAA, solid.Color.R, solid.Color.G, solid.Color.B));
 
             DrawWedge(dc, center, outer, edgeDist, startAngleDeg, endAngleDeg, cornerFill,
-                new Pen(new SolidColorBrush(Color.FromArgb(0x88, 0x55, 0x55, 0x55)), 0.5));
+                new Pen(new SolidColorBrush(Color.FromArgb(0x88, 0x8B, 0x95, 0x9E)), 0.5));
         }
 
         private static int FindSegmentIndex(IReadOnlyList<double> segments, double durationSec, long? timeMs)

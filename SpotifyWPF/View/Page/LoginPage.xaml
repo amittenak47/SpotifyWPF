@@ -26,7 +26,7 @@
                 <Run Text="Enter your personal Spotify Client ID to log in."/>
                 <LineBreak/>
                 <Hyperlink NavigateUri="https://developer.spotify.com/dashboard"
-                           Foreground="{StaticResource SpotifyGreenBrush}"
+                           Foreground="{StaticResource AppAccentBrush}"
                            RequestNavigate="Hyperlink_RequestNavigate">
                     Get your Client ID from the Spotify Developer Dashboard
                 </Hyperlink>
@@ -64,7 +64,7 @@
         </StackPanel>
 
         <Border Panel.ZIndex="1"
-                Background="#E6121212"
+                Background="#E6000000"
                 Visibility="{Binding IsLoggingIn,
                                      Converter={StaticResource BooleanToVisibilityConverter},
                                      FallbackValue=Collapsed,
