@@ -28,6 +28,8 @@ namespace SpotifyWPF.Service.Prediction
             return AnalysisCache.Exists(trackId);
         }
 
+        public bool RequiresPlaybackCapture(string trackId) => false;
+
         public async Task<TrackAnalysis> GetAnalysisAsync(string trackId, IProgress<string> progress,
             CancellationToken cancellationToken)
         {

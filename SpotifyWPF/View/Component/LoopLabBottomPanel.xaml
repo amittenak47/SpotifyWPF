@@ -167,13 +167,19 @@
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="*"/>
-                                        <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
                                     <StackPanel Grid.Row="0"
                                                 Style="{StaticResource ControlPanelToolbarStyle}">
                                         <Button Content="Play" MinWidth="56"
                                                 Command="{Binding PlaySessionTrackCommand}"/>
+                                        <Button Content="Analyze" MinWidth="72" Margin="8,0,0,0"
+                                                Command="{Binding AnalyzeSessionTrackCommand}"/>
+                                        <Button Content="Refresh" MinWidth="72" Margin="8,0,0,0"
+                                                Command="{Binding RefreshSessionCommand}"/>
+                                        <Button Content="Delete cache" MinWidth="88" Margin="8,0,0,0"
+                                                Command="{Binding DeleteSessionCacheCommand}"
+                                                ToolTip="Delete cached WAV and analysis JSON for the selected track"/>
                                         <Button Content="Remove" MinWidth="72" Margin="8,0,0,0"
                                                 Command="{Binding RemoveSessionTrackCommand}"/>
                                         <Button Content="Clear" MinWidth="56" Margin="8,0,0,0"
@@ -228,12 +234,6 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                     </ListBox>
-
-                                    <TextBlock Grid.Row="2"
-                                               Text="{Binding AnalysisStatusText}"
-                                               Margin="0,8,0,0"
-                                               TextTrimming="CharacterEllipsis"
-                                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                 </Grid>
                             </Border>
                         </TabItem>

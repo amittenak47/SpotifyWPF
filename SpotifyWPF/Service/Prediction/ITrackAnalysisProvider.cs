@@ -14,6 +14,11 @@ namespace SpotifyWPF.Service.Prediction
         bool IsCached(string trackId);
 
         /// <summary>
+        /// True when this provider must drive the SDK player to record audio (Path B, no WAV yet).
+        /// </summary>
+        bool RequiresPlaybackCapture(string trackId);
+
+        /// <summary>
         /// Returns the (cached or freshly produced) analysis for a track. Progress strings are
         /// user-facing ("Capturing…", "Analyzing…"). May take a full track length on Path B.
         /// </summary>
@@ -61,6 +66,24 @@ namespace SpotifyWPF.Service.Prediction
             PredictionPaths.EnsureDirectory(path);
 
             File.WriteAllText(path, JsonSerializer.Serialize(analysis, SerializerOptions));
+        }
+
+        public static void Delete(string trackId)
+        {
+            if (string.IsNullOrEmpty(trackId))
+                return;
+
+            try
+            {
+                var path = PredictionPaths.GetAnalysisCachePath(trackId);
+
+                if (File.Exists(path))
+                    File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to delete cached analysis for {trackId}: {ex.Message}");
+            }
         }
     }
 

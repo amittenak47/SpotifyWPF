@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
@@ -20,7 +21,7 @@ namespace SpotifyWPF.Service.Audio
         void StartCapture(string trackId);
 
         /// <summary>Stops recording, finalizes the WAV and its metadata sidecar, and returns the WAV path.</summary>
-        Task<string> StopCaptureAsync();
+        Task<string> StopCaptureAsync(long trackDurationMs = 0);
 
         /// <summary>Discards an in-flight capture (e.g. playback failed mid-recording).</summary>
         Task AbortCaptureAsync();
@@ -49,6 +50,8 @@ namespace SpotifyWPF.Service.Audio
         private string _trackId;
 
         private string _wavPath;
+
+        private long _bytesWritten;
 
         private Exception _captureError;
 
@@ -93,6 +96,7 @@ namespace SpotifyWPF.Service.Audio
                 _writer = new WaveFileWriter(wavPath, _writeFormat);
                 _trackId = trackId;
                 _wavPath = wavPath;
+                _bytesWritten = 0;
                 _captureError = null;
                 _stoppedCompletion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -105,12 +109,15 @@ namespace SpotifyWPF.Service.Audio
             }
         }
 
-        public async Task<string> StopCaptureAsync()
+        private static readonly TimeSpan CaptureStopTimeout = TimeSpan.FromSeconds(8);
+
+        public async Task<string> StopCaptureAsync(long trackDurationMs = 0)
         {
             WasapiLoopbackCapture capture;
             TaskCompletionSource<object> stoppedCompletion;
             string trackId;
             string wavPath;
+            long bytesWritten;
 
             lock (_lock)
             {
@@ -118,6 +125,7 @@ namespace SpotifyWPF.Service.Audio
                 stoppedCompletion = _stoppedCompletion;
                 trackId = _trackId;
                 wavPath = _wavPath;
+                bytesWritten = _bytesWritten;
             }
 
             if (capture == null)
@@ -127,14 +135,68 @@ namespace SpotifyWPF.Service.Audio
 
             capture.StopRecording();
 
-            await stoppedCompletion.Task;
+            if (stoppedCompletion != null)
+            {
+                var completed = await Task.WhenAny(stoppedCompletion.Task, Task.Delay(CaptureStopTimeout));
+
+                if (completed != stoppedCompletion.Task)
+                    ForceFinalizeCapture();
+                else
+                    await stoppedCompletion.Task;
+            }
+            else
+            {
+                ForceFinalizeCapture();
+            }
 
             if (_captureError != null)
                 throw new InvalidOperationException($"Audio capture failed: {_captureError.Message}", _captureError);
 
-            WriteMetadata(trackId, wavPath, format);
+            if (bytesWritten < WavCaptureValidator.MinimumBytes)
+            {
+                TryDeleteCaptureFiles(wavPath, trackId);
+                throw new InvalidOperationException(
+                    "Audio capture recorded no data. Check that the Loop Lab player is audible in Windows " +
+                    "(volume up, correct output device, not muted in Volume Mixer), then analyze again.");
+            }
+
+            WavCaptureValidator.TryRepairUnfinalizedHeader(wavPath);
+
+            if (!WavCaptureValidator.IsUsable(wavPath))
+            {
+                TryDeleteCaptureFiles(wavPath, trackId);
+                throw new InvalidOperationException(
+                    "Audio capture was too short to analyze. Keep other apps muted and let the track play " +
+                    "through once before the sidecar runs.");
+            }
+
+            if (trackDurationMs > 0 && !WavCaptureValidator.MeetsDurationThreshold(wavPath, trackDurationMs))
+            {
+                TryDeleteCaptureFiles(wavPath, trackId);
+                throw new InvalidOperationException(
+                    "Audio capture did not cover the full track. Analyze again and let playback run from start to end.");
+            }
+
+            WriteMetadata(trackId, wavPath, format, trackDurationMs);
 
             return wavPath;
+        }
+
+        private static void TryDeleteCaptureFiles(string wavPath, string trackId)
+        {
+            WavCaptureValidator.TryDeleteCapture(trackId);
+
+            if (!string.IsNullOrWhiteSpace(wavPath) && File.Exists(wavPath))
+            {
+                try
+                {
+                    File.Delete(wavPath);
+                }
+                catch (IOException ex)
+                {
+                    Console.WriteLine($"Could not delete short capture file: {ex.Message}");
+                }
+            }
         }
 
         public async Task AbortCaptureAsync()
@@ -208,10 +270,12 @@ namespace SpotifyWPF.Service.Audio
                     }
 
                     _writer.Write(pcm16, 0, pcm16.Length);
+                    _bytesWritten += pcm16.Length;
                     return;
                 }
 
                 _writer.Write(e.Buffer, 0, e.BytesRecorded);
+                _bytesWritten += e.BytesRecorded;
             }
         }
 
@@ -236,7 +300,44 @@ namespace SpotifyWPF.Service.Audio
             stoppedCompletion?.TrySetResult(null);
         }
 
-        private static void WriteMetadata(string trackId, string wavPath, WaveFormat format)
+        private void ForceFinalizeCapture()
+        {
+            lock (_lock)
+            {
+                if (_writer != null)
+                {
+                    try
+                    {
+                        _writer.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Capture writer finalize failed: {ex.Message}");
+                    }
+
+                    _writer = null;
+                }
+
+                if (_capture != null)
+                {
+                    try
+                    {
+                        _capture.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Capture device dispose failed: {ex.Message}");
+                    }
+
+                    _capture = null;
+                }
+
+                _stoppedCompletion?.TrySetResult(null);
+                _stoppedCompletion = null;
+            }
+        }
+
+        private static void WriteMetadata(string trackId, string wavPath, WaveFormat format, long durationMs = 0)
         {
             try
             {
@@ -250,6 +351,7 @@ namespace SpotifyWPF.Service.Audio
                     Channels = format.Channels,
                     BitsPerSample = format.BitsPerSample,
                     Encoding = format.Encoding.ToString(),
+                    DurationMs = durationMs,
                     CapturedAtUtc = DateTime.UtcNow
                 };
 
@@ -281,6 +383,9 @@ namespace SpotifyWPF.Service.Audio
 
             [JsonPropertyName("encoding")]
             public string Encoding { get; set; }
+
+            [JsonPropertyName("durationMs")]
+            public long DurationMs { get; set; }
 
             [JsonPropertyName("capturedAtUtc")]
             public DateTime CapturedAtUtc { get; set; }

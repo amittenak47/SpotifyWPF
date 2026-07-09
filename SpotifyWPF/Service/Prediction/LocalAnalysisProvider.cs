@@ -46,6 +46,14 @@ namespace SpotifyWPF.Service.Prediction
             return AnalysisCache.Exists(trackId);
         }
 
+        public bool RequiresPlaybackCapture(string trackId)
+        {
+            if (IsCached(trackId))
+                return false;
+
+            return !WavCaptureValidator.HasCompleteCapture(trackId);
+        }
+
         public async Task<TrackAnalysis> GetAnalysisAsync(string trackId, IProgress<string> progress,
             CancellationToken cancellationToken)
         {
@@ -60,8 +68,14 @@ namespace SpotifyWPF.Service.Prediction
             {
                 var wavPath = PredictionPaths.ResolveAudioCachePath(trackId);
 
-                if (!File.Exists(wavPath))
+                if (!WavCaptureValidator.HasCompleteCapture(trackId))
                 {
+                    if (File.Exists(wavPath))
+                    {
+                        progress?.Report("Discarding incomplete capture — re-recording from the start…");
+                        WavCaptureValidator.TryDeleteCapture(trackId);
+                    }
+
                     wavPath = await CaptureTrackAsync(trackId, progress, cancellationToken);
                 }
                 else if (!string.Equals(wavPath, PredictionPaths.GetAudioCachePath(trackId), StringComparison.OrdinalIgnoreCase))
@@ -69,18 +83,29 @@ namespace SpotifyWPF.Service.Prediction
                     progress?.Report($"Using cached capture: {wavPath}");
                 }
 
-                if (!File.Exists(wavPath))
+                if (!WavCaptureValidator.HasCompleteCapture(trackId))
                 {
                     throw new FileNotFoundException(
-                        $"No captured WAV found for track {trackId}. Looked in {PredictionPaths.AudioCacheDirectory}. " +
-                        "Re-run Analyze track to capture again, and double-check the track ID — " +
-                        "Spotify IDs distinguish similar characters like I, l, and i.");
+                        $"No complete captured WAV found for track {trackId}. Looked in {PredictionPaths.AudioCacheDirectory}. " +
+                        "Re-run Analyze and let the track play from start to end.");
                 }
 
                 progress?.Report("Analyzing audio (librosa sidecar)…");
 
                 var outputPath = PredictionPaths.GetAnalysisCachePath(trackId);
                 PredictionPaths.EnsureDirectory(outputPath);
+
+                if (File.Exists(outputPath))
+                {
+                    try
+                    {
+                        File.Delete(outputPath);
+                    }
+                    catch (IOException ex)
+                    {
+                        Console.WriteLine($"Could not clear prior analysis output: {ex.Message}");
+                    }
+                }
 
                 await RunSidecarAsync(wavPath, outputPath, trackId, cancellationToken);
 
@@ -96,6 +121,13 @@ namespace SpotifyWPF.Service.Prediction
                 progress?.Report("Analysis cached.");
 
                 return analysis;
+            }
+            catch (OperationCanceledException)
+            {
+                await _captureService.AbortCaptureAsync();
+                WavCaptureValidator.TryDeleteCapture(trackId);
+                AnalysisCache.Delete(trackId);
+                throw;
             }
             finally
             {
@@ -129,9 +161,23 @@ namespace SpotifyWPF.Service.Prediction
                 TryCompleteCaptureAtEnd(state.TrackId, state.PositionMs, state.DurationMs, state.Paused);
             };
 
+            var lastReportedPercent = -1;
+
             EventHandler<PositionSnapshot> onPositionUpdated = (_, position) =>
             {
                 var duration = Interlocked.Read(ref durationMs);
+
+                if (position.TrackId == trackId && duration > 0)
+                {
+                    var percent = (int)Math.Min(99, position.PositionMs * 100.0 / duration);
+
+                    if (percent >= lastReportedPercent + 2 || percent >= 95)
+                    {
+                        lastReportedPercent = percent;
+                        progress?.Report($"Capturing play-through… {percent}%");
+                    }
+                }
+
                 TryCompleteCaptureAtEnd(position.TrackId, position.PositionMs, duration, position.Paused);
             };
 
@@ -156,7 +202,19 @@ namespace SpotifyWPF.Service.Prediction
 
             // A loop seeking around during the capture would corrupt the recording.
             _playbackHost.DisarmAction();
+            _playbackHost.Pause();
+            _playbackHost.Seek(0);
 
+            try
+            {
+                await _playbackService.PauseAsync(_playbackHost.DeviceId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Pre-capture pause failed: {ex.Message}");
+            }
+
+            WavCaptureValidator.TryDeleteCapture(trackId);
             _captureService.StartCapture(trackId);
 
             try
@@ -164,7 +222,8 @@ namespace SpotifyWPF.Service.Prediction
                 // Start capture slightly before play so the head of the track is never clipped.
                 await Task.Delay(500, cancellationToken);
 
-                await _playbackService.PlayTrackAsync(trackId, _playbackHost.DeviceId);
+                await _playbackService.PlayTrackAsync(trackId, _playbackHost.DeviceId, positionMs: 0);
+                await WaitForPlaybackStartedAsync(trackId, cancellationToken);
 
                 // Wait for the natural end of the track, re-checking the timeout as the duration arrives.
                 var waited = TimeSpan.Zero;
@@ -197,11 +256,19 @@ namespace SpotifyWPF.Service.Prediction
 
                 progress?.Report("Finalizing capture…");
 
-                return await _captureService.StopCaptureAsync();
+                var trackDurationMs = Interlocked.Read(ref durationMs);
+                return await _captureService.StopCaptureAsync(trackDurationMs);
+            }
+            catch (OperationCanceledException)
+            {
+                await _captureService.AbortCaptureAsync();
+                WavCaptureValidator.TryDeleteCapture(trackId);
+                throw;
             }
             catch
             {
                 await _captureService.AbortCaptureAsync();
+                WavCaptureValidator.TryDeleteCapture(trackId);
                 throw;
             }
             finally
@@ -209,6 +276,40 @@ namespace SpotifyWPF.Service.Prediction
                 _playbackHost.TrackEnded -= onTrackEnded;
                 _playbackHost.StateChanged -= onStateChanged;
                 _playbackHost.PositionUpdated -= onPositionUpdated;
+            }
+        }
+
+        private async Task WaitForPlaybackStartedAsync(string trackId, CancellationToken cancellationToken)
+        {
+            var started = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var deadline = DateTime.UtcNow.AddSeconds(20);
+
+            void OnState(object sender, PlayerStateSnapshot state)
+            {
+                if (state.TrackId == trackId && state.DurationMs > 0 && !state.Paused)
+                    started.TrySetResult(null);
+            }
+
+            _playbackHost.StateChanged += OnState;
+
+            try
+            {
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (started.Task.IsCompleted)
+                        return;
+
+                    await Task.WhenAny(started.Task, Task.Delay(250, cancellationToken));
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
+                throw new InvalidOperationException(
+                    "The embedded player did not start playback for capture. Confirm Spotify Premium login, " +
+                    "that Loop Lab is the active device, and that Windows can hear the player.");
+            }
+            finally
+            {
+                _playbackHost.StateChanged -= OnState;
             }
         }
 
@@ -225,56 +326,104 @@ namespace SpotifyWPF.Service.Prediction
 
             var startInfo = PythonLauncher.CreateSidecarStartInfo(arguments);
 
-            using (var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true })
+            try
             {
-                var exitCompletion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-                process.Exited += (_, __) => exitCompletion.TrySetResult(null);
-
-                try
-                {
-                    process.Start();
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException(
-                        "Could not start Python for local analysis. Install Python 3 with librosa " +
-                        "(pip install librosa soundfile), then set the Python path on the Loop Lab page " +
-                        "or use Auto-detect. Microsoft Store Python must run via the py launcher " +
-                        "(Auto-detect handles this). If you set the path manually, use py:-3.12 or a " +
-                        $"non-Store python.exe under Local\\Programs\\Python. ({ex.Message})", ex);
-                }
-
-                var stderrTask = process.StandardError.ReadToEndAsync();
-                var stdoutTask = process.StandardOutput.ReadToEndAsync();
-
-                var finished = await Task.WhenAny(exitCompletion.Task,
-                    Task.Delay(SidecarTimeout, cancellationToken));
-
-                if (finished != exitCompletion.Task)
+                using (var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true })
+                using (cancellationToken.Register(() =>
                 {
                     try
                     {
-                        process.Kill();
+                        if (!process.HasExited)
+                            process.Kill();
                     }
-                    catch (InvalidOperationException)
+                    catch (Exception ex)
                     {
+                        Console.WriteLine($"Could not kill analysis sidecar: {ex.Message}");
+                    }
+                }))
+                {
+                    var exitCompletion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    process.Exited += (_, __) => exitCompletion.TrySetResult(null);
+
+                    try
+                    {
+                        process.Start();
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            "Could not start Python for local analysis. Install Python 3 with librosa " +
+                            "(pip install librosa soundfile), then set the Python path on the Loop Lab page " +
+                            "or use Auto-detect. Microsoft Store Python must run via the py launcher " +
+                            "(Auto-detect handles this). If you set the path manually, use py:-3.12 or a " +
+                            $"non-Store python.exe under Local\\Programs\\Python. ({ex.Message})", ex);
                     }
 
-                    throw new TimeoutException("The analysis sidecar timed out.");
+                    var stderrTask = process.StandardError.ReadToEndAsync();
+                    var stdoutTask = process.StandardOutput.ReadToEndAsync();
+
+                    var finished = await Task.WhenAny(exitCompletion.Task,
+                        Task.Delay(SidecarTimeout, cancellationToken));
+
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    if (finished != exitCompletion.Task)
+                    {
+                        try
+                        {
+                            process.Kill();
+                        }
+                        catch (InvalidOperationException)
+                        {
+                        }
+
+                        throw new TimeoutException("The analysis sidecar timed out.");
+                    }
+
+                    var stderr = await stderrTask;
+                    await stdoutTask;
+
+                    if (process.ExitCode != 0)
+                    {
+                        TryDeletePartialOutput(outputPath);
+
+                        var detail = string.IsNullOrWhiteSpace(stderr) ? "no error output" : stderr.Trim();
+
+                        if (detail.IndexOf("Input audio is empty", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            WavCaptureValidator.TryDeleteCapture(trackId);
+                            throw new InvalidOperationException(
+                                "Captured audio was empty. The previous WAV was removed — analyze again with the Loop Lab " +
+                                "player audible in Windows (volume up, correct output device, not muted in Volume Mixer).");
+                        }
+
+                        throw new InvalidOperationException($"Analysis sidecar failed (exit {process.ExitCode}): {detail}");
+                    }
                 }
 
-                var stderr = await stderrTask;
-                await stdoutTask;
-
-                if (process.ExitCode != 0)
-                {
-                    var detail = string.IsNullOrWhiteSpace(stderr) ? "no error output" : stderr.Trim();
-                    throw new InvalidOperationException($"Analysis sidecar failed (exit {process.ExitCode}): {detail}");
-                }
+                if (!File.Exists(outputPath))
+                    throw new InvalidOperationException("The analysis sidecar exited successfully but wrote no output file.");
             }
+            catch (OperationCanceledException)
+            {
+                TryDeletePartialOutput(outputPath);
+                throw;
+            }
+        }
 
-            if (!File.Exists(outputPath))
-                throw new InvalidOperationException("The analysis sidecar exited successfully but wrote no output file.");
+        private static void TryDeletePartialOutput(string outputPath)
+        {
+            if (string.IsNullOrWhiteSpace(outputPath) || !File.Exists(outputPath))
+                return;
+
+            try
+            {
+                File.Delete(outputPath);
+            }
+            catch (IOException ex)
+            {
+                Console.WriteLine($"Could not delete partial analysis output: {ex.Message}");
+            }
         }
     }
 }

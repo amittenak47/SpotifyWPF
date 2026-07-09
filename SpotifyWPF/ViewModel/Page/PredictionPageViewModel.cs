@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using GalaSoft.MvvmLight;
@@ -12,6 +13,7 @@ using GalaSoft.MvvmLight.Command;
 using Microsoft.Win32;
 using SpotifyWPF.Model.Prediction;
 using SpotifyWPF.Service;
+using SpotifyWPF.Service.Audio;
 using SpotifyWPF.Service.Playback;
 using SpotifyWPF.Service.Prediction;
 using SpotifyWPF.ViewModel.Component;
@@ -117,7 +119,7 @@ namespace SpotifyWPF.ViewModel.Page
             _playbackHost.PlayerError += OnPlayerError;
             _playbackHost.InitializationFailed += OnInitializationFailed;
 
-            TogglePlayPauseCommand = new RelayCommand(async () => await TogglePlayPauseAsync(), CanUsePlayer);
+            TogglePlayPauseCommand = new RelayCommand(async () => await TogglePlayPauseAsync(), CanPlayTransport);
             ReprobeAnalysisCommand = new RelayCommand(async () => await ProbeAnalysisSourceAsync(true));
             AnalyzeTrackCommand = new RelayCommand(async () => await AnalyzeCurrentTrackAsync(),
                 () => HasCurrentTrack() && !IsAnalyzing);
@@ -126,10 +128,11 @@ namespace SpotifyWPF.ViewModel.Page
                 () => SelectedSessionTrack != null && !IsAnalyzing);
             PreviousSessionTrackCommand = new RelayCommand(() => NavigateSessionTrack(-1), () => CanNavigateSessionTrack(-1));
             NextSessionTrackCommand = new RelayCommand(() => NavigateSessionTrack(1), () => CanNavigateSessionTrack(1));
-            PlaySessionTrackCommand = new RelayCommand(async () => await PlaySessionTrackAsync(),
-                () => SelectedSessionTrack != null && CanUsePlayer());
+            PlaySessionTrackCommand = new RelayCommand(async () => await PlaySessionTrackAsync(), CanPlaySessionTrack);
             RemoveSessionTrackCommand = new RelayCommand(RemoveSelectedSessionTrack,
                 () => SelectedSessionTrack != null);
+            RefreshSessionCommand = new RelayCommand(ReloadSessionTracks, () => !IsAnalyzing);
+            DeleteSessionCacheCommand = new RelayCommand(DeleteSelectedSessionCache, CanDeleteSessionCache);
             ClearSessionCommand = new RelayCommand(ClearSession, () => SessionTracks.Count > 0);
             RefreshPredictionsCommand = new RelayCommand(async () => await RefreshPredictionsAsync());
             PlayPredictionCommand = new RelayCommand<ScoredTrack>(
@@ -142,11 +145,11 @@ namespace SpotifyWPF.ViewModel.Page
             EnterMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = true, () => !IsMiniPlayerMode);
             ExitMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = false, () => IsMiniPlayerMode);
             ToggleRingLockCommand = new RelayCommand<RingBranchClick>(ToggleRingLock);
-            RingScrubToCommand = new RelayCommand<long>(ScrubToPositionMs, ms => DurationMs > 0);
+            RingScrubToCommand = new RelayCommand<long>(ScrubToPositionMs, ms => DurationMs > 0 && CanPlayTransport());
             EndRingScrubCommand = new RelayCommand(EndScrub);
             ClearRingLocksCommand = new RelayCommand(ClearRingLocks);
             ResetRingPlaysCommand = new RelayCommand(() => RingResetPlaysToken++);
-            StopPlaybackCommand = new RelayCommand(async () => await StopPlaybackAsync(), CanUsePlayer);
+            StopPlaybackCommand = new RelayCommand(async () => await StopPlaybackAsync(), CanStopPlayback);
             LoadBranchPresetCommand = new RelayCommand(LoadSelectedBranchPreset,
                 () => SelectedBranchPreset != null && SelectedSessionTrack != null);
             SaveBranchPresetCommand = new RelayCommand(SaveBranchPreset,
@@ -333,7 +336,8 @@ namespace SpotifyWPF.ViewModel.Page
                     PreviousSessionTrackCommand.RaiseCanExecuteChanged();
                     NextSessionTrackCommand.RaiseCanExecuteChanged();
                     LoadBranchPresetCommand.RaiseCanExecuteChanged();
-                    SaveBranchPresetCommand.RaiseCanExecuteChanged();
+                    DeleteSessionCacheCommand?.RaiseCanExecuteChanged();
+                    RefreshSessionCommand?.RaiseCanExecuteChanged();
                 }
             }
         }
@@ -403,6 +407,20 @@ namespace SpotifyWPF.ViewModel.Page
 
         private bool _jukeboxSuppressedForCapture;
 
+        private readonly SemaphoreSlim _playbackSessionGate = new SemaphoreSlim(1, 1);
+
+        private CancellationTokenSource _analysisCancellation;
+
+        private bool _captureInProgress;
+
+        private string _analyzingTrackId;
+
+        private string _analyzingDisplayName;
+
+        private bool _analysisProgressKnown;
+
+        private double _analysisProgressPercent;
+
         private bool _isAnalyzing;
 
         public bool IsAnalyzing
@@ -415,9 +433,40 @@ namespace SpotifyWPF.ViewModel.Page
                     AnalyzeTrackCommand.RaiseCanExecuteChanged();
                     AnalyzeInputCommand.RaiseCanExecuteChanged();
                     AnalyzeSessionTrackCommand.RaiseCanExecuteChanged();
+                    NotifyTransportStateChanged();
+                    RaisePropertyChanged(nameof(IsIndeterminateAnalysisProgress));
+                    RaisePropertyChanged(nameof(ShowAnalysisProgress));
                 }
             }
         }
+
+        public bool CaptureInProgress => _captureInProgress;
+
+        public bool ShowAnalysisProgress => IsAnalyzing;
+
+        public bool IsIndeterminateAnalysisProgress => IsAnalyzing && !_analysisProgressKnown;
+
+        /// <summary>Bound to ProgressBar — never negative (WPF throws on Value &lt; Minimum).</summary>
+        public double AnalysisProgressPercent
+        {
+            get => _analysisProgressKnown ? _analysisProgressPercent : 0;
+            private set
+            {
+                var known = value >= 0;
+                var clamped = known ? Math.Max(0, Math.Min(100, value)) : 0;
+
+                if (_analysisProgressKnown == known &&
+                    (!known || Math.Abs(_analysisProgressPercent - clamped) < 0.01))
+                    return;
+
+                _analysisProgressKnown = known;
+                _analysisProgressPercent = clamped;
+                RaisePropertyChanged(nameof(AnalysisProgressPercent));
+                RaisePropertyChanged(nameof(IsIndeterminateAnalysisProgress));
+            }
+        }
+
+        public string AnalyzingDisplayName => _analyzingDisplayName ?? _analyzingTrackId ?? "";
 
         private string _analysisStatusText = "No analysis for this track yet.";
 
@@ -756,6 +805,10 @@ namespace SpotifyWPF.ViewModel.Page
 
         public RelayCommand PlaySessionTrackCommand { get; }
 
+        public RelayCommand RefreshSessionCommand { get; }
+
+        public RelayCommand DeleteSessionCacheCommand { get; }
+
         public RelayCommand RemoveSessionTrackCommand { get; }
 
         public RelayCommand ClearSessionCommand { get; }
@@ -795,9 +848,43 @@ namespace SpotifyWPF.ViewModel.Page
 
         public RelayCommand SaveBranchPresetCommand { get; }
 
-        private bool CanUsePlayer()
+        private bool CanPlayTransport()
+        {
+            return _playbackHost.IsReady && !HasPlayerInitializationError && !IsAnalyzing;
+        }
+
+        private bool CanStopPlayback()
         {
             return _playbackHost.IsReady && !HasPlayerInitializationError;
+        }
+
+        private bool CanPlaySessionTrack()
+        {
+            return SelectedSessionTrack != null && CanPlayTransport();
+        }
+
+        private bool CanDeleteSessionCache()
+        {
+            if (SelectedSessionTrack == null || IsAnalyzing)
+                return false;
+
+            var trackId = SelectedSessionTrack.TrackId;
+
+            return AnalysisCache.Exists(trackId) ||
+                   WavCaptureValidator.HasCompleteCapture(trackId) ||
+                   File.Exists(PredictionPaths.ResolveAudioCachePath(trackId));
+        }
+
+        private bool CanUsePlayer() => CanPlayTransport();
+
+        private void NotifyTransportStateChanged()
+        {
+            TogglePlayPauseCommand.RaiseCanExecuteChanged();
+            StopPlaybackCommand.RaiseCanExecuteChanged();
+            PlaySessionTrackCommand.RaiseCanExecuteChanged();
+            RefreshSessionCommand?.RaiseCanExecuteChanged();
+            DeleteSessionCacheCommand?.RaiseCanExecuteChanged();
+            RingScrubToCommand.RaiseCanExecuteChanged();
         }
 
         private bool HasCurrentTrack()
@@ -934,6 +1021,21 @@ namespace SpotifyWPF.ViewModel.Page
 
         public async Task StopPlaybackAsync()
         {
+            if (IsAnalyzing)
+            {
+                _analysisCancellation?.Cancel();
+                await StopPlaybackInternalAsync().ConfigureAwait(true);
+                return;
+            }
+
+            if (!CanStopPlayback())
+                return;
+
+            await StopPlaybackInternalAsync();
+        }
+
+        private async Task StopPlaybackInternalAsync()
+        {
             if (!_playbackHost.IsReady)
                 return;
 
@@ -954,6 +1056,12 @@ namespace SpotifyWPF.ViewModel.Page
         /// <summary>Plays a track on the in-app SDK device. Source tags the listening-log entry.</summary>
         public async Task PlayTrackAsync(string trackId, string source)
         {
+            if (IsAnalyzing)
+            {
+                Status = $"Cannot play while analyzing {AnalyzingDisplayName}.";
+                return;
+            }
+
             if (!_playbackHost.IsReady)
             {
                 Status = "Player is not ready yet.";
@@ -1182,9 +1290,9 @@ namespace SpotifyWPF.ViewModel.Page
 
             AnalyzeTrackCommand.RaiseCanExecuteChanged();
 
-            AnalysisStatusText = AnalysisCache.Exists(state.TrackId)
+            Log(AnalysisCache.Exists(state.TrackId)
                 ? "Analysis cached for this track."
-                : "No analysis for this track yet.";
+                : "No analysis for this track yet.", verbose: true);
 
             UpsertSessionTrack(state.TrackId, state.TrackName, state.ArtistNames);
             RefreshRingVisualization(state.TrackId);
@@ -1509,7 +1617,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             await RefreshPredictionsAsync();
 
-            if (AutoPlayNext && !_loopController.IsLoopActive && Predictions.Count > 0)
+            if (AutoPlayNext && !IsAnalyzing && !_loopController.IsLoopActive && Predictions.Count > 0)
             {
                 var top = Predictions[0];
                 Log($"Auto-playing top prediction: {top.DisplayName}");
@@ -1580,14 +1688,24 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void RefreshSessionTracks()
         {
+            var selectedId = SelectedSessionTrack?.TrackId;
+
             SessionTracks.Clear();
 
             foreach (var track in _sessionStore.Tracks)
                 SessionTracks.Add(track);
 
-            ClearSessionCommand.RaiseCanExecuteChanged();
-            PreviousSessionTrackCommand.RaiseCanExecuteChanged();
-            NextSessionTrackCommand.RaiseCanExecuteChanged();
+            if (!string.IsNullOrEmpty(selectedId))
+            {
+                var restored = SessionTracks.FirstOrDefault(t => t.TrackId == selectedId);
+
+                if (restored != null && !ReferenceEquals(SelectedSessionTrack, restored))
+                    SelectedSessionTrack = restored;
+            }
+
+            ClearSessionCommand?.RaiseCanExecuteChanged();
+            PreviousSessionTrackCommand?.RaiseCanExecuteChanged();
+            NextSessionTrackCommand?.RaiseCanExecuteChanged();
         }
 
         private bool CanAnalyzeInput()
@@ -1601,18 +1719,12 @@ namespace SpotifyWPF.ViewModel.Page
 
             if (trackId == null)
             {
-                AnalysisStatusText = "Enter a valid track ID, URI, or open.spotify.com link.";
+                ReportAnalysisMessage("Enter a valid track ID, URI, or open.spotify.com link.");
                 return;
             }
 
             TrackInput = trackId;
             UpsertSessionTrack(trackId, trackId, "");
-
-            if (!AnalysisCache.Exists(trackId))
-            {
-                await StopPlaybackAsync();
-                Log($"Stopped playback to analyze {trackId}.");
-            }
 
             await AnalyzeTrackByIdAsync(trackId, trackId);
         }
@@ -1721,11 +1833,50 @@ namespace SpotifyWPF.ViewModel.Page
         {
             var track = SelectedSessionTrack;
 
-            if (track == null)
+            if (track == null || !CanPlayTransport())
                 return;
 
             TrackInput = track.TrackId;
             await PlayTrackAsync(track.TrackId, "session-track");
+        }
+
+        private void ReloadSessionTracks()
+        {
+            _sessionStore.Load();
+
+            foreach (var track in _sessionStore.Tracks)
+            {
+                _sessionStore.AddOrUpdate(new LoopLabSessionTrack
+                {
+                    TrackId = track.TrackId,
+                    Title = track.Title,
+                    Artist = track.Artist,
+                    AnalysisStatus = AnalysisCache.Exists(track.TrackId)
+                        ? SessionAnalysisStatus.Ready
+                        : SessionAnalysisStatus.Pending
+                });
+            }
+
+            RefreshSessionTracks();
+            DeleteSessionCacheCommand?.RaiseCanExecuteChanged();
+            Log($"Session refreshed ({SessionTracks.Count} tracks).");
+        }
+
+        private void DeleteSelectedSessionCache()
+        {
+            var track = SelectedSessionTrack;
+
+            if (track == null || IsAnalyzing)
+                return;
+
+            WavCaptureValidator.DeleteTrackArtifacts(track.TrackId);
+            UpdateSessionTrackAnalysisStatus(track.TrackId, SessionAnalysisStatus.Pending);
+
+            if (track.TrackId == _loopController.CurrentTrackId)
+                RefreshRingVisualization(track.TrackId);
+
+            DeleteSessionCacheCommand.RaiseCanExecuteChanged();
+            Log($"Deleted cached audio and analysis for {track.DisplayName}.");
         }
 
         private void RemoveSelectedSessionTrack()
@@ -1753,74 +1904,161 @@ namespace SpotifyWPF.ViewModel.Page
 
         private async Task AnalyzeTrackByIdAsync(string trackId, string displayName)
         {
-            ITrackAnalysisProvider provider;
-
-            try
+            if (IsAnalyzing)
             {
-                provider = await _analysisProviderSelector.GetProviderAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                AnalysisStatusText = ex.Message;
+                ReportAnalysisMessage($"Already analyzing {AnalyzingDisplayName}.");
                 return;
             }
 
-            if (provider.Source == AnalysisSource.Local && !provider.IsCached(trackId) &&
-                trackId != _loopController.CurrentTrackId)
+            if (!await _playbackSessionGate.WaitAsync(0).ConfigureAwait(true))
             {
-                Log("Local analysis will play the new track once for capture.");
+                ReportAnalysisMessage(
+                    $"Player busy — analyzing {AnalyzingDisplayName}. Wait for it to finish.");
+                return;
             }
-
-            IsAnalyzing = true;
-            UpdateSessionTrackAnalysisStatus(trackId, SessionAnalysisStatus.Analyzing);
 
             try
             {
-                if (provider.Source == AnalysisSource.Local && !provider.IsCached(trackId) &&
-                    trackId == _loopController.CurrentTrackId)
+                ITrackAnalysisProvider provider;
+
+                try
                 {
+                    provider = await _analysisProviderSelector.GetProviderAsync().ConfigureAwait(true);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    ReportAnalysisError(ex.Message);
+                    return;
+                }
+
+                var needsCapture = provider.RequiresPlaybackCapture(trackId);
+
+                _analysisCancellation?.Cancel();
+                _analysisCancellation?.Dispose();
+                _analysisCancellation = new CancellationTokenSource();
+                var analysisToken = _analysisCancellation.Token;
+
+                _analyzingTrackId = trackId;
+                _analyzingDisplayName = displayName ?? trackId;
+                RaisePropertyChanged(nameof(AnalyzingDisplayName));
+                IsAnalyzing = true;
+                AnalysisProgressPercent = double.NaN;
+                UpdateSessionTrackAnalysisStatus(trackId, SessionAnalysisStatus.Analyzing);
+
+                if (needsCapture)
+                {
+                    _captureInProgress = true;
+                    NotifyTransportStateChanged();
                     _jukeboxSuppressedForCapture = true;
                     ApplyLoopSettings();
-                    Log("Jukebox disabled during the capture pass.");
+                    Log($"Capturing {displayName ?? trackId} from the start — mute other apps until the track ends.");
                 }
                 else if (provider.Source == AnalysisSource.Local && !provider.IsCached(trackId))
                 {
-                    _jukeboxSuppressedForCapture = true;
-                    Log("Jukebox disabled during capture of a new track.");
+                    Log("Using cached WAV — running librosa sidecar only.");
                 }
 
-                if (provider.Source == AnalysisSource.Local && !provider.IsCached(trackId))
-                    Log("Local analysis records the system mix — keep other apps silent until the track ends.");
+                var progress = new Progress<string>(ApplyAnalysisProgress);
 
-                var progress = new Progress<string>(message =>
-                {
-                    AnalysisStatusText = message;
-                    Log(message, verbose: true);
-                });
+                var analysis = await provider.GetAnalysisAsync(trackId, progress, analysisToken)
+                    .ConfigureAwait(true);
 
-                var analysis = await provider.GetAnalysisAsync(trackId, progress, System.Threading.CancellationToken.None);
-
-                AnalysisStatusText = $"Analysis ready: {analysis.Beats.Count} beats, " +
-                                     $"{analysis.Segments.Count} segments ({analysis.SourceType}).";
-                Log($"Analysis complete for {displayName ?? trackId} via {provider.Source}.");
+                AnalysisProgressPercent = 100;
+                ReportAnalysisMessage(
+                    $"Analysis ready: {analysis.Beats.Count} beats, " +
+                    $"{analysis.Segments.Count} segments ({analysis.SourceType}).");
                 OnAnalysisCompleted(trackId, analysis);
+            }
+            catch (OperationCanceledException)
+            {
+                ReportAnalysisError("Analysis aborted.");
+                UpdateSessionTrackAnalysisStatus(trackId, SessionAnalysisStatus.Pending);
             }
             catch (Exception ex)
             {
-                AnalysisStatusText = $"Analysis failed: {ex.Message}";
-                Log($"Analysis failed: {ex.Message}");
+                ReportAnalysisError($"Analysis failed: {ex.Message}");
                 UpdateSessionTrackAnalysisStatus(trackId, SessionAnalysisStatus.Failed);
             }
             finally
             {
+                CompleteAnalysisSession();
+            }
+        }
+
+        private void CompleteAnalysisSession()
+        {
+            RunOnUiThreadSync(() =>
+            {
+                _captureInProgress = false;
+                AnalysisProgressPercent = double.NaN;
                 IsAnalyzing = false;
+                _analyzingTrackId = null;
+                _analyzingDisplayName = null;
+                RaisePropertyChanged(nameof(AnalyzingDisplayName));
 
                 if (_jukeboxSuppressedForCapture)
                 {
                     _jukeboxSuppressedForCapture = false;
                     ApplyLoopSettings();
                 }
-            }
+
+                NotifyTransportStateChanged();
+            });
+
+            _analysisCancellation?.Dispose();
+            _analysisCancellation = null;
+            _playbackSessionGate.Release();
+        }
+
+        private void ApplyAnalysisProgress(string message)
+        {
+            RunOnUiThread(() =>
+            {
+                AnalysisStatusText = message;
+                Status = FormatAnalysisStatusMessage(message);
+                Log(message, verbose: true);
+
+                var match = Regex.Match(message ?? string.Empty, @"(\d+)%");
+
+                if (match.Success && int.TryParse(match.Groups[1].Value, out var percent))
+                    AnalysisProgressPercent = percent;
+                else if (message != null &&
+                         (message.IndexOf("sidecar", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                          message.IndexOf("Analyzing audio", StringComparison.OrdinalIgnoreCase) >= 0))
+                    AnalysisProgressPercent = double.NaN;
+            });
+        }
+
+        private string FormatAnalysisStatusMessage(string message)
+        {
+            if (string.IsNullOrEmpty(_analyzingTrackId))
+                return message;
+
+            return string.IsNullOrEmpty(AnalyzingDisplayName)
+                ? message
+                : $"{AnalyzingDisplayName}: {message}";
+        }
+
+        private void ReportAnalysisMessage(string message, bool verboseLog = false)
+        {
+            RunOnUiThread(() =>
+            {
+                Status = message;
+
+                if (IsAnalyzing)
+                    AnalysisStatusText = message;
+
+                Log(message, verbose: verboseLog);
+            });
+        }
+
+        private void ReportAnalysisError(string message)
+        {
+            RunOnUiThread(() =>
+            {
+                Status = message;
+                Log(message);
+            });
         }
 
         #endregion
@@ -1833,7 +2071,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             if (trackId == null)
             {
-                AnalysisStatusText = "Play a track first, then analyze it.";
+                ReportAnalysisMessage("Play a track first, then analyze it.");
                 return;
             }
 
@@ -2098,6 +2336,16 @@ namespace SpotifyWPF.ViewModel.Page
                 action();
             else
                 dispatcher.BeginInvoke(action);
+        }
+
+        private static void RunOnUiThreadSync(Action action)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+
+            if (dispatcher == null || dispatcher.CheckAccess())
+                action();
+            else
+                dispatcher.Invoke(action);
         }
 
         #endregion

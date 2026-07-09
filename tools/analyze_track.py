@@ -14,6 +14,7 @@ Requires: librosa, soundfile, numpy  (pip install librosa soundfile)
 
 import argparse
 import json
+import os
 import sys
 
 try:
@@ -119,13 +120,16 @@ def main():
             y = librosa.resample(y, orig_sr=sr_native, target_sr=SAMPLE_RATE)
         sr = SAMPLE_RATE
     except Exception:
-        y, sr = librosa.load(args.input_wav, sr=SAMPLE_RATE, mono=True)
-    except Exception as exc:
-        sys.stderr.write("Could not read %s: %s\n" % (args.input_wav, exc))
-        sys.exit(3)
+        try:
+            y, sr = librosa.load(args.input_wav, sr=SAMPLE_RATE, mono=True)
+        except Exception as exc:
+            sys.stderr.write("Could not read %s: %s\n" % (args.input_wav, exc))
+            sys.exit(3)
 
     if y.size == 0:
-        sys.stderr.write("Input audio is empty.\n")
+        sys.stderr.write(
+            "Input audio is empty (%s, %d bytes on disk).\n"
+            % (args.input_wav, os.path.getsize(args.input_wav) if os.path.exists(args.input_wav) else 0))
         sys.exit(3)
 
     duration = float(len(y)) / sr

@@ -112,6 +112,33 @@
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
+                <StackPanel Orientation="Horizontal">
+                    <ProgressBar Width="72"
+                                 Height="4"
+                                 Margin="0,0,8,0"
+                                 VerticalAlignment="Center"
+                                 Maximum="100"
+                                 Value="{Binding AnalysisProgressPercent, Mode=OneWay}"
+                                 IsIndeterminate="{Binding IsIndeterminateAnalysisProgress, Mode=OneWay}"/>
+                    <TextBlock Text="{Binding AnalysisStatusText}"
+                               VerticalAlignment="Center"
+                               MaxWidth="280"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource AppAccentBrush}"/>
+                </StackPanel>
+                <StatusBarItem.Style>
+                    <Style TargetType="StatusBarItem">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsAnalyzing}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StatusBarItem.Style>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
                 <Label Content="{Binding DeviceText}"/>
             </StatusBarItem>
         </StatusBar>
