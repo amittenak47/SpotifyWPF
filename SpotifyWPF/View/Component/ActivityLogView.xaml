@@ -4,22 +4,28 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
-             d:DesignHeight="120" d:DesignWidth="800">
-
-    <!-- DataContext is expected to be an ActivityLogViewModel supplied by the hosting page. -->
+             d:DesignHeight="120" d:DesignWidth="800"
+             VerticalAlignment="Stretch"
+             VerticalContentAlignment="Stretch">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="ActivityLogBooleanToVisibilityConverter"/>
     </UserControl.Resources>
 
-    <DockPanel>
-        <StackPanel DockPanel.Dock="Top"
-                    Orientation="Horizontal"
-                    Margin="0,0,0,8"
+    <Grid VerticalAlignment="Stretch">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0"
+                    Style="{StaticResource ControlPanelToolbarStyle}"
+                    HorizontalAlignment="Right"
                     Visibility="{Binding ShowFilter, Converter={StaticResource ActivityLogBooleanToVisibilityConverter}}">
             <TextBlock Text="Filter"
                        VerticalAlignment="Center"
-                       Margin="0,0,8,0"/>
+                       Margin="0,0,8,0"
+                       Foreground="{StaticResource AppMutedForegroundBrush}"/>
             <ComboBox ItemsSource="{Binding LogFilterOptions}"
                       SelectedItem="{Binding SelectedLogFilter}"
                       Style="{StaticResource DarkComboBoxStyle}"
@@ -28,11 +34,17 @@
                       Padding="6,2"/>
         </StackPanel>
 
-        <ListBox x:Name="LogMessagesListBox"
+        <ListBox Grid.Row="1"
+                 x:Name="LogMessagesListBox"
                  ItemsSource="{Binding LogMessages}"
+                 Background="Transparent"
+                 BorderThickness="0"
                  FontFamily="{Binding FontFamily}"
                  FontSize="{Binding FontSize}"
-                 SelectionMode="Extended">
+                 SelectionMode="Extended"
+                 VerticalAlignment="Stretch"
+                 MinHeight="72"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ContextMenu>
                 <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                     <MenuItem Header="Copy Selected"
@@ -43,5 +55,5 @@
                 </ContextMenu>
             </ListBox.ContextMenu>
         </ListBox>
-    </DockPanel>
+    </Grid>
 </UserControl>

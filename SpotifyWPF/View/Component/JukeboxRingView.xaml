@@ -3,13 +3,15 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SpotifyWPF.View.Component"
              MinHeight="160"
-             MinWidth="160">
+             MinWidth="160"
+             Background="{x:Null}">
     <Grid>
         <local:JukeboxRingCanvas x:Name="Ring"
                                  DurationMs="{Binding RingDurationMs, Mode=OneWay}"
                                  PositionMs="{Binding PositionMs, Mode=OneWay}"
                                  SegmentStartsSec="{Binding RingSegmentStartsSec, Mode=OneWay}"
                                  GlowFromMs="{Binding RingGlowFromMs, Mode=OneWay}"
-                                 GlowToMs="{Binding RingGlowToMs, Mode=OneWay}"/>
+                                 GlowToMs="{Binding RingGlowToMs, Mode=OneWay}"
+                                 MiniPlayerMode="{Binding MiniPlayerMode, RelativeSource={RelativeSource AncestorType=local:JukeboxRingView}}"/>
     </Grid>
 </UserControl>

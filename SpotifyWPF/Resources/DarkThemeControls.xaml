@@ -569,12 +569,217 @@
     </Setter>
   </Style>
 
+  <Style x:Key="DarkMediaSliderDecreaseRepeatStyle" TargetType="{x:Type RepeatButton}">
+    <Setter Property="Focusable" Value="False"/>
+    <Setter Property="IsTabStop" Value="False"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type RepeatButton}">
+          <Border Background="{StaticResource SpotifyGreenBrush}"
+                  Height="6"
+                  CornerRadius="3,0,0,3"/>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="DarkMediaSliderIncreaseRepeatStyle" TargetType="{x:Type RepeatButton}">
+    <Setter Property="Focusable" Value="False"/>
+    <Setter Property="IsTabStop" Value="False"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type RepeatButton}">
+          <Border Background="Transparent"/>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="DarkMediaSliderStyle" TargetType="{x:Type Slider}">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{StaticResource SpotifyGreenBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="Height" Value="22"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type Slider}">
+          <Grid Background="{TemplateBinding Background}">
+            <Border x:Name="TrackBackground"
+                    Height="6"
+                    VerticalAlignment="Center"
+                    Background="{StaticResource AppSurfaceAltBrush}"
+                    BorderBrush="{StaticResource SpotifyGreenLineBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3"/>
+            <Track x:Name="PART_Track">
+              <Track.DecreaseRepeatButton>
+                <RepeatButton Command="{x:Static Slider.DecreaseLarge}"
+                              Style="{StaticResource DarkMediaSliderDecreaseRepeatStyle}"/>
+              </Track.DecreaseRepeatButton>
+              <Track.IncreaseRepeatButton>
+                <RepeatButton Command="{x:Static Slider.IncreaseLarge}"
+                              Style="{StaticResource DarkMediaSliderIncreaseRepeatStyle}"/>
+              </Track.IncreaseRepeatButton>
+              <Track.Thumb>
+                <Thumb Width="12" Height="12">
+                  <Thumb.Template>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                      <Ellipse Fill="{StaticResource SpotifyGreenBrush}"
+                               Stroke="{StaticResource SpotifyGreenLineBrush}"
+                               StrokeThickness="1"/>
+                    </ControlTemplate>
+                  </Thumb.Template>
+                </Thumb>
+              </Track.Thumb>
+            </Track>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="TrackBackground" Property="Opacity" Value="0.45"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style TargetType="{x:Type TextBox}">
     <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
     <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
     <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
     <Setter Property="CaretBrush" Value="{StaticResource AppForegroundBrush}"/>
     <Setter Property="SelectionBrush" Value="{StaticResource AppSelectedBrush}"/>
+  </Style>
+
+  <Style x:Key="ControlPanelHeaderToggleStyle" TargetType="{x:Type ToggleButton}">
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    <Setter Property="Padding" Value="8,6"/>
+    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ToggleButton}">
+          <Border x:Name="HeaderBorder"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="0,0,0,1"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="Center"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+              <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="ControlPanelTabItemStyle" TargetType="{x:Type TabItem}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="Foreground" Value="{StaticResource AppMutedForegroundBrush}"/>
+    <Setter Property="Padding" Value="14,6"/>
+    <Setter Property="Margin" Value="0,0,4,0"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type TabItem}">
+          <Border x:Name="TabBorder"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{StaticResource AppBorderBrush}"
+                  BorderThickness="1,1,1,0"
+                  CornerRadius="4,4,0,0"
+                  Padding="{TemplateBinding Padding}"
+                  Margin="{TemplateBinding Margin}">
+            <ContentPresenter x:Name="ContentSite"
+                              ContentSource="Header"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
+              <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource SpotifyGreenBrush}"/>
+              <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+              <Setter Property="Panel.ZIndex" Value="1"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{StaticResource AppDisabledForegroundBrush}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="ControlPanelTabControlStyle" TargetType="{x:Type TabControl}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="ItemContainerStyle" Value="{StaticResource ControlPanelTabItemStyle}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type TabControl}">
+          <Grid KeyboardNavigation.TabNavigation="Local">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <TabPanel IsItemsHost="True"
+                      Grid.Row="0"
+                      Background="Transparent"
+                      Margin="8,4,8,0"
+                      KeyboardNavigation.TabIndex="1"/>
+            <Border Grid.Row="1"
+                    Margin="8,4,8,8"
+                    Background="Transparent"
+                    BorderThickness="0">
+              <ContentPresenter ContentSource="SelectedContent"
+                                VerticalAlignment="Stretch"
+                                HorizontalAlignment="Stretch"/>
+            </Border>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="ControlPanelTabContentBorderStyle" TargetType="{x:Type Border}">
+    <Setter Property="Background" Value="{StaticResource AppSurfaceAltBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource SpotifyGreenLineBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="8"/>
+    <Setter Property="MinHeight" Value="120"/>
+    <Setter Property="VerticalAlignment" Value="Stretch"/>
+    <Setter Property="HorizontalAlignment" Value="Stretch"/>
+    <Setter Property="SnapsToDevicePixels" Value="True"/>
+  </Style>
+
+  <Style x:Key="ControlPanelToolbarStyle" TargetType="{x:Type StackPanel}">
+    <Setter Property="Orientation" Value="Horizontal"/>
+    <Setter Property="MinHeight" Value="28"/>
+    <Setter Property="Margin" Value="0,0,0,8"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+  <Style x:Key="SettingValueBadgeStyle" TargetType="{x:Type Border}">
+    <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="6,2"/>
+    <Setter Property="Margin" Value="8,0,0,0"/>
+    <Setter Property="CornerRadius" Value="3"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
   </Style>
 
 </ResourceDictionary>

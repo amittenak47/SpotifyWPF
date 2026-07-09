@@ -29,6 +29,8 @@ namespace SpotifyWPF.Service.Prediction
 
         public static string JukeboxSettingsPath => Path.Combine(RootDirectory, "jukebox-settings.json");
 
+        public static string SessionTracksPath => Path.Combine(RootDirectory, "session-tracks.json");
+
         public static string AnalysisCacheDirectory => Path.Combine(RootDirectory, "analysis-cache");
 
         public static string AudioCacheDirectory => Path.Combine(RootDirectory, "audio-cache");

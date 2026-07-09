@@ -1,0 +1,365 @@
+<UserControl x:Class="SpotifyWPF.View.Component.LoopLabBottomPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SpotifyWPF.View.Component"
+             x:Name="Root"
+             MinHeight="28"
+             ClipToBounds="False">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
+
+    <Border Background="{StaticResource AppSurfaceBrush}"
+            BorderBrush="{StaticResource AppBorderBrush}"
+            BorderThickness="1"
+            ClipToBounds="False">
+        <Grid ClipToBounds="False">
+            <DockPanel x:Name="PanelContent" LastChildFill="True">
+                <ToggleButton DockPanel.Dock="Top"
+                              Style="{StaticResource ControlPanelHeaderToggleStyle}"
+                              IsChecked="{Binding IsExpanded, ElementName=Root, Mode=TwoWay}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Control Panel"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource AppForegroundBrush}"/>
+                        <TextBlock Margin="8,0,0,0"
+                                   FontFamily="Segoe UI Symbol"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource AppMutedForegroundBrush}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="▶"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsExpanded, ElementName=Root}" Value="True">
+                                            <Setter Property="Text" Value="▼"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </ToggleButton>
+
+                <Grid Visibility="{Binding IsExpanded, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border x:Name="ResizeBar"
+                            Grid.Row="0"
+                            Height="6"
+                            Background="{StaticResource AppSurfaceAltBrush}"
+                            BorderBrush="{StaticResource AppBorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Cursor="SizeNS"
+                            ToolTip="Drag to resize panel height"
+                            PreviewMouseLeftButtonDown="ResizeBar_PreviewMouseLeftButtonDown"
+                            PreviewMouseMove="ResizeBar_PreviewMouseMove"
+                            PreviewMouseLeftButtonUp="ResizeBar_PreviewMouseLeftButtonUp">
+                        <Border Width="48" Height="4"
+                                CornerRadius="2"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Background="{StaticResource AppBorderBrush}"/>
+                    </Border>
+
+                    <TabControl Grid.Row="1"
+                                Style="{StaticResource ControlPanelTabControlStyle}"
+                                DataContext="{Binding DataContext, ElementName=Root}">
+                        <TabItem Header="Logs">
+                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                                <local:ActivityLogView DataContext="{Binding ActivityLog, ElementName=Root}"/>
+                            </Border>
+                        </TabItem>
+
+                        <TabItem Header="Tuning">
+                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              VerticalAlignment="Stretch"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel>
+                                        <local:TuningSliderRow Label="Branch similarity threshold (lower = smoother)"
+                                                               ValueText="{Binding JukeboxSimilarityThresholdMaxText}"
+                                                               Minimum="25"
+                                                               Maximum="80"
+                                                               Value="{Binding JukeboxSimilarityThresholdMax}"/>
+                                        <local:TuningSliderRow Label="Branch probability min"
+                                                               ValueText="{Binding JukeboxBranchProbabilityMinText}"
+                                                               Minimum="0"
+                                                               Maximum="40"
+                                                               Value="{Binding JukeboxBranchProbabilityMinPercent}"/>
+                                        <local:TuningSliderRow Label="Branch probability max"
+                                                               ValueText="{Binding JukeboxBranchProbabilityMaxText}"
+                                                               Minimum="5"
+                                                               Maximum="60"
+                                                               Value="{Binding JukeboxBranchProbabilityMaxPercent}"/>
+                                        <local:TuningSliderRow Label="Ramp-up per beat"
+                                                               ValueText="{Binding JukeboxBranchRampText}"
+                                                               Minimum="0.2"
+                                                               Maximum="3"
+                                                               Value="{Binding JukeboxBranchRampPerBeatPercent}"/>
+                                        <local:TuningSliderRow Label="Seek lead (SDK latency)"
+                                                               ValueText="{Binding JukeboxSeekLeadMsText}"
+                                                               Minimum="0"
+                                                               Maximum="300"
+                                                               Value="{Binding JukeboxSeekLeadMs}"/>
+
+                                        <CheckBox Content="Allow only reverse branches"
+                                                  Foreground="{StaticResource AppForegroundBrush}"
+                                                  IsChecked="{Binding JukeboxAllowOnlyReverseBranches}"
+                                                  Margin="0,0,0,4"/>
+                                        <CheckBox Content="Allow only long branches (16+ beats apart)"
+                                                  Foreground="{StaticResource AppForegroundBrush}"
+                                                  IsChecked="{Binding JukeboxAllowOnlyLongBranches}"
+                                                  Margin="0,0,0,8"/>
+
+                                        <TextBlock Text="Re-analyze after changing segments; graph rebuilds when sliders change."
+                                                   FontSize="11"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+                        </TabItem>
+
+                        <TabItem Header="Session">
+                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0"
+                                                Style="{StaticResource ControlPanelToolbarStyle}">
+                                        <Button Content="Play" MinWidth="56"
+                                                Command="{Binding PlaySessionTrackCommand}"/>
+                                        <Button Content="Remove" MinWidth="72" Margin="8,0,0,0"
+                                                Command="{Binding RemoveSessionTrackCommand}"/>
+                                        <Button Content="Clear" MinWidth="56" Margin="8,0,0,0"
+                                                Command="{Binding ClearSessionCommand}"/>
+                                        <Button Content="Export" MinWidth="64" Margin="16,0,0,0"
+                                                Command="{Binding ExportLoopDataCommand}"/>
+                                        <Button Content="Import" MinWidth="64" Margin="8,0,0,0"
+                                                Command="{Binding ImportLoopDataCommand}"/>
+                                    </StackPanel>
+
+                                    <ListBox Grid.Row="1"
+                                             ItemsSource="{Binding SessionTracks}"
+                                             SelectedItem="{Binding SelectedSessionTrack}"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             VerticalAlignment="Stretch"
+                                             MinHeight="72"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="{Binding DisplayName}"
+                                                               FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Foreground="{StaticResource AppForegroundBrush}"/>
+                                                    <TextBlock Text="{Binding Artist}"
+                                                               FontSize="11"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding StatusText}"
+                                                           VerticalAlignment="Center"
+                                                           Margin="12,0,0,0"
+                                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                    </ListBox>
+
+                                    <TextBlock Grid.Row="2"
+                                               Text="{Binding AnalysisStatusText}"
+                                               Margin="0,8,0,0"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                </Grid>
+                            </Border>
+                        </TabItem>
+
+                        <TabItem Header="Music Predictions">
+                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                                <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="220"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <DockPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,8">
+                                    <Button DockPanel.Dock="Right" Content="Refresh" MinWidth="80"
+                                            Command="{Binding RefreshPredictionsCommand}"/>
+                                    <CheckBox DockPanel.Dock="Right" Content="Auto-play next"
+                                              Margin="0,0,12,0" VerticalAlignment="Center"
+                                              Foreground="{StaticResource AppForegroundBrush}"
+                                              IsChecked="{Binding AutoPlayNext}"
+                                              ToolTip="When a track ends naturally (jukebox off), start the top prediction"/>
+                                    <TextBlock Text="{Binding PredictionStatusText}"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                </DockPanel>
+
+                                <ListBox Grid.Row="1" Grid.Column="0" Margin="0,0,8,0"
+                                         ItemsSource="{Binding Predictions}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         VerticalAlignment="Stretch"
+                                         MinHeight="72"
+                                         HorizontalContentAlignment="Stretch"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Foreground="{StaticResource AppForegroundBrush}"/>
+                                                    <TextBlock Text="{Binding Reason}" FontSize="11"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="{Binding Score, StringFormat={}{0:0.00}}"
+                                                           VerticalAlignment="Center" Margin="8,0"
+                                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                                <Button Grid.Column="2" Content="Play" MinWidth="56" Margin="0,0,6,0"
+                                                        Command="{Binding DataContext.PlayPredictionCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                        CommandParameter="{Binding}"/>
+                                                <Button Grid.Column="3"
+                                                        MinWidth="56"
+                                                        Command="{Binding DataContext.TogglePinCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                        CommandParameter="{Binding}">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button">
+                                                            <Setter Property="Content" Value="Pin"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsPinned}" Value="True">
+                                                                    <Setter Property="Content" Value="Unpin"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1">
+                                    <TextBlock Text="Scoring weights"
+                                               FontWeight="SemiBold"
+                                               Margin="0,0,0,8"
+                                               Foreground="{StaticResource AppForegroundBrush}"/>
+                                    <local:TuningSliderRow Label="Recency penalty"
+                                                           ValueText="{Binding WeightRecencyPenalty, StringFormat={}{0:0.00}}"
+                                                           Minimum="0"
+                                                           Maximum="2"
+                                                           Value="{Binding WeightRecencyPenalty}"/>
+                                    <local:TuningSliderRow Label="Pinned bonus"
+                                                           ValueText="{Binding WeightPinned, StringFormat={}{0:0.00}}"
+                                                           Minimum="0"
+                                                           Maximum="5"
+                                                           Value="{Binding WeightPinned}"/>
+                                </StackPanel>
+                                </Grid>
+                            </Border>
+                        </TabItem>
+
+                        <TabItem Header="Settings">
+                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              VerticalAlignment="Stretch"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel MaxWidth="640">
+                                    <TextBlock Text="Local analysis (Path B)"
+                                               FontSize="16" FontWeight="SemiBold"
+                                               Foreground="{StaticResource AppForegroundBrush}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
+                                               Foreground="{StaticResource AppMutedForegroundBrush}">
+                                        Configure the Python interpreter used for librosa-based beat analysis when Spotify's audio-analysis API is unavailable.
+                                    </TextBlock>
+
+                                    <TextBlock Text="Python executable" Margin="0,0,0,4"
+                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding PythonExecutablePath, UpdateSourceTrigger=LostFocus}"
+                                                 VerticalContentAlignment="Center"
+                                                 ToolTip="Full path to python.exe; leave empty to auto-detect on first analysis"/>
+                                        <Button Grid.Column="1" Content="Browse" MinWidth="72" Margin="8,0,0,0"
+                                                Command="{Binding BrowsePythonCommand}"/>
+                                        <Button Grid.Column="2" Content="Auto-detect" MinWidth="88" Margin="8,0,0,0"
+                                                Command="{Binding AutoDetectPythonCommand}"/>
+                                    </Grid>
+
+                                    <Button Content="Re-probe analysis source"
+                                            HorizontalAlignment="Left"
+                                            MinWidth="160"
+                                            Command="{Binding ReprobeAnalysisCommand}"
+                                            ToolTip="Check whether Spotify API or local Python analysis is available"/>
+
+                                    <TextBlock Text="Window"
+                                               FontSize="16" FontWeight="SemiBold"
+                                               Foreground="{StaticResource AppForegroundBrush}"
+                                               Margin="0,16,0,8"/>
+                                    <CheckBox Content="Ring mini player mode"
+                                              Foreground="{StaticResource AppForegroundBrush}"
+                                              IsChecked="{Binding IsMiniPlayerMode, Mode=TwoWay}"
+                                              ToolTip="Show only the jukebox ring in a compact window (use the diagonal-arrow buttons on the transport bar to enter/exit)"/>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
+            </DockPanel>
+
+            <Canvas x:Name="ResizePreviewCanvas"
+                    ClipToBounds="False"
+                    IsHitTestVisible="False"
+                    Panel.ZIndex="20">
+                <Border x:Name="ResizePreviewGhost"
+                        Background="#CC121212"
+                        BorderBrush="{StaticResource SpotifyGreenBrush}"
+                        BorderThickness="1"
+                        Visibility="Collapsed">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="16"
+                                          ShadowDepth="4"
+                                          Opacity="0.65"
+                                          Color="Black"/>
+                    </Border.Effect>
+                </Border>
+            </Canvas>
+        </Grid>
+    </Border>
+</UserControl>

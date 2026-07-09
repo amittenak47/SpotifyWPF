@@ -8,16 +8,88 @@
              DataContext="{Binding PredictionPage, Source={StaticResource Locator}}"
              Loaded="PredictionPage_Loaded"
              Unloaded="PredictionPage_Unloaded"
-             d:DesignHeight="450" d:DesignWidth="800">
+             d:DesignHeight="450" d:DesignWidth="800"
+             ClipToBounds="False">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+
+        <Style x:Key="TransportIconButtonStyle" TargetType="{x:Type Button}">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="18">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{StaticResource AppHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TransportGlyphStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+        </Style>
     </UserControl.Resources>
 
     <DockPanel Margin="8" Background="{StaticResource AppBackgroundBrush}">
-        <StatusBar DockPanel.Dock="Bottom">
-            <StatusBarItem>
-                <Label Content="{Binding Status}"/>
+        <StatusBar DockPanel.Dock="Bottom"
+                   Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StatusBarItem Width="300">
+                <Grid Height="18" ClipToBounds="True">
+                    <TextBlock Text="{Binding Status}"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource AppMutedForegroundBrush}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <component:MarqueeTextBlock Text="{Binding NowPlayingMarqueeText}"
+                                                Height="18"
+                                                Foreground="{StaticResource AppForegroundBrush}">
+                        <component:MarqueeTextBlock.Style>
+                            <Style TargetType="{x:Type component:MarqueeTextBlock}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </component:MarqueeTextBlock.Style>
+                    </component:MarqueeTextBlock>
+                </Grid>
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
@@ -29,21 +101,40 @@
             </StatusBarItem>
         </StatusBar>
 
-        <TabControl Background="{StaticResource AppBackgroundBrush}">
-            <TabItem Header="Loop Lab">
-                <Grid Margin="8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+        <Grid ClipToBounds="False">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-                    <!-- Player init error panel -->
-                    <Border Grid.Row="0"
+            <StackPanel Grid.Row="0" Margin="0,0,0,12"
+                        Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Infinite Jukebox"
+                               FontSize="24"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource AppForegroundBrush}"/>
+                    <TextBlock Text=" by "
+                               FontSize="13"
+                               Margin="6,0,0,4"
+                               VerticalAlignment="Bottom"
+                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                    <TextBlock FontSize="13"
+                               Margin="0,0,0,4"
+                               VerticalAlignment="Bottom">
+                        <Hyperlink NavigateUri="https://musicmachinery.com/2012/11/12/the-infinite-jukebox/"
+                                   Foreground="{StaticResource SpotifyGreenBrush}"
+                                   RequestNavigate="PaulLamereLink_RequestNavigate">
+                            Paul Lamere
+                        </Hyperlink>
+                    </TextBlock>
+                </StackPanel>
+            </StackPanel>
+
+            <Border Grid.Row="1"
                             Background="{StaticResource AppSurfaceAltBrush}"
                             BorderBrush="{StaticResource AppBorderBrush}"
                             BorderThickness="1"
@@ -56,473 +147,139 @@
                                    Foreground="#E05545"/>
                     </Border>
 
-                    <!-- Playback controls -->
-                    <Grid Grid.Row="1" Margin="0,0,0,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <TextBox Grid.Column="0"
-                                 Text="{Binding TrackInput, UpdateSourceTrigger=PropertyChanged}"
-                                 VerticalContentAlignment="Center"
-                                 ToolTip="Track ID, spotify:track: URI, or open.spotify.com link"/>
-                        <Button Grid.Column="1"
-                                Content="Play"
-                                MinWidth="72"
-                                Margin="8,0,0,0"
-                                Command="{Binding PlayCommand}"/>
-                        <Button Grid.Column="2"
-                                Content="{Binding PauseResumeLabel}"
-                                MinWidth="72"
-                                Margin="8,0,0,0"
-                                Command="{Binding PauseResumeCommand}"/>
-                    </Grid>
-
-                    <!-- Now playing -->
                     <Border Grid.Row="2"
                             Background="{StaticResource AppSurfaceBrush}"
                             BorderBrush="{StaticResource AppBorderBrush}"
                             BorderThickness="1"
                             Padding="8"
-                            Margin="0,0,0,8">
-                        <StackPanel>
-                            <TextBlock Text="{Binding NowPlayingTitle}"
-                                       FontSize="16"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource AppForegroundBrush}"/>
-                            <TextBlock Text="{Binding NowPlayingArtist}"
-                                       Foreground="{StaticResource AppMutedForegroundBrush}"
-                                       Margin="0,2,0,6"/>
-                            <Grid>
+                            Margin="0,0,0,8"
+                            Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <ProgressBar Grid.Column="0"
-                                             Height="6"
-                                             VerticalAlignment="Center"
-                                             Minimum="0"
-                                             Maximum="{Binding DurationMs, Mode=OneWay}"
-                                             Value="{Binding PositionMs, Mode=OneWay}"/>
+
+                                <TextBox Grid.Column="0"
+                                         Text="{Binding TrackInput, UpdateSourceTrigger=PropertyChanged}"
+                                         VerticalContentAlignment="Center"
+                                         ToolTip="Track ID, spotify:track: URI, or open.spotify.com link"/>
+
+                                <StackPanel Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            Margin="8,0,0,0"
+                                            VerticalAlignment="Center">
+                                    <Button Style="{StaticResource TransportIconButtonStyle}"
+                                            Command="{Binding PreviousSessionTrackCommand}"
+                                            ToolTip="Previous session track">
+                                        <TextBlock Text="&#xE892;" Style="{StaticResource TransportGlyphStyle}"/>
+                                    </Button>
+
+                                    <Button Style="{StaticResource TransportIconButtonStyle}"
+                                            Command="{Binding TogglePlayPauseCommand}"
+                                            ToolTip="Play / Pause">
+                                        <TextBlock>
+                                            <TextBlock.Style>
+                                                <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource TransportGlyphStyle}">
+                                                    <Setter Property="Text" Value="&#xE768;"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ShowPauseIcon}" Value="True">
+                                                            <Setter Property="Text" Value="&#xE769;"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Button>
+
+                                    <Button Style="{StaticResource TransportIconButtonStyle}"
+                                            Command="{Binding NextSessionTrackCommand}"
+                                            ToolTip="Next session track">
+                                        <TextBlock Text="&#xE893;" Style="{StaticResource TransportGlyphStyle}"/>
+                                    </Button>
+
+                                    <Button Style="{StaticResource TransportIconButtonStyle}"
+                                            Command="{Binding EnterMiniPlayerCommand}"
+                                            ToolTip="Mini player (ring only)">
+                                        <TextBlock Text="&#xE919;" Style="{StaticResource TransportGlyphStyle}"/>
+                                    </Button>
+
+                                    <Button Content="Analyze"
+                                            MinWidth="72"
+                                            Margin="8,0,0,0"
+                                            Command="{Binding AnalyzeInputCommand}"
+                                            ToolTip="Analyze the track ID in the search box"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Grid.Row="1" Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Slider Grid.Column="0"
+                                        Style="{StaticResource DarkMediaSliderStyle}"
+                                        Minimum="0"
+                                        Maximum="{Binding DurationMs, Mode=OneWay}"
+                                        Value="{Binding ScrubberPositionMs, Mode=TwoWay}"
+                                        IsMoveToPointEnabled="True"
+                                        IsEnabled="{Binding HasScrubbableTrack}"
+                                        VerticalAlignment="Center"
+                                        Loaded="Scrubber_Loaded"
+                                        PreviewMouseLeftButtonDown="Scrubber_PreviewMouseLeftButtonDown"
+                                        PreviewMouseLeftButtonUp="Scrubber_PreviewMouseLeftButtonUp"
+                                        LostMouseCapture="Scrubber_LostMouseCapture"/>
+
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding PositionText}"
-                                           Margin="8,0,0,0"
+                                           Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
                                            Foreground="{StaticResource AppMutedForegroundBrush}"/>
                             </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Loop controls (simple outro skip) -->
-                    <Border Grid.Row="3"
-                            Background="{StaticResource AppSurfaceBrush}"
-                            BorderBrush="{StaticResource AppBorderBrush}"
-                            BorderThickness="1"
-                            Padding="8"
-                            Margin="0,0,0,8">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                <TextBlock Text="Loop (skip outro / repeat section)"
-                                           FontWeight="SemiBold"
-                                           Foreground="{StaticResource AppForegroundBrush}"/>
-                                <RadioButton Content="Simple loop"
-                                             GroupName="LoopMode"
-                                             Margin="16,0,0,0"
-                                             VerticalAlignment="Center"
-                                             Foreground="{StaticResource AppForegroundBrush}"
-                                             IsChecked="{Binding SimpleModeEnabled}"/>
-                                <RadioButton Content="Infinite Jukebox"
-                                             GroupName="LoopMode"
-                                             Margin="12,0,0,0"
-                                             VerticalAlignment="Center"
-                                             Foreground="{StaticResource AppForegroundBrush}"
-                                             IsChecked="{Binding JukeboxModeEnabled}"
-                                             ToolTip="Jumps between similar beats instead of a fixed region (requires track analysis)"/>
-                            </StackPanel>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Grid.Column="0" Text="Start (ms)"
-                                           VerticalAlignment="Center"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                                <TextBox Grid.Column="1" MinWidth="70" Margin="6,0,0,0"
-                                         VerticalContentAlignment="Center"
-                                         Text="{Binding LoopStartMs, UpdateSourceTrigger=LostFocus}"/>
-                                <Button Grid.Column="2" Content="Set from position" Margin="6,0,12,0"
-                                        Command="{Binding SetLoopStartCommand}"/>
-
-                                <TextBlock Grid.Column="3" Text="End (ms)"
-                                           VerticalAlignment="Center"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                                <TextBox Grid.Column="4" MinWidth="70" Margin="6,0,0,0"
-                                         VerticalContentAlignment="Center"
-                                         Text="{Binding LoopEndMs, UpdateSourceTrigger=LostFocus}"/>
-                                <Button Grid.Column="5" Content="Set from position" Margin="6,0,12,0"
-                                        Command="{Binding SetLoopEndCommand}"/>
-
-                                <CheckBox Grid.Column="6" Content="Enable loop"
-                                          VerticalAlignment="Center"
-                                          Foreground="{StaticResource AppForegroundBrush}"
-                                          IsChecked="{Binding LoopEnabled}"/>
-
-                                <TextBlock Grid.Column="7" Text="{Binding LoopStatusText}"
-                                           VerticalAlignment="Center"
-                                           HorizontalAlignment="Right"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                            </Grid>
-
-                            <Grid Margin="0,8,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <Button Grid.Column="0" Content="Analyze track"
-                                        MinWidth="100"
-                                        Command="{Binding AnalyzeTrackCommand}"
-                                        ToolTip="Builds the beat map used by Infinite Jukebox mode (may need one full uninterrupted play-through)"/>
-                                <TextBlock Grid.Column="1" Text="{Binding AnalysisStatusText}"
-                                           Margin="10,0,10,0"
-                                           VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                                <Button Grid.Column="2" Content="Export"
-                                        MinWidth="60"
-                                        Margin="0,0,6,0"
-                                        Command="{Binding ExportLoopDataCommand}"
-                                        ToolTip="Export loop profiles and cached analyses to a JSON file"/>
-                                <Button Grid.Column="3" Content="Import"
-                                        MinWidth="60"
-                                        Command="{Binding ImportLoopDataCommand}"
-                                        ToolTip="Import loop profiles and cached analyses from a JSON file"/>
-                            </Grid>
-
-                            <Grid Margin="0,8,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Grid.Column="0"
-                                           Text="Python (Path B)"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"
-                                           ToolTip="Full path to python.exe for local librosa analysis"/>
-                                <TextBox Grid.Column="1"
-                                         Text="{Binding PythonExecutablePath, UpdateSourceTrigger=LostFocus}"
-                                         VerticalContentAlignment="Center"
-                                         ToolTip="Leave empty to auto-detect on first analysis, or click Auto-detect"/>
-                                <Button Grid.Column="2"
-                                        Content="Browse"
-                                        MinWidth="72"
-                                        Margin="8,0,0,0"
-                                        Command="{Binding BrowsePythonCommand}"/>
-                                <Button Grid.Column="3"
-                                        Content="Auto-detect"
-                                        MinWidth="88"
-                                        Margin="8,0,0,0"
-                                        Command="{Binding AutoDetectPythonCommand}"/>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Jukebox tune + ring (visible when Infinite Jukebox is selected) -->
-                    <Border Grid.Row="4"
-                            Background="{StaticResource AppSurfaceBrush}"
-                            BorderBrush="{StaticResource AppBorderBrush}"
-                            BorderThickness="1"
-                            Padding="8"
-                            Margin="0,0,0,8"
-                            Visibility="{Binding JukeboxModeEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="200"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                                <TextBlock Text="Branch ring"
-                                           FontWeight="SemiBold"
-                                           HorizontalAlignment="Center"
-                                           Foreground="{StaticResource AppForegroundBrush}"
-                                           Margin="0,0,0,6"/>
-                                <component:JukeboxRingView Width="180" Height="180"
-                                                             DataContext="{Binding}"/>
-                                <TextBlock Text="{Binding RingSegmentCountText}"
-                                           FontSize="11"
-                                           TextAlignment="Center"
-                                           Margin="0,4,0,0"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                                <TextBlock Text="{Binding JukeboxBranchChanceText}"
-                                           FontSize="11"
-                                           TextWrapping="Wrap"
-                                           TextAlignment="Center"
-                                           Margin="0,6,0,0"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="1" Margin="12,0,0,0">
-                                <TextBlock Text="Jukebox Tune"
-                                           FontWeight="SemiBold"
-                                           Foreground="{StaticResource AppForegroundBrush}"
-                                           Margin="0,0,0,8"/>
-
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="48"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0"
-                                               Text="Branch similarity threshold (lower = smoother)"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding JukeboxSimilarityThresholdMaxText}"
-                                               HorizontalAlignment="Right"
-                                               Foreground="{StaticResource AppForegroundBrush}"/>
-                                    <Slider Grid.Column="0" Grid.ColumnSpan="2"
-                                            Margin="0,20,0,0"
-                                            Minimum="25" Maximum="80"
-                                            Value="{Binding JukeboxSimilarityThresholdMax}"/>
-                                </Grid>
-
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="48"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Branch probability min"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding JukeboxBranchProbabilityMinText}"
-                                               HorizontalAlignment="Right"
-                                               Foreground="{StaticResource AppForegroundBrush}"/>
-                                    <Slider Grid.Column="0" Grid.ColumnSpan="2"
-                                            Margin="0,20,0,0"
-                                            Minimum="0" Maximum="40"
-                                            Value="{Binding JukeboxBranchProbabilityMinPercent}"/>
-                                </Grid>
-
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="48"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Branch probability max"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding JukeboxBranchProbabilityMaxText}"
-                                               HorizontalAlignment="Right"
-                                               Foreground="{StaticResource AppForegroundBrush}"/>
-                                    <Slider Grid.Column="0" Grid.ColumnSpan="2"
-                                            Margin="0,20,0,0"
-                                            Minimum="5" Maximum="60"
-                                            Value="{Binding JukeboxBranchProbabilityMaxPercent}"/>
-                                </Grid>
-
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="48"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Ramp-up per beat"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding JukeboxBranchRampText}"
-                                               HorizontalAlignment="Right"
-                                               Foreground="{StaticResource AppForegroundBrush}"/>
-                                    <Slider Grid.Column="0" Grid.ColumnSpan="2"
-                                            Margin="0,20,0,0"
-                                            Minimum="0.2" Maximum="3"
-                                            Value="{Binding JukeboxBranchRampPerBeatPercent}"/>
-                                </Grid>
-
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="56"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Seek lead (SDK latency)"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding JukeboxSeekLeadMsText}"
-                                               HorizontalAlignment="Right"
-                                               Foreground="{StaticResource AppForegroundBrush}"/>
-                                    <Slider Grid.Column="0" Grid.ColumnSpan="2"
-                                            Margin="0,20,0,0"
-                                            Minimum="0" Maximum="300"
-                                            Value="{Binding JukeboxSeekLeadMs}"/>
-                                </Grid>
-
-                                <CheckBox Content="Allow only reverse branches"
-                                          Foreground="{StaticResource AppForegroundBrush}"
-                                          IsChecked="{Binding JukeboxAllowOnlyReverseBranches}"
-                                          Margin="0,0,0,4"/>
-                                <CheckBox Content="Allow only long branches (16+ beats apart)"
-                                          Foreground="{StaticResource AppForegroundBrush}"
-                                          IsChecked="{Binding JukeboxAllowOnlyLongBranches}"
-                                          Margin="0,0,0,8"/>
-
-                                <TextBlock Text="Re-analyze after changing segments; graph rebuilds when sliders change."
-                                           FontSize="11"
-                                           TextWrapping="Wrap"
-                                           Margin="0,8,0,0"
-                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                            </StackPanel>
                         </Grid>
                     </Border>
 
-                    <!-- Embedded Web Playback SDK player (re-parented singleton WebView2) -->
-                    <Border Grid.Row="5"
-                            x:Name="PlayerHostBorder"
-                            Height="48"
-                            Background="{StaticResource AppSurfaceBrush}"
-                            BorderBrush="{StaticResource AppBorderBrush}"
-                            BorderThickness="1"
-                            Margin="0,0,0,8"/>
+                    <!-- Large centered ring -->
+                    <Grid Grid.Row="3" Margin="0,0,0,8">
+                        <Viewbox Stretch="Uniform"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 MaxWidth="420"
+                                 MaxHeight="420">
+                            <StackPanel HorizontalAlignment="Center">
+                                <component:JukeboxRingView Width="380" Height="380"
+                                                             DataContext="{Binding}"/>
+                                <TextBlock Text="{Binding RingSegmentCountText}"
+                                           FontSize="11" TextAlignment="Center"
+                                           Margin="0,6,0,0"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                <TextBlock Text="{Binding JukeboxBranchChanceText}"
+                                           FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
+                                           Margin="0,4,0,0"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                            </StackPanel>
+                        </Viewbox>
 
-                    <!-- Activity log -->
-                    <component:ActivityLogView Grid.Row="6"
-                                               DataContext="{Binding ActivityLog}"/>
-                </Grid>
-            </TabItem>
+                        <Border x:Name="PlayerHostBorder"
+                                Width="1" Height="1"
+                                Opacity="0"
+                                IsHitTestVisible="False"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Bottom"/>
+                    </Grid>
 
-            <TabItem Header="Next Track">
-                <Grid Margin="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="260"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-
-                    <!-- Header row: status + actions -->
-                    <DockPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,8">
-                        <Button DockPanel.Dock="Right" Content="Refresh"
-                                MinWidth="80"
-                                Command="{Binding RefreshPredictionsCommand}"/>
-                        <CheckBox DockPanel.Dock="Right"
-                                  Content="Auto-play next"
-                                  Margin="0,0,12,0"
-                                  VerticalAlignment="Center"
-                                  Foreground="{StaticResource AppForegroundBrush}"
-                                  IsChecked="{Binding AutoPlayNext}"
-                                  ToolTip="When a track ends naturally (loop off), start the top prediction automatically"/>
-                        <TextBlock Text="{Binding PredictionStatusText}"
-                                   VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"
-                                   Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                    </DockPanel>
-
-                    <!-- Ranked predictions -->
-                    <ListBox Grid.Row="1" Grid.Column="0"
-                             Margin="0,0,8,0"
-                             ItemsSource="{Binding Predictions}"
-                             Background="{StaticResource AppSurfaceBrush}"
-                             BorderBrush="{StaticResource AppBorderBrush}"
-                             HorizontalContentAlignment="Stretch"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Margin="4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="{Binding DisplayName}"
-                                                   FontWeight="SemiBold"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Foreground="{StaticResource AppForegroundBrush}"/>
-                                        <TextBlock Text="{Binding Reason}"
-                                                   FontSize="11"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                                    </StackPanel>
-
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding ScoreText}"
-                                               Margin="8,0"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                                    <Button Grid.Column="2" Content="Pin"
-                                            Margin="0,0,6,0"
-                                            MinWidth="44"
-                                            Command="{Binding DataContext.TogglePinCommand,
-                                                              RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                            CommandParameter="{Binding}"/>
-                                    <Button Grid.Column="3" Content="Play next"
-                                            MinWidth="76"
-                                            Command="{Binding DataContext.PlayPredictionCommand,
-                                                              RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                            CommandParameter="{Binding}"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-
-                    <!-- Scoring weights -->
-                    <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
-                            Background="{StaticResource AppSurfaceBrush}"
-                            BorderBrush="{StaticResource AppBorderBrush}"
-                            BorderThickness="1"
-                            Padding="10">
-                        <StackPanel>
-                            <TextBlock Text="Scoring weights"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource AppForegroundBrush}"
-                                       Margin="0,0,0,8"/>
-
-                            <TextBlock Text="Follows previous track" Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightTransition}" Margin="0,2,0,8"/>
-
-                            <TextBlock Text="Repeat favorite" Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightRepeatAffinity}" Margin="0,2,0,8"/>
-
-                            <TextBlock Text="Same artist" Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightSameArtist}" Margin="0,2,0,8"/>
-
-                            <TextBlock Text="Tempo similarity" Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightTempoSimilarity}" Margin="0,2,0,8"/>
-
-                            <TextBlock Text="Recently played penalty" Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightRecencyPenalty}" Margin="0,2,0,8"/>
-
-                            <TextBlock Text="Pinned bonus" Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                            <Slider Minimum="0" Maximum="2" Value="{Binding WeightPinned}" Margin="0,2,0,8"/>
-
-                            <TextBlock Text="Changes apply on the next refresh."
-                                       FontSize="11"
-                                       TextWrapping="Wrap"
-                                       Foreground="{StaticResource AppMutedForegroundBrush}"/>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-            </TabItem>
-        </TabControl>
+                    <component:LoopLabBottomPanel Grid.Row="4"
+                                                    ActivityLog="{Binding ActivityLog}"
+                                                    IsExpanded="{Binding IsBottomPanelExpanded, Mode=TwoWay}"
+                                                    ExpandedHeight="{Binding BottomPanelHeight, Mode=TwoWay}"
+                                                    Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+        </Grid>
     </DockPanel>
 </UserControl>

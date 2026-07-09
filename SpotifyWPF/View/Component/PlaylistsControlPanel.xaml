@@ -1,0 +1,130 @@
+<UserControl x:Class="SpotifyWPF.View.Component.PlaylistsControlPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SpotifyWPF.View.Component"
+             x:Name="Root"
+             MinHeight="28"
+             VerticalAlignment="Stretch">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
+
+    <Border Background="{StaticResource AppSurfaceBrush}"
+            BorderBrush="{StaticResource AppBorderBrush}"
+            BorderThickness="1">
+        <DockPanel LastChildFill="True">
+            <ToggleButton DockPanel.Dock="Top"
+                          Style="{StaticResource ControlPanelHeaderToggleStyle}"
+                          IsChecked="{Binding IsExpanded, ElementName=Root, Mode=TwoWay}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Controls"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource AppForegroundBrush}"/>
+                    <TextBlock Margin="8,0,0,0"
+                               FontFamily="Segoe UI Symbol"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource AppMutedForegroundBrush}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="▶"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsExpanded, ElementName=Root}" Value="True">
+                                        <Setter Property="Text" Value="▼"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </ToggleButton>
+
+            <TabControl Style="{StaticResource ControlPanelTabControlStyle}"
+                        DataContext="{Binding DataContext, ElementName=Root}"
+                        Visibility="{Binding IsExpanded, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}">
+                <TabItem Header="Logs">
+                    <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                        <local:ActivityLogView DataContext="{Binding ActivityLog, ElementName=Root}"/>
+                    </Border>
+                </TabItem>
+
+                <TabItem Header="Actions">
+                    <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                        <TreeView x:Name="QueuedActionsTreeView"
+                                  ItemsSource="{Binding QueuedActions}"
+                                  FontFamily="Consolas"
+                                  FontSize="11"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  VerticalAlignment="Stretch"
+                                  MinHeight="72"
+                                  PreviewKeyDown="QueuedActionsTreeView_PreviewKeyDown">
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding DetailItems}">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                    <HierarchicalDataTemplate.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" Margin="4,1,0,1"/>
+                                        </DataTemplate>
+                                    </HierarchicalDataTemplate.ItemTemplate>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </Border>
+                </TabItem>
+
+                <TabItem Header="Tracks">
+                    <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0"
+                                        Style="{StaticResource ControlPanelToolbarStyle}"
+                                        HorizontalAlignment="Right">
+                                <TextBlock Text="Double-click a playlist or use Load Tracks."
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"
+                                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+                                <Button Content="Load Tracks"
+                                        Command="{Binding LoadTracksCommand}"
+                                        CommandParameter="{Binding SelectedPlaylist}"
+                                        Focusable="False"
+                                        Padding="12,4"/>
+                            </StackPanel>
+
+                            <DataGrid Grid.Row="1"
+                                      x:Name="TracksDataGrid"
+                                      ItemsSource="{Binding Tracks}"
+                                      AutoGenerateColumns="False"
+                                      CanUserAddRows="False"
+                                      IsReadOnly="True"
+                                      CanUserSortColumns="True"
+                                      HeadersVisibility="Column"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      VerticalAlignment="Stretch"
+                                      MinHeight="72">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="#" Binding="{Binding Position}" SortMemberPath="Position" Width="Auto"/>
+                                    <DataGridTextColumn Header="Name" Binding="{Binding TrackName}" SortMemberPath="TrackName" Width="*"/>
+                                    <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}" SortMemberPath="Artists" Width="*"/>
+                                    <DataGridTextColumn Header="Album" Binding="{Binding Album}" SortMemberPath="Album" Width="*"/>
+                                    <DataGridTextColumn Header="Disc #" Binding="{Binding DiscNumber}" SortMemberPath="DiscNumber" Width="Auto"/>
+                                    <DataGridTextColumn Header="Track #" Binding="{Binding TrackNumber}" SortMemberPath="TrackNumber" Width="Auto"/>
+                                    <DataGridTextColumn Header="Duration" Binding="{Binding Duration}" SortMemberPath="Duration" Width="Auto"/>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding ItemType}" SortMemberPath="ItemType" Width="Auto"/>
+                                    <DataGridTextColumn Header="Spotify ID" Binding="{Binding SpotifyId}" SortMemberPath="SpotifyId" Width="*"/>
+                                    <DataGridTextColumn Header="Note" Binding="{Binding StatusNote}" SortMemberPath="StatusNote" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+                </TabItem>
+            </TabControl>
+        </DockPanel>
+    </Border>
+</UserControl>

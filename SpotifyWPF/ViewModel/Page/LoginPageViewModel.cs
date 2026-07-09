@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows;
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
@@ -38,6 +39,7 @@ namespace SpotifyWPF.ViewModel.Page
         }
 
         private bool _isLoggingIn;
+
         public bool IsLoggingIn
         {
             get => _isLoggingIn;
@@ -45,10 +47,33 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 if (Set(ref _isLoggingIn, value))
                 {
+                    RaisePropertyChanged(nameof(IsLoginFormEnabled));
                     SpotifyLoginCommand?.RaiseCanExecuteChanged();
                     RefreshSpotifyTokenCommand?.RaiseCanExecuteChanged();
                 }
             }
+        }
+
+        private bool _showLoginBridge;
+
+        public bool ShowLoginBridge
+        {
+            get => _showLoginBridge;
+            set
+            {
+                if (Set(ref _showLoginBridge, value))
+                    RaisePropertyChanged(nameof(IsLoginFormEnabled));
+            }
+        }
+
+        public bool IsLoginFormEnabled => !IsLoggingIn && !ShowLoginBridge;
+
+        private string _loginStatusText = "Waiting for Spotify authorization…";
+
+        public string LoginStatusText
+        {
+            get => _loginStatusText;
+            set => Set(ref _loginStatusText, value);
         }
 
         public LoginPageViewModel(ISpotify spotify, IMessageBoxService messageBoxService)
@@ -62,10 +87,11 @@ namespace SpotifyWPF.ViewModel.Page
             SpotifyLoginCommand = new RelayCommand(ExecuteLogin, CanExecuteLogin);
             RefreshSpotifyTokenCommand = new RelayCommand(ExecuteRefreshToken, CanExecuteLogin);
 
-            // Listen for login failures so we can unlock the button
-            MessengerInstance.Register<object>(this, "LoginFailed", _ => 
+            MessengerInstance.Register<object>(this, "LoginFailed", _ =>
             {
                 IsLoggingIn = false;
+                ShowLoginBridge = false;
+                LoginStatusText = "Authorization failed or was cancelled.";
             });
         }
 
@@ -73,26 +99,28 @@ namespace SpotifyWPF.ViewModel.Page
         {
             _spotify.ResetAuthenticationState();
             IsLoggingIn = false;
+            ShowLoginBridge = false;
+            LoginStatusText = "Waiting for Spotify authorization…";
         }
 
         private async void ExecuteLogin()
         {
             try
             {
-                // 1. Validate using your service instead of CanExecute
                 if (string.IsNullOrWhiteSpace(UserClientId))
                 {
                     _messageBoxService.ShowMessageBox(
-                        "Please enter your Spotify Client ID.", 
-                        "Client ID Required", 
-                        Service.MessageBoxes.MessageBoxButton.OK, 
+                        "Please enter your Spotify Client ID.",
+                        "Client ID Required",
+                        Service.MessageBoxes.MessageBoxButton.OK,
                         MessageBoxIcon.Warning
                     );
-                    return; // Stop execution here
+                    return;
                 }
 
-                // 2. Proceed with login if valid
                 IsLoggingIn = true;
+                ShowLoginBridge = false;
+                LoginStatusText = "Waiting for Spotify authorization…";
                 SaveClientId(UserClientId.Trim());
                 Properties.Settings.Default.Save();
 
@@ -102,6 +130,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 System.Windows.MessageBox.Show($"A hidden crash occurred:\n{ex.Message}", "Crash Detected");
                 IsLoggingIn = false;
+                ShowLoginBridge = false;
             }
         }
 
@@ -121,6 +150,8 @@ namespace SpotifyWPF.ViewModel.Page
                 }
 
                 IsLoggingIn = true;
+                ShowLoginBridge = false;
+                LoginStatusText = "Refreshing Spotify authorization…";
                 SaveClientId(UserClientId.Trim());
                 Properties.Settings.Default.Save();
 
@@ -130,12 +161,13 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 System.Windows.MessageBox.Show($"A hidden crash occurred:\n{ex.Message}", "Crash Detected");
                 IsLoggingIn = false;
+                ShowLoginBridge = false;
             }
         }
 
         private bool CanExecuteLogin()
         {
-            return !IsLoggingIn && !string.IsNullOrWhiteSpace(UserClientId);
+            return !IsLoggingIn && !ShowLoginBridge && !string.IsNullOrWhiteSpace(UserClientId);
         }
 
         private void LoadSavedClientIds()
@@ -171,10 +203,15 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void OnSuccess()
         {
-            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            Application.Current.Dispatcher.BeginInvoke(new Action(async () =>
             {
                 IsLoggingIn = false;
+                LoginStatusText = "Signed in. Opening playlists…";
+                ShowLoginBridge = true;
 
+                await Task.Delay(900);
+
+                ShowLoginBridge = false;
                 // Pass new object() to avoid anonymous type matching bugs in MVVM Light
                 MessengerInstance.Send<object>(new object(), MessageType.LoginSuccessful);
             }));

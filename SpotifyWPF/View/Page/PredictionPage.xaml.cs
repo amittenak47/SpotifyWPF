@@ -1,6 +1,9 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using CommonServiceLocator;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Navigation;using CommonServiceLocator;
 using SpotifyWPF.Service.Playback;
 using SpotifyWPF.ViewModel.Page;
 
@@ -13,10 +16,14 @@ namespace SpotifyWPF.View.Page
     /// </summary>
     public partial class PredictionPage
     {
+        private bool _scrubStarted;
+
         public PredictionPage()
         {
             InitializeComponent();
         }
+
+        private PredictionPageViewModel ViewModel => DataContext as PredictionPageViewModel;
 
         private async void PredictionPage_Loaded(object sender, RoutedEventArgs e)
         {
@@ -35,12 +42,15 @@ namespace SpotifyWPF.View.Page
             }
 
             // WebView2 must be in the visual tree before CoreWebView2 initializes.
-            if (DataContext is PredictionPageViewModel viewModel)
-                await viewModel.OnPageLoadedAsync();
+            if (ViewModel != null)
+                await ViewModel.OnPageLoadedAsync();
         }
 
         private void PredictionPage_Unloaded(object sender, RoutedEventArgs e)
         {
+            if (ViewModel?.IsMiniPlayerMode == true)
+                ViewModel.IsMiniPlayerMode = false;
+
             var view = PlayerHostBorder.Child;
 
             if (view == null)
@@ -48,6 +58,57 @@ namespace SpotifyWPF.View.Page
 
             PlayerHostBorder.Child = null;
             (Window.GetWindow(this) as MainWindow)?.ParkWebPlaybackView(view);
+        }
+
+        private void Scrubber_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is Slider slider))
+                return;
+
+            slider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(Scrubber_DragStarted), true);
+            slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(Scrubber_DragCompleted), true);
+        }
+
+        private void Scrubber_DragStarted(object sender, DragStartedEventArgs e)
+        {
+            _scrubStarted = true;
+            ViewModel?.BeginScrub();
+        }
+
+        private void Scrubber_DragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            EndScrubIfActive();
+        }
+
+        private void Scrubber_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _scrubStarted = true;
+            ViewModel?.BeginScrub();
+        }
+
+        private void Scrubber_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            EndScrubIfActive();
+        }
+
+        private void Scrubber_LostMouseCapture(object sender, MouseEventArgs e)
+        {
+            EndScrubIfActive();
+        }
+
+        private void EndScrubIfActive()
+        {
+            if (!_scrubStarted)
+                return;
+
+            _scrubStarted = false;
+            ViewModel?.EndScrub();
+        }
+
+        private void PaulLamereLink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+            e.Handled = true;
         }
     }
 }

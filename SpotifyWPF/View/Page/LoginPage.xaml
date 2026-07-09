@@ -1,14 +1,23 @@
 ﻿<UserControl x:Class="SpotifyWPF.View.Page.LoginPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:i="http://schemas.microsoft.com/expression/2010/interactivity"
-             mc:Ignorable="d" 
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
 
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
+
+    <!-- DataContext comes from MainWindow DataTemplate (LoginPageViewModel). Do not override here. -->
     <Grid Background="{StaticResource AppBackgroundBrush}">
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480" Margin="24">
+        <StackPanel HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    MaxWidth="480"
+                    Margin="24"
+                    Panel.ZIndex="0"
+                    IsEnabled="{Binding IsLoginFormEnabled}">
             <TextBlock Text="Bring Your Own Spotify App"
                        FontSize="20" FontWeight="SemiBold"
                        HorizontalAlignment="Center" Margin="0,0,0,12"/>
@@ -53,5 +62,40 @@
                         Padding="16,6"/>
             </StackPanel>
         </StackPanel>
+
+        <Border Panel.ZIndex="1"
+                Background="#E6121212"
+                Visibility="{Binding IsLoggingIn,
+                                     Converter={StaticResource BooleanToVisibilityConverter},
+                                     FallbackValue=Collapsed,
+                                     TargetNullValue=Collapsed}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="280">
+                <ProgressBar IsIndeterminate="True" Height="8" Margin="0,0,0,16"/>
+                <TextBlock Text="{Binding LoginStatusText}"
+                           HorizontalAlignment="Center"
+                           Foreground="{StaticResource AppForegroundBrush}"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <Border Panel.ZIndex="2"
+                Background="{StaticResource AppBackgroundBrush}"
+                Visibility="{Binding ShowLoginBridge,
+                                     Converter={StaticResource BooleanToVisibilityConverter},
+                                     FallbackValue=Collapsed,
+                                     TargetNullValue=Collapsed}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="Signed in"
+                           FontSize="28"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           Foreground="{StaticResource AppForegroundBrush}"/>
+                <TextBlock Text="Loading your library…"
+                           Margin="0,8,0,0"
+                           HorizontalAlignment="Center"
+                           Foreground="{StaticResource AppMutedForegroundBrush}"/>
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>

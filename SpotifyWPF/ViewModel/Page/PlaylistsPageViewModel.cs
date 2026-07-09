@@ -140,6 +140,22 @@ namespace SpotifyWPF.ViewModel.Page
 
         public ObservableCollection<Track> Tracks { get; } = new ObservableCollection<Track>();
 
+        private PlaylistCacheItem _selectedPlaylist;
+
+        public PlaylistCacheItem SelectedPlaylist
+        {
+            get => _selectedPlaylist;
+            set => Set(ref _selectedPlaylist, value);
+        }
+
+        private bool _isControlsPanelExpanded = true;
+
+        public bool IsControlsPanelExpanded
+        {
+            get => _isControlsPanelExpanded;
+            set => Set(ref _isControlsPanelExpanded, value);
+        }
+
         public ObservableCollection<QueuedPlaylistAction> QueuedActions => _actionQueue.QueuedActions;
 
         public string NewPlaylistName
