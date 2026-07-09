@@ -56,11 +56,19 @@ namespace SpotifyWPF.View.Component
 
         private int _hoverToBeatIndex = -1;
 
+        private readonly int[] _hoverChain = { -1, -1, -1, -1 };
+
+        private int[] _pinnedChain;
+
+        private const int MaxPreviewHopDepth = 3;
+
         private long _lastPositionMs;
 
         private double _positionStampMs;
 
         private double _zoom = 1.0;
+
+        private bool _isRingScrubbing;
 
         private const double MinZoom = 0.75;
 
@@ -126,6 +134,14 @@ namespace SpotifyWPF.View.Component
             DependencyProperty.Register(nameof(ToggleLockCommand), typeof(ICommand), typeof(JukeboxRingCanvas),
                 new FrameworkPropertyMetadata(null));
 
+        public static readonly DependencyProperty ScrubToMsCommandProperty =
+            DependencyProperty.Register(nameof(ScrubToMsCommand), typeof(ICommand), typeof(JukeboxRingCanvas),
+                new FrameworkPropertyMetadata(null));
+
+        public static readonly DependencyProperty EndScrubCommandProperty =
+            DependencyProperty.Register(nameof(EndScrubCommand), typeof(ICommand), typeof(JukeboxRingCanvas),
+                new FrameworkPropertyMetadata(null));
+
         public static readonly DependencyProperty ResetPlaysTokenProperty =
             DependencyProperty.Register(nameof(ResetPlaysToken), typeof(int), typeof(JukeboxRingCanvas),
                 new FrameworkPropertyMetadata(0, FrameworkPropertyMetadataOptions.AffectsRender,
@@ -134,6 +150,10 @@ namespace SpotifyWPF.View.Component
         public static readonly DependencyProperty MiniPlayerModeProperty =
             DependencyProperty.Register(nameof(MiniPlayerMode), typeof(bool), typeof(JukeboxRingCanvas),
                 new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
+        public static readonly DependencyProperty PreviewHopDepthProperty =
+            DependencyProperty.Register(nameof(PreviewHopDepth), typeof(int), typeof(JukeboxRingCanvas),
+                new FrameworkPropertyMetadata(2, FrameworkPropertyMetadataOptions.AffectsRender));
 
         public long DurationMs
         {
@@ -196,6 +216,20 @@ namespace SpotifyWPF.View.Component
             set => SetValue(ToggleLockCommandProperty, value);
         }
 
+        /// <summary>Seek the transport scrubber to the given position in milliseconds.</summary>
+        public ICommand ScrubToMsCommand
+        {
+            get => (ICommand)GetValue(ScrubToMsCommandProperty);
+            set => SetValue(ScrubToMsCommandProperty, value);
+        }
+
+        /// <summary>Commit the ring scrub and resume normal playback position updates.</summary>
+        public ICommand EndScrubCommand
+        {
+            get => (ICommand)GetValue(EndScrubCommandProperty);
+            set => SetValue(EndScrubCommandProperty, value);
+        }
+
         /// <summary>Increment to clear play-coverage bars (the "Reset plays" action).</summary>
         public int ResetPlaysToken
         {
@@ -208,6 +242,13 @@ namespace SpotifyWPF.View.Component
         {
             get => (bool)GetValue(MiniPlayerModeProperty);
             set => SetValue(MiniPlayerModeProperty, value);
+        }
+
+        /// <summary>How many branch hops to preview when hovering (1–3).</summary>
+        public int PreviewHopDepth
+        {
+            get => (int)GetValue(PreviewHopDepthProperty);
+            set => SetValue(PreviewHopDepthProperty, value);
         }
 
         private static void OnPositionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -252,6 +293,8 @@ namespace SpotifyWPF.View.Component
             _flashes.Clear();
             _hoverBeatIndex = -1;
             _hoverToBeatIndex = -1;
+            ClearChain(_hoverChain);
+            _pinnedChain = null;
         }
 
         private void OnAnimationTick()
@@ -393,26 +436,21 @@ namespace SpotifyWPF.View.Component
             base.OnMouseMove(e);
 
             var point = e.GetPosition(this);
-            var hit = HitTestBeat(point);
-            var toBeat = -1;
 
-            if (hit >= 0)
+            if (_isRingScrubbing && e.LeftButton == MouseButtonState.Pressed)
             {
-                var graph = Graph;
-
-                if (graph != null)
-                {
-                    var inspect = NearestBeatWithBranches(graph, hit, 2);
-
-                    if (inspect >= 0)
-                        toBeat = HitTestBranchEdge(point, graph, inspect);
-                }
+                ScrubToPoint(point);
+                return;
             }
 
-            if (hit != _hoverBeatIndex || toBeat != _hoverToBeatIndex)
+            var hit = HitTestBeat(point);
+            var before = ChainSignature(_hoverChain);
+            UpdateHoverChain(point);
+            var after = ChainSignature(_hoverChain);
+
+            if (hit != _hoverBeatIndex || before != after)
             {
                 _hoverBeatIndex = hit;
-                _hoverToBeatIndex = toBeat;
                 InvalidateVisual();
             }
 
@@ -422,8 +460,13 @@ namespace SpotifyWPF.View.Component
         protected override void OnMouseLeave(MouseEventArgs e)
         {
             base.OnMouseLeave(e);
+
+            if (_isRingScrubbing)
+                EndRingScrub();
+
             _hoverBeatIndex = -1;
             _hoverToBeatIndex = -1;
+            ClearChain(_hoverChain);
             InvalidateVisual();
         }
 
@@ -433,35 +476,115 @@ namespace SpotifyWPF.View.Component
 
             var graph = Graph;
             var command = ToggleLockCommand;
+            var point = e.GetPosition(this);
 
-            if (graph == null || command == null)
-                return;
-
-            var hit = HitTestBeat(e.GetPosition(this));
-
-            if (hit < 0)
-                return;
-
-            var inspect = NearestBeatWithBranches(graph, hit, 3);
-
-            if (inspect < 0)
-                return;
-
-            var toBeat = _hoverToBeatIndex;
-
-            if (toBeat < 0 || toBeat >= graph.Beats.Count)
-                return;
-
-            e.Handled = MiniPlayerMode;
-
-            var click = new RingBranchClick
+            if (graph != null && command != null && HitTestBeat(point) >= 0)
             {
-                FromBeatIndex = inspect,
-                ToBeatIndex = toBeat
-            };
+                var chain = ActivePreviewChain();
+                var depth = EffectivePreviewHopDepth();
+                var fromBeat = -1;
+                var toBeat = -1;
 
-            if (command.CanExecute(click))
-                command.Execute(click);
+                for (var hop = depth; hop >= 1; hop--)
+                {
+                    if (chain[hop] >= 0 && chain[hop - 1] >= 0)
+                    {
+                        fromBeat = chain[hop - 1];
+                        toBeat = chain[hop];
+                        break;
+                    }
+                }
+
+                if (fromBeat >= 0 && toBeat >= 0)
+                {
+                    e.Handled = MiniPlayerMode;
+
+                    _pinnedChain = (int[])chain.Clone();
+
+                    var click = new RingBranchClick
+                    {
+                        FromBeatIndex = fromBeat,
+                        ToBeatIndex = toBeat
+                    };
+
+                    if (command.CanExecute(click))
+                        command.Execute(click);
+
+                    return;
+                }
+            }
+
+            if (TryBeginRingScrub(point))
+                e.Handled = MiniPlayerMode;
+        }
+
+        protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+        {
+            base.OnMouseLeftButtonUp(e);
+
+            if (_isRingScrubbing)
+                EndRingScrub();
+        }
+
+        private bool TryBeginRingScrub(Point point)
+        {
+            var ms = PositionMsFromPoint(point);
+
+            if (!ms.HasValue)
+                return false;
+
+            var scrubCommand = ScrubToMsCommand;
+
+            if (scrubCommand == null || !scrubCommand.CanExecute(ms.Value))
+                return false;
+
+            _isRingScrubbing = true;
+            CaptureMouse();
+            scrubCommand.Execute(ms.Value);
+            Cursor = Cursors.SizeWE;
+            return true;
+        }
+
+        private void ScrubToPoint(Point point)
+        {
+            var ms = PositionMsFromPoint(point);
+            var scrubCommand = ScrubToMsCommand;
+
+            if (!ms.HasValue || scrubCommand == null || !scrubCommand.CanExecute(ms.Value))
+                return;
+
+            scrubCommand.Execute(ms.Value);
+        }
+
+        private void EndRingScrub()
+        {
+            if (!_isRingScrubbing)
+                return;
+
+            _isRingScrubbing = false;
+            ReleaseMouseCapture();
+            EndScrubCommand?.Execute(null);
+            Cursor = Cursors.Arrow;
+        }
+
+        /// <summary>Map a screen point to a timeline position, or null if too close to center.</summary>
+        private long? PositionMsFromPoint(Point point)
+        {
+            var total = TotalMs();
+
+            if (total <= 0 || ActualWidth <= 0 || ActualHeight <= 0)
+                return null;
+
+            var center = new Point(ActualWidth / 2, ActualHeight / 2);
+            var dx = point.X - center.X;
+            var dy = point.Y - center.Y;
+
+            if (dx * dx + dy * dy < 16)
+                return null;
+
+            var fraction = (Math.Atan2(dy, dx) + Math.PI / 2) / (Math.PI * 2);
+            fraction = ((fraction % 1) + 1) % 1;
+            return (long)Math.Round(fraction * total);
         }
 
         protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -636,6 +759,161 @@ namespace SpotifyWPF.View.Component
             return false;
         }
 
+        private void ClearChain(int[] chain)
+        {
+            for (var i = 0; i < chain.Length; i++)
+                chain[i] = -1;
+        }
+
+        private int EffectivePreviewHopDepth()
+        {
+            return Math.Max(1, Math.Min(MaxPreviewHopDepth, PreviewHopDepth));
+        }
+
+        private static string ChainSignature(int[] chain)
+        {
+            return chain == null ? string.Empty : string.Join(",", chain);
+        }
+
+        /// <summary>Hover chain wins; pinned chain keeps the fan visible after a lock click.</summary>
+        private int[] ActivePreviewChain()
+        {
+            if (_hoverChain[0] >= 0)
+                return _hoverChain;
+
+            return _pinnedChain ?? _hoverChain;
+        }
+
+        private void UpdateHoverChain(Point point)
+        {
+            ClearChain(_hoverChain);
+            _hoverToBeatIndex = -1;
+
+            var graph = Graph;
+
+            if (graph == null)
+                return;
+
+            var hit = HitTestBeat(point);
+
+            if (hit < 0)
+                return;
+
+            var inspect = NearestBeatWithBranches(graph, hit, 2);
+
+            if (inspect < 0)
+                return;
+
+            _hoverChain[0] = inspect;
+
+            if (_pinnedChain != null && _pinnedChain[0] != inspect)
+                _pinnedChain = null;
+
+            var depth = EffectivePreviewHopDepth();
+            var parent = inspect;
+
+            for (var hop = 1; hop <= depth; hop++)
+            {
+                var to = HitTestBranchEdge(point, graph, parent);
+
+                if (to < 0)
+                    break;
+
+                _hoverChain[hop] = to;
+                parent = to;
+            }
+
+            if (_hoverChain[1] >= 0)
+                _hoverToBeatIndex = _hoverChain[1];
+        }
+
+        private string DrawChainedBranchPreview(DrawingContext dc, BeatGraph graph, Point center,
+            double rChord, long total, IReadOnlyList<BranchLock> locks, int[] chain)
+        {
+            if (chain == null || chain[0] < 0)
+                return null;
+
+            var beats = graph.Beats;
+            var inspect = chain[0];
+            var depth = EffectivePreviewHopDepth();
+            var hopText = new List<string>();
+
+            for (var hop = 1; hop <= depth; hop++)
+            {
+                if (hop > 1 && chain[hop - 1] < 0)
+                    break;
+
+                var parent = hop == 1 ? chain[0] : chain[hop - 1];
+
+                if (parent < 0 || parent >= beats.Count)
+                    break;
+
+                var edges = beats[parent].Neighbors;
+
+                if (edges.Count == 0)
+                    break;
+
+                GetNeighborDistanceRange(edges, out var minDist, out var maxDist);
+                var layerAlpha = hop == 1 ? 0.82 : hop == 2 ? 0.52 : 0.34;
+                var layerRadius = rChord * (1 - (hop - 1) * 0.06);
+                var highlight = chain[hop];
+
+                foreach (var edge in edges)
+                {
+                    var dest = edge.DestinationIndex;
+
+                    if (dest < 0 || dest >= beats.Count)
+                        continue;
+
+                    var a1 = BeatAngle(beats[parent], total);
+                    var a2 = BeatAngle(beats[dest], total);
+                    var branchColor = DistanceBranchColor(edge.Distance, minDist, maxDist);
+                    var locked = IsBranchLocked(locks, parent, dest);
+                    var isHighlighted = dest == highlight;
+                    var width = isHighlighted ? 2.5 : locked ? 2.0 : 1.35;
+                    var alpha = isHighlighted ? 1.0 : locked ? 0.88 : layerAlpha;
+
+                    DrawChord(dc, center, layerRadius, a1, a2,
+                        MakePen(locked ? LockColor : branchColor, width, alpha));
+
+                    var dot = Polar(center, layerRadius, a2);
+                    dc.DrawEllipse(MakeBrush(locked ? LockColor : branchColor, alpha), null, dot,
+                        isHighlighted ? 4.2 : 3, isHighlighted ? 4.2 : 3);
+                }
+
+                if (highlight >= 0)
+                    hopText.Add($"hop{hop}: {parent}→{highlight}");
+
+                if (highlight < 0)
+                    break;
+            }
+
+            var origin = Polar(center, rChord, BeatAngle(beats[inspect], total));
+            dc.DrawEllipse(MakeBrush(HotColor, 0.9), null, origin, 4, 4);
+
+            var edgeCount = beats[inspect].Neighbors.Count;
+            var path = hopText.Count > 0 ? " · " + string.Join(" · ", hopText) : string.Empty;
+
+            return $"beat {inspect} · {edgeCount} branch{(edgeCount == 1 ? "" : "es")}{path}";
+        }
+
+        private Color CoverageBarColor(BeatNode beat, double playNorm, Color[] sectionColors)
+        {
+            var section = BeatColor(beat, sectionColors);
+            var heat = FromHsl(28 - playNorm * 28, 0.72, 0.42 + playNorm * 0.18);
+            var blend = 0.25 + playNorm * 0.55;
+            return BlendColors(section, heat, blend);
+        }
+
+        private static Color BlendColors(Color a, Color b, double t)
+        {
+            t = Math.Max(0, Math.Min(1, t));
+            return Color.FromRgb(
+                (byte)(a.R + (b.R - a.R) * t),
+                (byte)(a.G + (b.G - a.G) * t),
+                (byte)(a.B + (b.B - a.B) * t));
+        }
+
         #endregion
 
         #region Rendering
@@ -740,19 +1018,17 @@ namespace SpotifyWPF.View.Component
 
             DrawSectionRim(dc, center, outer - 4, total, sectionColors);
 
-            // Coverage bars: length grows with replay count (the height map from the reference).
+            // Coverage bars: length = play count; color blends section tint with play-frequency heat.
             for (var i = 0; i < beats.Count; i++)
             {
                 var t = _playCounts.Length == beats.Count ? _playCounts[i] / (double)maxPlay : 0;
                 var length = minLen + t * ext;
                 var angle = BeatAngle(beats[i], total);
                 DrawRadialLine(dc, center, rIn, rIn + length, angle,
-                    MakePen(BeatColor(beats[i], sectionColors), barWidth));
+                    MakePen(CoverageBarColor(beats[i], t, sectionColors), barWidth));
             }
 
-            // Mini player: continue the bars out to the square window edges so the transparent
-            // window's corners aren't an abrupt clip (master's extended segment markers, adapted
-            // to beat bars — per-section colors come along for free via BeatColor).
+            // Mini player: neutral grey extensions to the square edges (no section tint bleed).
             if (MiniPlayerMode)
             {
                 for (var i = 0; i < beats.Count; i++)
@@ -764,7 +1040,7 @@ namespace SpotifyWPF.View.Component
                         continue;
 
                     DrawRadialLine(dc, center, outer - 1, edgeDist, angle,
-                        MakePen(BeatColor(beats[i], sectionColors), barWidth, 0.22));
+                        MakePen(RimColor, barWidth, 0.28));
                 }
             }
 
@@ -813,69 +1089,12 @@ namespace SpotifyWPF.View.Component
                     MakePen(HotColor, barWidth + 1.5));
             }
 
-            // Hover: fan out branches colored by similarity distance; preview one hop ahead.
+            // Chained branch preview (distance-colored); pinned after lock so options stay visible.
             string hoverText = null;
+            var previewChain = ActivePreviewChain();
 
-            if (_hoverBeatIndex >= 0)
-            {
-                var inspect = NearestBeatWithBranches(graph, _hoverBeatIndex, 2);
-
-                if (inspect >= 0)
-                {
-                    var edges = beats[inspect].Neighbors;
-                    GetNeighborDistanceRange(edges, out var minDist, out var maxDist);
-                    hoverText = $"beat {inspect} · {edges.Count} branch{(edges.Count == 1 ? "" : "es")}";
-
-                    foreach (var edge in edges)
-                    {
-                        var dest = edge.DestinationIndex;
-
-                        if (dest < 0 || dest >= beats.Count)
-                            continue;
-
-                        var a1 = BeatAngle(beats[inspect], total);
-                        var a2 = BeatAngle(beats[dest], total);
-                        var branchColor = DistanceBranchColor(edge.Distance, minDist, maxDist);
-                        var locked = IsBranchLocked(locks, inspect, dest);
-                        var isHovered = dest == _hoverToBeatIndex;
-                        var width = isHovered ? 2.4 : locked ? 2.0 : 1.4;
-                        var alpha = isHovered ? 1.0 : locked ? 0.85 : 0.72;
-
-                        DrawChord(dc, center, rChord, a1, a2,
-                            MakePen(locked ? LockColor : branchColor, width, alpha));
-
-                        var dot = Polar(center, rChord, a2);
-                        dc.DrawEllipse(MakeBrush(locked ? LockColor : branchColor, alpha), null, dot,
-                            isHovered ? 4.2 : 3, isHovered ? 4.2 : 3);
-
-                        // Second hop: where this branch lands, show its outgoing options faintly.
-                        if (isHovered)
-                        {
-                            var hopEdges = beats[dest].Neighbors;
-                            GetNeighborDistanceRange(hopEdges, out var hopMin, out var hopMax);
-
-                            foreach (var hop in hopEdges)
-                            {
-                                var hopDest = hop.DestinationIndex;
-
-                                if (hopDest < 0 || hopDest >= beats.Count || hopDest == inspect)
-                                    continue;
-
-                                var hopA1 = BeatAngle(beats[dest], total);
-                                var hopA2 = BeatAngle(beats[hopDest], total);
-                                var hopColor = DistanceBranchColor(hop.Distance, hopMin, hopMax);
-                                DrawChord(dc, center, rChord * 0.92, hopA1, hopA2,
-                                    MakePen(hopColor, 1.1, 0.35));
-                                var hopDot = Polar(center, rChord * 0.92, hopA2);
-                                dc.DrawEllipse(MakeBrush(hopColor, 0.4), null, hopDot, 2.2, 2.2);
-                            }
-                        }
-                    }
-
-                    var origin = Polar(center, rChord, BeatAngle(beats[inspect], total));
-                    dc.DrawEllipse(MakeBrush(HotColor, 0.9), null, origin, 4, 4);
-                }
-            }
+            if (previewChain[0] >= 0)
+                hoverText = DrawChainedBranchPreview(dc, graph, center, rChord, total, locks, previewChain);
 
             // The predictor's mind: one pulsing chord for the planned jump.
             if (plannedFrom >= 0 && plannedTo >= 0 && plannedFrom < beats.Count && plannedTo < beats.Count)
@@ -899,38 +1118,30 @@ namespace SpotifyWPF.View.Component
                     BeatAngle(beats[to], total), MakePen(HotColor, 1 + 2.4 * alpha, alpha * 0.9));
             }
 
-            // Locked branches while hovering are drawn in the hover fan-out above.
-            if (locks != null && _hoverBeatIndex < 0)
+            // Locked branches on beats not currently being inspected.
+            if (locks != null)
             {
+                var inspect = previewChain[0];
+
                 foreach (var branchLock in locks)
                 {
                     if (branchLock.FromBeatIndex >= beats.Count || branchLock.ToBeatIndex >= beats.Count ||
                         branchLock.FromBeatIndex < 0 || branchLock.ToBeatIndex < 0)
                         continue;
 
-                    var a1 = BeatAngle(beats[branchLock.FromBeatIndex], total);
-                    var a2 = BeatAngle(beats[branchLock.ToBeatIndex], total);
-                    DrawChord(dc, center, rChord, a1, a2, MakePen(LockColor, 2.1));
-
-                    var mid = ChordMidpoint(center, rChord, a1, a2);
-                    dc.DrawEllipse(MakeBrush(LockColor, 1), null, mid, 3.4, 3.4);
-                }
-            }
-            else if (locks != null && _hoverBeatIndex >= 0)
-            {
-                // Draw locks from other beats while inspecting one beat.
-                foreach (var branchLock in locks)
-                {
-                    if (branchLock.FromBeatIndex == NearestBeatWithBranches(graph, _hoverBeatIndex, 2))
-                        continue;
-
-                    if (branchLock.FromBeatIndex >= beats.Count || branchLock.ToBeatIndex >= beats.Count ||
-                        branchLock.FromBeatIndex < 0 || branchLock.ToBeatIndex < 0)
+                    if (inspect >= 0 && branchLock.FromBeatIndex == inspect)
                         continue;
 
                     var a1 = BeatAngle(beats[branchLock.FromBeatIndex], total);
                     var a2 = BeatAngle(beats[branchLock.ToBeatIndex], total);
-                    DrawChord(dc, center, rChord, a1, a2, MakePen(LockColor, 1.6, 0.55));
+                    var alpha = inspect >= 0 ? 0.55 : 1.0;
+                    DrawChord(dc, center, rChord, a1, a2, MakePen(LockColor, inspect >= 0 ? 1.6 : 2.1, alpha));
+
+                    if (inspect < 0)
+                    {
+                        var mid = ChordMidpoint(center, rChord, a1, a2);
+                        dc.DrawEllipse(MakeBrush(LockColor, 1), null, mid, 3.4, 3.4);
+                    }
                 }
             }
 

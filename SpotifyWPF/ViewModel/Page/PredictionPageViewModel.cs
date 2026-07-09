@@ -142,6 +142,8 @@ namespace SpotifyWPF.ViewModel.Page
             EnterMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = true, () => !IsMiniPlayerMode);
             ExitMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = false, () => IsMiniPlayerMode);
             ToggleRingLockCommand = new RelayCommand<RingBranchClick>(ToggleRingLock);
+            RingScrubToCommand = new RelayCommand<long>(ScrubToPositionMs, ms => DurationMs > 0);
+            EndRingScrubCommand = new RelayCommand(EndScrub);
             ClearRingLocksCommand = new RelayCommand(ClearRingLocks);
             ResetRingPlaysCommand = new RelayCommand(() => RingResetPlaysToken++);
             StopPlaybackCommand = new RelayCommand(async () => await StopPlaybackAsync(), CanUsePlayer);
@@ -618,6 +620,15 @@ namespace SpotifyWPF.ViewModel.Page
 
         private int _ringResetPlaysToken;
 
+        private int _ringPreviewHopDepth = 2;
+
+        /// <summary>Branch hops to preview when hovering the ring (1–3).</summary>
+        public int RingPreviewHopDepth
+        {
+            get => _ringPreviewHopDepth;
+            set => Set(ref _ringPreviewHopDepth, Math.Max(1, Math.Min(3, value)));
+        }
+
         private bool _jukeboxLocksOnly;
 
         /// <summary>When true, jukebox jumps only travel the branches locked on the ring.</summary>
@@ -762,6 +773,10 @@ namespace SpotifyWPF.ViewModel.Page
         /// <summary>Ring click: lock/unlock the clicked beat's best branch.</summary>
         public RelayCommand<RingBranchClick> ToggleRingLockCommand { get; }
 
+        public RelayCommand<long> RingScrubToCommand { get; }
+
+        public RelayCommand EndRingScrubCommand { get; }
+
         public RelayCommand ClearRingLocksCommand { get; }
 
         public RelayCommand ResetRingPlaysCommand { get; }
@@ -849,6 +864,25 @@ namespace SpotifyWPF.ViewModel.Page
             _isUserScrubbing = true;
             _scrubPositionMs = PositionMs;
             RaisePropertyChanged(nameof(ScrubberPositionMs));
+        }
+
+        private void ScrubToPositionMs(long ms)
+        {
+            if (DurationMs <= 0)
+                return;
+
+            if (!_isUserScrubbing)
+                BeginScrub();
+
+            var clamped = Math.Max(0L, Math.Min(ms, DurationMs));
+
+            if (_scrubPositionMs == clamped)
+                return;
+
+            _scrubPositionMs = clamped;
+            PositionMs = clamped;
+            RaisePropertyChanged(nameof(ScrubberPositionMs));
+            RaisePropertyChanged(nameof(PositionText));
         }
 
         public void EndScrub()

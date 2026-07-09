@@ -600,10 +600,11 @@
     <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="Height" Value="22"/>
+    <Setter Property="MinHeight" Value="22"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type Slider}">
-          <Grid Background="{TemplateBinding Background}">
+          <Grid Background="{TemplateBinding Background}" MinHeight="22">
             <Border x:Name="TrackBackground"
                     Height="6"
                     VerticalAlignment="Center"
@@ -621,12 +622,28 @@
                               Style="{StaticResource DarkMediaSliderIncreaseRepeatStyle}"/>
               </Track.IncreaseRepeatButton>
               <Track.Thumb>
-                <Thumb Width="12" Height="12">
+                <Thumb x:Name="Thumb" Width="22" Height="22">
                   <Thumb.Template>
                     <ControlTemplate TargetType="{x:Type Thumb}">
-                      <Ellipse Fill="{DynamicResource AppBorderBrush}"
-                               Stroke="{DynamicResource AppBorderBrush}"
-                               StrokeThickness="1"/>
+                      <Grid Width="22" Height="22">
+                        <Ellipse x:Name="HitTarget" Fill="Transparent"/>
+                        <Ellipse x:Name="ThumbVisual"
+                                 Width="12"
+                                 Height="12"
+                                 Fill="{DynamicResource AppAccentBrush}"
+                                 Stroke="{DynamicResource AppBorderBrush}"
+                                 StrokeThickness="1"/>
+                      </Grid>
+                      <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                          <Setter TargetName="ThumbVisual" Property="Width" Value="16"/>
+                          <Setter TargetName="ThumbVisual" Property="Height" Value="16"/>
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                          <Setter TargetName="ThumbVisual" Property="Width" Value="16"/>
+                          <Setter TargetName="ThumbVisual" Property="Height" Value="16"/>
+                        </Trigger>
+                      </ControlTemplate.Triggers>
                     </ControlTemplate>
                   </Thumb.Template>
                 </Thumb>
@@ -636,6 +653,20 @@
           <ControlTemplate.Triggers>
             <Trigger Property="IsEnabled" Value="False">
               <Setter TargetName="TrackBackground" Property="Opacity" Value="0.45"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter Property="Height" Value="32"/>
+              <Setter Property="MinHeight" Value="32"/>
+              <Setter TargetName="TrackBackground" Property="Height" Value="8"/>
+              <Setter TargetName="Thumb" Property="Width" Value="28"/>
+              <Setter TargetName="Thumb" Property="Height" Value="28"/>
+            </Trigger>
+            <Trigger Property="IsMouseCaptureWithin" Value="True">
+              <Setter Property="Height" Value="32"/>
+              <Setter Property="MinHeight" Value="32"/>
+              <Setter TargetName="TrackBackground" Property="Height" Value="8"/>
+              <Setter TargetName="Thumb" Property="Width" Value="28"/>
+              <Setter TargetName="Thumb" Property="Height" Value="28"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>

@@ -11,9 +11,9 @@
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="2,0"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
             <Setter Property="Cursor" Value="Arrow"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -46,7 +46,7 @@
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="Foreground" Value="{StaticResource AppForegroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
         </Style>
     </UserControl.Resources>
 
@@ -63,8 +63,8 @@
                 Panel.ZIndex="2"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Background="{StaticResource AppSurfaceBrush}"
-                BorderBrush="{StaticResource AppBorderBrush}"
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="8"
                 Padding="6,5"
@@ -131,7 +131,7 @@
                     <CheckBox Content="Locks only"
                               VerticalAlignment="Center"
                               FontSize="10"
-                              Foreground="{StaticResource AppForegroundBrush}"
+                              Foreground="{DynamicResource AppForegroundBrush}"
                               IsChecked="{Binding JukeboxLocksOnly}"/>
                     <TextBlock Text="{Binding RingLockCountText}"
                                VerticalAlignment="Center"
