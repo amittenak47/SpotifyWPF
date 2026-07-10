@@ -403,10 +403,16 @@ namespace SpotifyWPF.View.Component
             if (Math.Abs(delta.X) < WheelDragThreshold && Math.Abs(delta.Y) < WheelDragThreshold)
                 return LockWheelAction.None;
 
-            if (Math.Abs(delta.X) >= Math.Abs(delta.Y))
-                return delta.X < 0 ? LockWheelAction.Clear : LockWheelAction.Reset;
+            if (delta.X < 0 && delta.Y < 0)
+                return LockWheelAction.Clear;
 
-            return delta.Y < 0 ? LockWheelAction.Maximize : LockWheelAction.Hops;
+            if (delta.X > 0 && delta.Y < 0)
+                return LockWheelAction.Reset;
+
+            if (delta.X > 0 && delta.Y > 0)
+                return LockWheelAction.Maximize;
+
+            return LockWheelAction.Hops;
         }
 
         private static TransportWheelAction PickTransportWheelAction(Vector delta)
