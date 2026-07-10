@@ -1,83 +1,88 @@
 <UserControl x:Class="SpotifyWPF.View.Page.PlaylistsPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:i="http://schemas.microsoft.com/expression/2010/interactivity"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:component="clr-namespace:SpotifyWPF.View.Component"
              mc:Ignorable="d"
-             DataContext="{Binding PlaylistsPage, Source={StaticResource Locator}}"    
+             DataContext="{Binding PlaylistsPage, Source={StaticResource Locator}}"
              d:DesignHeight="450" d:DesignWidth="800"
-             MinWidth="920" MinHeight="480">
+             MinWidth="720" MinHeight="400">
 
-    <DockPanel Background="{DynamicResource AppBackgroundBrush}">
-        <StatusBar DockPanel.Dock="Bottom">
-            <StatusBar.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                    </Grid>
-                </ItemsPanelTemplate>
-            </StatusBar.ItemsPanel>
-            <StatusBarItem>
-                <Label Content="{Binding Status, Converter={StaticResource StatusActionConverter}}"/>
-            </StatusBarItem>
-            <StatusBarItem Grid.Column="1" HorizontalContentAlignment="Stretch">
-                <ProgressBar IsIndeterminate="True" Height="10" Visibility="{Binding ProgressVisibility}"/>
-            </StatusBarItem>
-            <StatusBarItem Grid.Column="2">
-                <StackPanel Orientation="Horizontal" Margin="8,0,4,0">
-                    <Label Content="Request spacing (ms)" VerticalAlignment="Center"/>
-                    <TextBox Text="{Binding RequestSpacingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
-                             Width="56"
-                             VerticalContentAlignment="Center"
-                             Margin="0,0,8,0"/>
-                    <Button Content="{Binding ExecuteOrPauseButtonLabel}"
-                            Command="{Binding ExecuteOrPauseCommand}"
-                            Padding="12,3"
-                            Margin="0,0,8,0"/>
-                    <Button Content="Abort"
-                            Command="{Binding CancelCurrentActionCommand}"
-                            Padding="12,3"/>
-                </StackPanel>
-            </StatusBarItem>
-        </StatusBar>
+    <Grid Background="{DynamicResource AppBackgroundBrush}" ClipToBounds="False">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-        <Grid Margin="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="280"/>
-                <ColumnDefinition Width="Auto" MinWidth="56"/>
-                <ColumnDefinition Width="*" MinWidth="280"/>
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="2*"/>
-                <RowDefinition Height="8"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+        <DockPanel Grid.Row="0" Margin="8,8,8,0">
+            <StatusBar DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                <StatusBar.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                        </Grid>
+                    </ItemsPanelTemplate>
+                </StatusBar.ItemsPanel>
+                <StatusBarItem>
+                    <Label Content="{Binding Status, Converter={StaticResource StatusActionConverter}}"/>
+                </StatusBarItem>
+                <StatusBarItem Grid.Column="1" HorizontalContentAlignment="Stretch">
+                    <ProgressBar IsIndeterminate="True" Height="10" Visibility="{Binding ProgressVisibility}"/>
+                </StatusBarItem>
+                <StatusBarItem Grid.Column="2">
+                    <StackPanel Orientation="Horizontal" Margin="8,0,4,0">
+                        <Label Content="Spacing" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding RequestSpacingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="48"
+                                 VerticalContentAlignment="Center"
+                                 Margin="4,0,8,0"/>
+                        <Button Content="{Binding ExecuteOrPauseButtonLabel}"
+                                Command="{Binding ExecuteOrPauseCommand}"
+                                Padding="12,3"
+                                Margin="0,0,8,0"/>
+                        <Button Content="Abort"
+                                Command="{Binding CancelCurrentActionCommand}"
+                                Padding="12,3"/>
+                    </StackPanel>
+                </StatusBarItem>
+            </StatusBar>
 
-            <GroupBox Header="Playlists" Margin="0,0,8,8">
-                <DockPanel>
-                    <GroupBox DockPanel.Dock="Top" Header="Create Playlist" Margin="0,0,0,8">
-                        <WrapPanel Margin="4">
-                            <Label Content="Name" VerticalAlignment="Center"/>
+            <DockPanel>
+                <!-- Unified toolbar: create + search + load/delete/enqueue/mark -->
+                <Border DockPanel.Dock="Top"
+                        Background="{DynamicResource AppSurfaceBrush}"
+                        BorderBrush="{DynamicResource AppBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="10,8"
+                        Margin="0,0,0,8">
+                    <StackPanel>
+                        <WrapPanel Margin="0,0,0,8">
+                            <TextBlock Text="Create"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                             <TextBox Text="{Binding NewPlaylistName, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="180"
+                                     Width="160"
                                      VerticalContentAlignment="Center"
-                                     Margin="0,0,8,0"/>
-                            <Label Content="Description" VerticalAlignment="Center"/>
+                                     Margin="0,0,6,0"
+                                     ToolTip="Playlist name"/>
                             <TextBox Text="{Binding NewPlaylistDescription, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="260"
+                                     Width="200"
                                      VerticalContentAlignment="Center"
-                                     Margin="0,0,8,0"/>
+                                     Margin="0,0,6,0"
+                                     ToolTip="Description"/>
                             <CheckBox Content="Public"
                                       IsChecked="{Binding NewPlaylistIsPublic}"
                                       VerticalAlignment="Center"
-                                      Margin="0,0,8,0"/>
-                            <CheckBox Content="Collaborative"
+                                      Margin="0,0,6,0"/>
+                            <CheckBox Content="Collab"
                                       IsChecked="{Binding NewPlaylistIsCollaborative}"
                                       VerticalAlignment="Center"
                                       Margin="0,0,8,0"/>
@@ -85,207 +90,133 @@
                                     Command="{Binding CreatePlaylistCommand}"
                                     Padding="12,4"/>
                         </WrapPanel>
-                    </GroupBox>
 
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <Label Content="Search" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding PlaylistsFilterText, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="180"
-                                 VerticalContentAlignment="Center"
-                                 Margin="0,0,8,0"/>
-                        <Button Content="Search"
-                                Command="{Binding ApplyPlaylistsFilterCommand}"
-                                Focusable="False"
-                                Padding="12,4"
-                                Margin="0,0,8,0"/>
-                        <Button Content="Clear"
-                                Command="{Binding ClearPlaylistsFilterCommand}"
-                                Focusable="False"
-                                Padding="12,4"/>
+                        <WrapPanel>
+                            <TextBox Text="{Binding PlaylistsFilterText, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="200"
+                                     VerticalContentAlignment="Center"
+                                     Margin="0,0,8,0"
+                                     ToolTip="Filter playlists"/>
+                            <TextBlock Text="Limit"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,4,0"
+                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                            <TextBox Text="{Binding PlaylistLoadLimit, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="40"
+                                     VerticalContentAlignment="Center"
+                                     Margin="0,0,8,0"/>
+                            <Button Content="Load"
+                                    Command="{Binding LoadMorePlaylistsCommand}"
+                                    Padding="10,4"
+                                    Margin="0,0,4,0"/>
+                            <Button Content="Load All"
+                                    Command="{Binding LoadAllPlaylistsCommand}"
+                                    Padding="10,4"
+                                    Margin="0,0,4,0"/>
+                            <Button Content="Delete"
+                                    Command="{Binding DeletePlaylistsCommand}"
+                                    Padding="10,4"
+                                    Margin="0,0,12,0"/>
+                            <Button Content="Enqueue Load"
+                                    Command="{Binding EnqueueLoadLimitCommand}"
+                                    Focusable="False"
+                                    Padding="10,4"
+                                    Margin="0,0,4,0"/>
+                            <Button Content="Enqueue All"
+                                    Command="{Binding EnqueueLoadAllCommand}"
+                                    Focusable="False"
+                                    Padding="10,4"
+                                    Margin="0,0,4,0"/>
+                            <Button Content="Enqueue Delete"
+                                    Command="{Binding EnqueueDeleteSelectionCommand}"
+                                    CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
+                                    Focusable="False"
+                                    Padding="10,4"
+                                    Margin="0,0,12,0"/>
+                            <Button Content="Mark / Unmark"
+                                    Command="{Binding ToggleMarkCommand}"
+                                    CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
+                                    Focusable="False"
+                                    Padding="10,4"
+                                    Margin="0,0,4,0"/>
+                            <Button Content="Stage / Unstage"
+                                    Command="{Binding ToggleStageCommand}"
+                                    CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
+                                    Focusable="False"
+                                    Padding="10,4"
+                                    Margin="0,0,4,0"/>
+                            <Button Content="Refresh"
+                                    Command="{Binding RefreshCombinedCommand}"
+                                    CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
+                                    Padding="10,4"
+                                    Margin="0,0,4,0"/>
+                            <Button Content="Export"
+                                    Command="{Binding ExportToJsonCommand}"
+                                    Padding="10,4"/>
+                        </WrapPanel>
                     </StackPanel>
+                </Border>
 
-                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                        <Label Content="Limit" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding PlaylistLoadLimit, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="44"
-                                 VerticalContentAlignment="Center"
-                                 Margin="0,0,8,0"/>
-                        <Button Content="Load" Command="{Binding LoadMorePlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
-                        <Button Content="Load All" Command="{Binding LoadAllPlaylistsCommand}" Padding="12,4" Margin="0,0,8,0"/>
-                        <Button Content="Enqueue Load"
-                                Command="{Binding EnqueueLoadLimitCommand}"
-                                Focusable="False"
-                                Padding="12,4"
-                                Margin="0,0,8,0"/>
-                        <Button Content="Enqueue Load All"
-                                Command="{Binding EnqueueLoadAllCommand}"
-                                Focusable="False"
-                                Padding="12,4"
-                                Margin="0,0,8,0"/>
-                        <Button Content="Refresh Selected"
-                                Command="{Binding RefreshSelectedPlaylistsCommand}"
-                                CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
-                                Padding="12,4"
-                                Margin="0,0,8,0"/>
-                        <Button Content="Export" Command="{Binding ExportToJsonCommand}" Padding="12,4" Margin="0,0,8,0"/>
-                        <Button Content="Import" Command="{Binding ImportFromJsonCommand}" IsEnabled="False" Padding="12,4"/>
-                    </StackPanel>
+                <DataGrid x:Name="PlaylistsDataGrid"
+                          ItemsSource="{Binding CombinedPlaylists}"
+                          SelectedItem="{Binding SelectedPlaylistRow, Mode=TwoWay}"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          IsReadOnly="True"
+                          CanUserSortColumns="True"
+                          SelectionMode="Extended"
+                          SelectionUnit="FullRow"
+                          HeadersVisibility="Column"
+                          Background="Transparent"
+                          BorderBrush="{DynamicResource AppBorderBrush}"
+                          BorderThickness="1">
+                    <DataGrid.InputBindings>
+                        <MouseBinding Gesture="LeftDoubleClick"
+                                      Command="{Binding LoadTracksCommand}"
+                                      CommandParameter="{Binding SelectedPlaylist}"/>
+                        <KeyBinding Key="Delete"
+                                    Command="{Binding ToggleStageCommand}"
+                                    CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"/>
+                    </DataGrid.InputBindings>
 
-                    <DataGrid x:Name="PlaylistsDataGrid"
-                              ItemsSource="{Binding Playlists}"
-                              SelectedItem="{Binding SelectedPlaylist, Mode=TwoWay}"
-                              AutoGenerateColumns="False"
-                              CanUserAddRows="False"
-                              IsReadOnly="True"
-                              CanUserSortColumns="True"
-                              SelectionMode="Extended"
-                              SelectionUnit="FullRow"
-                              HeadersVisibility="Column">
-                        <DataGrid.InputBindings>
-                            <MouseBinding Gesture="LeftDoubleClick"
-                                          Command="{Binding LoadTracksCommand}"
-                                          CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItem}"/>
-                            <KeyBinding Key="Delete"
-                                        Command="{Binding StagePlaylistsCommand}"
-                                        CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"/>
-                        </DataGrid.InputBindings>
+                    <DataGrid.ContextMenu>
+                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                            <MenuItem Header="Open in Loop Lab"
+                                      Command="{Binding OpenInLoopLabCommand}"
+                                      CommandParameter="{Binding SelectedPlaylist}"/>
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
 
-                        <DataGrid.ContextMenu>
-                            <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                <MenuItem Header="Open in Loop Lab"
-                                          Command="{Binding OpenInLoopLabCommand}"
-                                          CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                            </ContextMenu>
-                        </DataGrid.ContextMenu>
+                    <DataGrid.RowStyle>
+                        <Style TargetType="{x:Type DataGridRow}" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding DeletionStatusName}" Value="Deleted">
+                                    <Setter Property="Background" Value="#8B2E2E"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DeletionStatusName}" Value="Failed">
+                                    <Setter Property="Background" Value="#8A6D1D"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
 
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="Name" IsReadOnly="True" Width="*"/>
-                            <DataGridTextColumn Header="Owner" Binding="{Binding OwnerDisplayName}" SortMemberPath="OwnerDisplayName" IsReadOnly="True" Width="*"/>
-                            <DataGridTextColumn Header="# Tracks" Binding="{Binding TracksTotal}" SortMemberPath="TracksTotal" IsReadOnly="True" Width="Auto"/>
-                            <DataGridTextColumn Header="Spotify ID" Binding="{Binding Id}" SortMemberPath="Id" IsReadOnly="True" Width="*"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </DockPanel>
-            </GroupBox>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="Name" Width="*"/>
+                        <DataGridTextColumn Header="Owner" Binding="{Binding OwnerDisplayName}" SortMemberPath="OwnerDisplayName" Width="*"/>
+                        <DataGridTextColumn Header="# Tracks" Binding="{Binding TracksTotal}" SortMemberPath="TracksTotal" Width="Auto"/>
+                        <DataGridTextColumn Header="Loaded" Binding="{Binding LoadedText}" SortMemberPath="LoadedText" Width="Auto"/>
+                        <DataGridTextColumn Header="Queue" Binding="{Binding QueueStatus}" SortMemberPath="QueueStatus" Width="Auto"/>
+                        <DataGridTextColumn Header="Delete Status" Binding="{Binding DeletionStatusName}" SortMemberPath="DeletionStatusName" Width="Auto"/>
+                        <DataGridTextColumn Header="Spotify ID" Binding="{Binding Id}" SortMemberPath="Id" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </DockPanel>
 
-            <GridSplitter Grid.Row="1"
-                          Grid.ColumnSpan="3"
-                          Height="8"
-                          Background="{DynamicResource SpotifyGreenLineBrush}"
-                          HorizontalAlignment="Stretch"
-                          VerticalAlignment="Stretch"
-                          Cursor="SizeNS"
-                          ShowsPreview="True"
-                          ResizeBehavior="PreviousAndNext"
-                          ResizeDirection="Rows"/>
-
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,8">
-                <Button Content="-&gt;"
-                        Command="{Binding StagePlaylistsCommand}"
-                        CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
-                        Focusable="False"
-                        Padding="12,4" Margin="0,0,0,8"/>
-                <Button Content="&lt;-"
-                        Command="{Binding UnstagePlaylistsCommand}"
-                        CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"
-                        Focusable="False"
-                        Padding="12,4"/>
-            </StackPanel>
-
-            <GroupBox Grid.Column="2" Header="Staged For Deletion" Margin="0,0,0,8">
-                <DockPanel>
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <Label Content="Search" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding StagedPlaylistsFilterText, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="180"
-                                 VerticalContentAlignment="Center"
-                                 Margin="0,0,8,0"/>
-                        <Button Content="Search"
-                                Command="{Binding ApplyStagedPlaylistsFilterCommand}"
-                                Focusable="False"
-                                Padding="12,4"
-                                Margin="0,0,8,0"/>
-                        <Button Content="Clear"
-                                Command="{Binding ClearStagedPlaylistsFilterCommand}"
-                                Focusable="False"
-                                Padding="12,4"/>
-                    </StackPanel>
-
-                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                        <Button Content="Refresh"
-                                Command="{Binding RefreshDeletionResultsCommand}"
-                                Padding="12,4"
-                                Margin="0,0,8,0"/>
-                        <Button Content="Mark For Deletion"
-                                Command="{Binding MarkForDeletionCommand}"
-                                CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"
-                                Focusable="False"
-                                Padding="12,4"
-                                Margin="0,0,8,0"/>
-                        <Button Content="Unmark For Deletion"
-                                Command="{Binding UnmarkForDeletionCommand}"
-                                CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"
-                                Focusable="False"
-                                Padding="12,4"
-                                Margin="0,0,8,0"/>
-                        <Button Content="Enqueue Delete"
-                                Command="{Binding EnqueueDeleteSelectionCommand}"
-                                CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"
-                                Focusable="False"
-                                Padding="12,4"
-                                Margin="0,0,8,0"/>
-                        <Button Content="Delete"
-                                Command="{Binding DeletePlaylistsCommand}"
-                                Padding="12,4"/>
-                    </StackPanel>
-
-                    <DataGrid x:Name="StagedForDeletionDataGrid"
-                              ItemsSource="{Binding StagedForDeletion}"
-                              AutoGenerateColumns="False"
-                              CanUserAddRows="False"
-                              IsReadOnly="True"
-                              CanUserSortColumns="True"
-                              SelectionMode="Extended"
-                              SelectionUnit="FullRow"
-                              HeadersVisibility="Column">
-                        <DataGrid.RowStyle>
-                            <Style TargetType="{x:Type DataGridRow}" BasedOn="{StaticResource {x:Type DataGridRow}}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding DeletionStatusName}" Value="Deleted">
-                                        <Setter Property="Background" Value="#8B2E2E"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding DeletionStatusName}" Value="Failed">
-                                        <Setter Property="Background" Value="#8A6D1D"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </DataGrid.RowStyle>
-
-                        <DataGrid.InputBindings>
-                            <KeyBinding Key="Delete"
-                                        Command="{Binding UnstagePlaylistsCommand}"
-                                        CommandParameter="{Binding ElementName=StagedForDeletionDataGrid, Path=SelectedItems}"/>
-                        </DataGrid.InputBindings>
-
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Playlist.Name}" SortMemberPath="Playlist.Name" IsReadOnly="True" Width="*"/>
-                            <DataGridTextColumn Header="Owner" Binding="{Binding Playlist.OwnerDisplayName}" SortMemberPath="Playlist.OwnerDisplayName" IsReadOnly="True" Width="*"/>
-                            <DataGridTextColumn Header="# Tracks" Binding="{Binding Playlist.TracksTotal}" SortMemberPath="Playlist.TracksTotal" IsReadOnly="True" Width="Auto"/>
-                            <DataGridTextColumn Header="Spotify ID" Binding="{Binding Playlist.Id}" SortMemberPath="Playlist.Id" IsReadOnly="True" Width="*"/>
-                            <DataGridTextColumn Header="Queue" Binding="{Binding MarkStatus}" SortMemberPath="MarkStatus" IsReadOnly="True" Width="Auto"/>
-                            <DataGridTextColumn Header="Delete Status" Binding="{Binding DeletionStatusName}" SortMemberPath="DeletionStatusName" IsReadOnly="True" Width="Auto"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </DockPanel>
-            </GroupBox>
-
-            <component:PlaylistsControlPanel Grid.Row="2"
-                                             Grid.ColumnSpan="3"
-                                             Margin="0,8,0,0"
-                                             ActivityLog="{Binding ActivityLog}"
-                                             IsExpanded="{Binding IsControlsPanelExpanded, Mode=TwoWay}"/>
-        </Grid>
-    </DockPanel>
+        <component:PlaylistsControlPanel Grid.Row="1"
+                                         Margin="8,0,8,8"
+                                         ActivityLog="{Binding ActivityLog}"
+                                         IsExpanded="{Binding IsControlsPanelExpanded, Mode=TwoWay}"
+                                         ExpandedHeight="220"/>
+    </Grid>
 </UserControl>

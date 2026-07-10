@@ -106,10 +106,13 @@ namespace SpotifyWPF.ViewModel.Page
             ExecuteOrPauseCommand = new RelayCommand(async () => await ExecuteOrPauseAsync(), CanExecuteOrPause);
             StagePlaylistsCommand = new RelayCommand<IList>(StagePlaylists);
             UnstagePlaylistsCommand = new RelayCommand<IList>(UnstagePlaylists);
+            ToggleStageCommand = new RelayCommand<IList>(ToggleStage);
             MarkForDeletionCommand = new RelayCommand<IList>(MarkForDeletion, CanMarkForDeletion);
             UnmarkForDeletionCommand = new RelayCommand<IList>(UnmarkForDeletion, CanUnmarkForDeletion);
+            ToggleMarkCommand = new RelayCommand<IList>(ToggleMark);
             DeletePlaylistsCommand = new RelayCommand(async () => await DeletePlaylistsAsync(), CanDeleteMarkedPlaylists);
             RefreshDeletionResultsCommand = new RelayCommand(RefreshDeletionResults);
+            RefreshCombinedCommand = new RelayCommand<IList>(RefreshCombined);
             ExportToJsonCommand = new RelayCommand(ExportToJson);
             ImportFromJsonCommand = new RelayCommand(() => { }, () => false);
             CreatePlaylistCommand = new RelayCommand(async () => await CreatePlaylistAsync(), CanCreatePlaylist);
@@ -138,7 +141,22 @@ namespace SpotifyWPF.ViewModel.Page
 
         public ObservableCollection<DeletionQueueItem> StagedForDeletion { get; } = new ObservableCollection<DeletionQueueItem>();
 
+        /// <summary>Combined projection of available + staged playlists for the single grid UI.</summary>
+        public ObservableCollection<PlaylistGridItem> CombinedPlaylists { get; } = new ObservableCollection<PlaylistGridItem>();
+
         public ObservableCollection<Track> Tracks { get; } = new ObservableCollection<Track>();
+
+        private PlaylistGridItem _selectedPlaylistRow;
+
+        public PlaylistGridItem SelectedPlaylistRow
+        {
+            get => _selectedPlaylistRow;
+            set
+            {
+                if (Set(ref _selectedPlaylistRow, value))
+                    SelectedPlaylist = value?.Playlist;
+            }
+        }
 
         private PlaylistCacheItem _selectedPlaylist;
 
@@ -148,7 +166,7 @@ namespace SpotifyWPF.ViewModel.Page
             set => Set(ref _selectedPlaylist, value);
         }
 
-        private bool _isControlsPanelExpanded = true;
+        private bool _isControlsPanelExpanded;
 
         public bool IsControlsPanelExpanded
         {
@@ -329,6 +347,12 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand<IList> StagePlaylistsCommand { get; }
 
         public RelayCommand<IList> UnstagePlaylistsCommand { get; }
+
+        public RelayCommand<IList> ToggleStageCommand { get; }
+
+        public RelayCommand<IList> ToggleMarkCommand { get; }
+
+        public RelayCommand<IList> RefreshCombinedCommand { get; }
 
         public RelayCommand ExportToJsonCommand { get; }
 
@@ -781,7 +805,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void StagePlaylists(IList items)
         {
-            var playlists = items?.Cast<PlaylistCacheItem>().ToList();
+            var playlists = ExtractLoadedPlaylists(items);
 
             if (playlists == null || !playlists.Any()) return;
 
@@ -806,7 +830,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void UnstagePlaylists(IList items)
         {
-            var playlists = items?.Cast<DeletionQueueItem>().ToList();
+            var playlists = ExtractStagedItems(items);
 
             if (playlists == null || !playlists.Any()) return;
 
@@ -827,6 +851,43 @@ namespace SpotifyWPF.ViewModel.Page
             _localStore.SaveDeletionQueue(deletionQueue);
             RefreshGridFromLocalFiles();
             RaiseDeletionCommandStates();
+        }
+
+        private void ToggleStage(IList items)
+        {
+            var rows = ExtractGridItems(items);
+            if (rows.Count == 0)
+                return;
+
+            var toStage = rows.Where(r => r.IsLoaded && r.Playlist != null).Select(r => r.Playlist).ToList();
+            var toUnstage = rows.Where(r => r.IsStaged && r.DeletionItem != null).Select(r => r.DeletionItem).ToList();
+
+            if (toStage.Count > 0)
+                StagePlaylists(toStage);
+            if (toUnstage.Count > 0)
+                UnstagePlaylists(toUnstage);
+        }
+
+        private void ToggleMark(IList items)
+        {
+            var staged = ExtractStagedItems(items);
+            if (staged.Count == 0)
+            {
+                Log("Select one or more staged playlists to mark/unmark for deletion.");
+                return;
+            }
+
+            var shouldMark = staged.Any(item => !item.IsMarkedForDeletion);
+            SetDeletionMark(staged, shouldMark);
+        }
+
+        private async void RefreshCombined(IList items)
+        {
+            var loaded = ExtractLoadedPlaylists(items);
+            if (loaded.Count > 0)
+                await RefreshSelectedPlaylistsAsync(loaded);
+
+            RefreshDeletionResults();
         }
 
         private void RefreshDeletionResults()
@@ -1074,9 +1135,48 @@ namespace SpotifyWPF.ViewModel.Page
 
         private static List<DeletionQueueItem> GetSelectedDeletionItems(IList items)
         {
-            return items?.Cast<DeletionQueueItem>()
-                .Where(item => item != null)
-                .ToList() ?? new List<DeletionQueueItem>();
+            return ExtractStagedItems(items);
+        }
+
+        private static List<PlaylistGridItem> ExtractGridItems(IList items)
+        {
+            if (items == null)
+                return new List<PlaylistGridItem>();
+
+            return items.OfType<PlaylistGridItem>()
+                .Concat(items.OfType<PlaylistCacheItem>().Select(p => new PlaylistGridItem(p)))
+                .Concat(items.OfType<DeletionQueueItem>().Select(d => new PlaylistGridItem(d)))
+                .GroupBy(r => r.Id)
+                .Select(g => g.First())
+                .ToList();
+        }
+
+        private static List<PlaylistCacheItem> ExtractLoadedPlaylists(IList items)
+        {
+            if (items == null)
+                return new List<PlaylistCacheItem>();
+
+            return ExtractGridItems(items)
+                .Where(r => r.IsLoaded && r.Playlist != null)
+                .Select(r => r.Playlist)
+                .Concat(items.OfType<PlaylistCacheItem>())
+                .GroupBy(p => p.Id)
+                .Select(g => g.First())
+                .ToList();
+        }
+
+        private static List<DeletionQueueItem> ExtractStagedItems(IList items)
+        {
+            if (items == null)
+                return new List<DeletionQueueItem>();
+
+            return ExtractGridItems(items)
+                .Where(r => r.IsStaged && r.DeletionItem != null)
+                .Select(r => r.DeletionItem)
+                .Concat(items.OfType<DeletionQueueItem>())
+                .GroupBy(d => d.Playlist?.Id)
+                .Select(g => g.First())
+                .ToList();
         }
 
         private bool CanMarkForDeletion(IList items)
@@ -1278,14 +1378,22 @@ namespace SpotifyWPF.ViewModel.Page
         {
             var playlistsFilter = PlaylistsFilterText?.Trim();
             var stagedFilter = StagedPlaylistsFilterText?.Trim();
+            // Single search box drives both sides of the combined grid.
+            var combinedFilter = string.IsNullOrWhiteSpace(playlistsFilter) ? stagedFilter : playlistsFilter;
 
             var availablePlaylists = _localStore.LoadAvailablePlaylists().Values
-                .Where(playlist => MatchesPlaylistFilter(playlist, playlistsFilter))
+                .Where(playlist => MatchesPlaylistFilter(playlist, combinedFilter))
                 .OrderBy(playlist => playlist.Name)
                 .ToList();
             var deletionQueue = _localStore.LoadDeletionQueue().Values
-                .Where(item => MatchesPlaylistFilter(item.Playlist, stagedFilter))
+                .Where(item => MatchesPlaylistFilter(item.Playlist, combinedFilter))
                 .OrderBy(playlist => playlist.Playlist?.Name)
+                .ToList();
+
+            var combined = availablePlaylists
+                .Select(p => new PlaylistGridItem(p))
+                .Concat(deletionQueue.Select(d => new PlaylistGridItem(d)))
+                .OrderBy(r => r.Name)
                 .ToList();
 
             Application.Current.Dispatcher.BeginInvoke((Action) (() =>
@@ -1296,8 +1404,33 @@ namespace SpotifyWPF.ViewModel.Page
                 if (!DeletionQueueCollectionsMatch(StagedForDeletion, deletionQueue))
                     ReplaceCollection(StagedForDeletion, deletionQueue);
 
+                if (!CombinedCollectionsMatch(CombinedPlaylists, combined))
+                    ReplaceCollection(CombinedPlaylists, combined);
+
                 RaiseDeletionCommandStates();
             }));
+        }
+
+        private static bool CombinedCollectionsMatch(IList<PlaylistGridItem> currentItems, IList<PlaylistGridItem> newItems)
+        {
+            if (currentItems.Count != newItems.Count) return false;
+
+            for (var i = 0; i < currentItems.Count; i++)
+            {
+                var current = currentItems[i];
+                var next = newItems[i];
+
+                if (current.Id != next.Id ||
+                    current.Name != next.Name ||
+                    current.OwnerDisplayName != next.OwnerDisplayName ||
+                    current.TracksTotal != next.TracksTotal ||
+                    current.IsLoaded != next.IsLoaded ||
+                    current.QueueStatus != next.QueueStatus ||
+                    current.DeletionStatusName != next.DeletionStatusName)
+                    return false;
+            }
+
+            return true;
         }
 
         private static bool MatchesPlaylistFilter(PlaylistCacheItem playlist, string filter)

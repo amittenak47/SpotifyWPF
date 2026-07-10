@@ -4,9 +4,7 @@
              xmlns:local="clr-namespace:SpotifyWPF.View.Component"
              x:Name="Root"
              MinHeight="8"
-             ClipToBounds="True"
-             MouseEnter="Root_MouseEnter"
-             MouseLeave="Root_MouseLeave">
+             ClipToBounds="True">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
@@ -25,7 +23,8 @@
                         BorderBrush="{DynamicResource AppBorderBrush}"
                         BorderThickness="0,0,0,1"
                         Cursor="SizeNS"
-                        ToolTip="Hover to open Controls · Drag to resize"
+                        ToolTip="Click to open/close Controls · Drag to resize when open"
+                        MouseLeftButtonUp="PeekBar_MouseLeftButtonUp"
                         PreviewMouseLeftButtonDown="ResizeBar_PreviewMouseLeftButtonDown"
                         PreviewMouseMove="ResizeBar_PreviewMouseMove"
                         PreviewMouseLeftButtonUp="ResizeBar_PreviewMouseLeftButtonUp">

@@ -18,6 +18,9 @@
         <DataTemplate DataType="{x:Type vm1:LoginPageViewModel}">
             <page:LoginPage/>
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm1:ManagePageViewModel}">
+            <page:ManagePage/>
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm1:PlaylistsPageViewModel}">
             <page:PlaylistsPage/>
         </DataTemplate>

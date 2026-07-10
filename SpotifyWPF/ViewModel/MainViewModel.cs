@@ -42,6 +42,8 @@ namespace SpotifyWPF.ViewModel
 
         private readonly PredictionPageViewModel _predictionPageViewModel;
 
+        private readonly ManagePageViewModel _managePageViewModel;
+
         private readonly IAppThemeStore _themeStore;
 
         private readonly IVisualEffectsStore _visualEffectsStore;
@@ -66,6 +68,8 @@ namespace SpotifyWPF.ViewModel
 
             PredictionPageViewModel predictionPageViewModel,
 
+            ManagePageViewModel managePageViewModel,
+
             IAppThemeStore themeStore,
 
             IVisualEffectsStore visualEffectsStore)
@@ -83,6 +87,8 @@ namespace SpotifyWPF.ViewModel
             _searchPageViewModel = searchPageViewModel;
 
             _predictionPageViewModel = predictionPageViewModel;
+
+            _managePageViewModel = managePageViewModel;
 
             _themeStore = themeStore;
 
@@ -138,25 +144,7 @@ namespace SpotifyWPF.ViewModel
 
                 },
 
-                new MenuItemViewModel("View")
-
-                {
-
-                    MenuItems = new ObservableCollection<MenuItemViewModel>
-
-                    {
-
-                        new MenuItemViewModel("Playlists", new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) {IsEnabled = false},
-
-                        new MenuItemViewModel("Albums", new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) {IsEnabled = false},
-
-                        new MenuItemViewModel("Artists", new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) {IsEnabled = false},
-
-                        new MenuItemViewModel("Search", new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) {IsEnabled = false},
-
-                    }
-
-                },
+                new MenuItemViewModel("Manage", new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) { IsEnabled = false },
 
                 new MenuItemViewModel("Experimental")
 
@@ -210,9 +198,9 @@ namespace SpotifyWPF.ViewModel
 
             SetAuthenticatedMenuItemsEnabled(true);
 
-            NavigateTo(_playlistsPageViewModel);
+            NavigateTo(_predictionPageViewModel);
 
-            CheckViewMenuItem("Playlists");
+            CheckMenuItem("Experimental", "Infinite Jukebox");
 
         }
 
@@ -274,35 +262,11 @@ namespace SpotifyWPF.ViewModel
 
             {
 
-                case "Playlists":
+                case "Manage":
 
-                    NavigateTo(_playlistsPageViewModel);
+                    NavigateTo(_managePageViewModel);
 
-                    CheckMenuItem("View", menuItem.Header);
-
-                    break;
-
-                case "Albums":
-
-                    NavigateTo(_albumsPageViewModel);
-
-                    CheckMenuItem("View", menuItem.Header);
-
-                    break;
-
-                case "Artists":
-
-                    NavigateTo(_artistsPageViewModel);
-
-                    CheckMenuItem("View", menuItem.Header);
-
-                    break;
-
-                case "Search":
-
-                    NavigateTo(_searchPageViewModel);
-
-                    CheckMenuItem("View", menuItem.Header);
+                    CheckTopLevelMenuItem("Manage");
 
                     break;
 
@@ -434,46 +398,37 @@ namespace SpotifyWPF.ViewModel
 
 
 
-        private void CheckViewMenuItem(string header)
-
+        private void CheckTopLevelMenuItem(string header)
         {
-
-            CheckMenuItem("View", header);
-
+            UncheckAllMenuItems(MenuItems);
+            var item = MenuItems?.FirstOrDefault(m => m.Header == header);
+            if (item != null)
+                item.IsChecked = true;
         }
 
-
+        private void CheckViewMenuItem(string header)
+        {
+            CheckMenuItem("View", header);
+        }
 
         private void SetAuthenticatedMenuItemsEnabled(bool isEnabled)
-
         {
-
-            var enabledOnAuth = new[] { "Playlists", "Albums", "Artists", "Search", "Infinite Jukebox" };
-
-
+            var enabledOnAuth = new[] { "Manage", "Infinite Jukebox" };
 
             foreach (var topLevel in MenuItems)
-
             {
+                if (enabledOnAuth.Contains(topLevel.Header))
+                    topLevel.IsEnabled = isEnabled;
 
                 if (topLevel.MenuItems == null)
-
                     continue;
 
-
-
                 foreach (var menuItem in topLevel.MenuItems)
-
                 {
-
                     if (enabledOnAuth.Contains(menuItem.Header))
-
                         menuItem.IsEnabled = isEnabled;
-
                 }
-
             }
-
         }
 
 

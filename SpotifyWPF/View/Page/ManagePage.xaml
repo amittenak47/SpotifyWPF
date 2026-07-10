@@ -1,0 +1,24 @@
+<UserControl x:Class="SpotifyWPF.View.Page.ManagePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:page="clr-namespace:SpotifyWPF.View.Page"
+             DataContext="{Binding ManagePage, Source={StaticResource Locator}}">
+
+    <TabControl SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}"
+                Background="{DynamicResource AppBackgroundBrush}"
+                BorderThickness="0"
+                Padding="0">
+        <TabItem Header="Playlists">
+            <page:PlaylistsPage/>
+        </TabItem>
+        <TabItem Header="Albums">
+            <page:AlbumsPage/>
+        </TabItem>
+        <TabItem Header="Artists">
+            <page:ArtistsPage/>
+        </TabItem>
+        <TabItem Header="Search">
+            <page:SearchPage/>
+        </TabItem>
+    </TabControl>
+</UserControl>

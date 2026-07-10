@@ -29,6 +29,7 @@ namespace SpotifyWPF.View.Component
 
         private bool _isResizing;
         private bool _isOpen;
+        private bool _didResizeDrag;
         private double _resizeStartY;
         private double _resizeStartHeight;
         private double _frozenHeight;
@@ -77,17 +78,30 @@ namespace SpotifyWPF.View.Component
                 panel.Height = ClampExpandedHeight(panel.ExpandedHeight);
         }
 
+        private void PeekBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isResizing || _didResizeDrag)
+            {
+                _didResizeDrag = false;
+                return;
+            }
+
+            if (_isOpen)
+                SlideClosed();
+            else
+                SlideOpen();
+
+            e.Handled = true;
+        }
+
         private void Root_MouseEnter(object sender, MouseEventArgs e)
         {
-            SlideOpen();
+            // Click-to-toggle only; hover no longer opens the panel.
         }
 
         private void Root_MouseLeave(object sender, MouseEventArgs e)
         {
-            if (_isResizing)
-                return;
-
-            SlideClosed();
+            // Click-to-toggle only; hover no longer closes the panel.
         }
 
         private void SlideOpen()
@@ -155,6 +169,7 @@ namespace SpotifyWPF.View.Component
                 return;
 
             _isResizing = true;
+            _didResizeDrag = false;
             _resizeStartY = e.GetPosition(this).Y;
             _resizeStartHeight = ExpandedHeight;
             _frozenHeight = Height;
@@ -209,6 +224,9 @@ namespace SpotifyWPF.View.Component
         private void UpdatePreviewFromMouse(double currentY)
         {
             var delta = _resizeStartY - currentY;
+            if (Math.Abs(delta) > 2)
+                _didResizeDrag = true;
+
             _previewHeight = ClampExpandedHeight(_resizeStartHeight + delta);
             UpdateResizePreview();
         }
@@ -220,18 +238,19 @@ namespace SpotifyWPF.View.Component
 
             _isResizing = false;
             Mouse.Capture(null);
-            ExpandedHeight = _previewHeight;
-            EndResizePreview();
 
-            if (_isOpen || IsMouseOver)
+            if (_didResizeDrag)
             {
+                ExpandedHeight = _previewHeight;
+                EndResizePreview();
                 _isOpen = true;
+                IsExpanded = true;
                 Height = ClampExpandedHeight(ExpandedHeight);
+                return;
             }
-            else
-            {
-                SlideClosed();
-            }
+
+            EndResizePreview();
+            // Click without drag: toggle is handled by PeekBar_MouseLeftButtonUp.
         }
     }
 }
