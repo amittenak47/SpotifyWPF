@@ -10,21 +10,29 @@ using SpotifyWPF.Service.Visual;
 namespace SpotifyWPF.View.Component
 {
     /// <summary>
-    /// Optional generative background: a morphing Julia-set fractal rendered into a low-resolution
-    /// WriteableBitmap and upscaled to the viewport. Palette hue, zoom pulse, and iteration depth
-    /// follow the shared <see cref="IVisualEnergyProvider"/> so the fractal breathes with the
-    /// equalizer. Disabled (default) it draws nothing — the plain black app background shows.
-    ///
-    /// Renders behind the jukebox ring but above the app background brush. Never hit-test visible.
-    /// Performance: ~200px render target, Parallel.For pixel loop, ~30 fps; frames are skipped
-    /// entirely while the hosting window is minimized.
+    /// Optional Mandelbrot background: near-viewport resolution escape-time fractal with a slow
+    /// continuous zoom. Soft indigo/violet palette. Disabled (default) it draws nothing.
     /// </summary>
     public class FractalBackgroundControl : FrameworkElement
     {
-        private const int MaxRenderSize = 208;
+        /// <summary>
+        /// Cap on the long edge. High enough that typical window sizes render 1:1 (no upscale
+        /// pixelation); still bounded so a 4K monitor doesn't melt the CPU.
+        /// </summary>
+        private const int MaxRenderSize = 1440;
 
-        /// <summary>Accessibility: cap the beat zoom/hue kick so the background never strobes.</summary>
-        private const double MaxBeatZoom = 0.10;
+        private const int BaseMaxIter = 140;
+
+        private const int ExtraMaxIter = 220;
+
+        /// <summary>Seahorse-valley deep zoom target (classic Mandelbrot landmark).</summary>
+        private const double TargetRe = -0.743643887037151;
+
+        private const double TargetIm = 0.131825904205330;
+
+        private const double StartScale = 2.6;
+
+        private const double MinScale = 1e-8;
 
         private static readonly Stopwatch Clock = Stopwatch.StartNew();
 
@@ -40,17 +48,18 @@ namespace SpotifyWPF.View.Component
 
         private double _lastFrameMs;
 
-        private double _theta = 2.05;
+        private double _scale = StartScale;
 
-        private double _hueBase = 215;
+        private double _palettePhase;
 
         public FractalBackgroundControl()
         {
             IsHitTestVisible = false;
-            RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.Linear);
+            // HighQuality softens any residual upscale; at 1:1 it is a no-op.
+            RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.HighQuality);
             _timer = new DispatcherTimer(DispatcherPriority.Background)
             {
-                Interval = TimeSpan.FromMilliseconds(33)
+                Interval = TimeSpan.FromMilliseconds(48)
             };
             _timer.Tick += (_, __) => OnFrame();
 
@@ -71,21 +80,18 @@ namespace SpotifyWPF.View.Component
             DependencyProperty.Register(nameof(MiniPlayerMode), typeof(bool),
                 typeof(FractalBackgroundControl), new FrameworkPropertyMetadata(false));
 
-        /// <summary>Bound to the "Fractal background" preference. Off ⇒ nothing is drawn.</summary>
         public bool IsActive
         {
             get => (bool)GetValue(IsActiveProperty);
             set => SetValue(IsActiveProperty, value);
         }
 
-        /// <summary>Same energy source as the equalizer, so both pulse together.</summary>
         public IVisualEnergyProvider EnergyProvider
         {
             get => (IVisualEnergyProvider)GetValue(EnergyProviderProperty);
             set => SetValue(EnergyProviderProperty, value);
         }
 
-        /// <summary>Feathers the fractal out over the transparent center disc of the mini player.</summary>
         public bool MiniPlayerMode
         {
             get => (bool)GetValue(MiniPlayerModeProperty);
@@ -115,7 +121,6 @@ namespace SpotifyWPF.View.Component
             if (!IsActive || ActualWidth < 8 || ActualHeight < 8)
                 return;
 
-            // Minimized: skip work entirely; the timer keeps ticking cheaply.
             var window = Window.GetWindow(this);
 
             if (window != null && window.WindowState == WindowState.Minimized)
@@ -125,18 +130,19 @@ namespace SpotifyWPF.View.Component
             var dtSec = Math.Max(0.001, Math.Min(0.2, (now - _lastFrameMs) / 1000.0));
             _lastFrameMs = now;
 
-            var energyProvider = EnergyProvider;
-            var energy = energyProvider?.GlobalEnergy ?? 0;
-            var pulse = energyProvider?.BeatPulse ?? 0;
+            var energy = EnergyProvider?.GlobalEnergy ?? 0;
+            var pulse = EnergyProvider?.BeatPulse ?? 0;
 
-            // Idle floor keeps a slow, dim drift alive when nothing is playing.
-            var drive = Math.Max(0.18, energy);
+            var zoomRate = 0.16 + 0.28 * energy + 0.10 * pulse;
+            _scale *= Math.Exp(-zoomRate * dtSec);
 
-            _theta += dtSec * (0.045 + 0.22 * energy);
-            _hueBase = (_hueBase + dtSec * (3 + 22 * energy)) % 360;
+            if (_scale < MinScale)
+                _scale = StartScale;
+
+            _palettePhase = (_palettePhase + dtSec * (0.6 + 1.8 * energy)) % 360;
 
             EnsureBuffers();
-            RenderFractal(drive, pulse);
+            RenderMandelbrot(Math.Max(0.12, energy), pulse);
 
             _bitmap.WritePixels(new Int32Rect(0, 0, _pixelWidth, _pixelHeight), _pixels,
                 _pixelWidth * 4, 0);
@@ -145,48 +151,48 @@ namespace SpotifyWPF.View.Component
 
         private void EnsureBuffers()
         {
-            var aspect = ActualWidth / ActualHeight;
-            int pw, ph;
+            // Prefer near-native resolution so the fractal isn't upscaled into blocks.
+            var targetW = (int)Math.Ceiling(ActualWidth);
+            var targetH = (int)Math.Ceiling(ActualHeight);
+            var longEdge = Math.Max(targetW, targetH);
 
-            if (aspect >= 1)
+            if (longEdge > MaxRenderSize)
             {
-                pw = MaxRenderSize;
-                ph = Math.Max(16, (int)(MaxRenderSize / aspect));
-            }
-            else
-            {
-                ph = MaxRenderSize;
-                pw = Math.Max(16, (int)(MaxRenderSize * aspect));
+                var scale = MaxRenderSize / (double)longEdge;
+                targetW = Math.Max(64, (int)(targetW * scale));
+                targetH = Math.Max(64, (int)(targetH * scale));
             }
 
-            if (_bitmap != null && pw == _pixelWidth && ph == _pixelHeight)
+            // Snap to even sizes for slightly cleaner WriteableBitmap strides.
+            targetW = Math.Max(64, targetW & ~1);
+            targetH = Math.Max(64, targetH & ~1);
+
+            if (_bitmap != null && targetW == _pixelWidth && targetH == _pixelHeight)
                 return;
 
-            _pixelWidth = pw;
-            _pixelHeight = ph;
-            _pixels = new int[pw * ph];
-            _bitmap = new WriteableBitmap(pw, ph, 96, 96, PixelFormats.Bgra32, null);
+            _pixelWidth = targetW;
+            _pixelHeight = targetH;
+            _pixels = new int[targetW * targetH];
+            _bitmap = new WriteableBitmap(targetW, targetH, 96, 96, PixelFormats.Bgra32, null);
         }
 
-        private void RenderFractal(double energy, double pulse)
+        private void RenderMandelbrot(double energy, double pulse)
         {
             var pw = _pixelWidth;
             var ph = _pixelHeight;
             var pixels = _pixels;
+            var scale = _scale;
+            var depth = Math.Min(1.0, Math.Log10(StartScale / scale + 1) / 6.0);
+            var maxIter = BaseMaxIter + (int)(ExtraMaxIter * depth);
+            maxIter = Math.Min(maxIter, 480);
 
-            // Julia constant orbits near the Mandelbrot boundary — rich, continuously morphing sets.
-            var cRe = 0.7885 * Math.Cos(_theta);
-            var cIm = 0.7885 * Math.Sin(_theta);
-
-            // Beat: brief zoom-in pulse (capped) and a hue kick applied in the palette below.
-            var zoom = 1.15 * (1 + Math.Min(MaxBeatZoom, pulse * MaxBeatZoom));
-            var maxIter = 24 + (int)(18 * energy);
-
-            var spanY = 2.9 / zoom;
-            var spanX = spanY * pw / ph;
-            var hue = _hueBase + pulse * 22;
-            var saturation = 0.55 + 0.38 * energy;
-            var brightness = 0.35 + 0.65 * energy;
+            var spanY = scale;
+            var spanX = spanY * pw / (double)ph;
+            var centerRe = TargetRe;
+            var centerIm = TargetIm;
+            // Soft violet atmosphere — not neon rainbow.
+            var brightness = 0.42 + 0.38 * energy + 0.06 * pulse;
+            var hueShift = _palettePhase;
 
             var mini = MiniPlayerMode;
             var holeOuter = Math.Min(pw, ph) * 0.5 * 0.66;
@@ -196,16 +202,15 @@ namespace SpotifyWPF.View.Component
 
             Parallel.For(0, ph, y =>
             {
-                var zy0 = (y / (double)ph - 0.5) * spanY;
+                var cIm = centerIm + (y / (double)ph - 0.5) * spanY;
                 var row = y * pw;
 
                 for (var x = 0; x < pw; x++)
                 {
-                    var zx = (x / (double)pw - 0.5) * spanX;
-                    var zy = zy0;
+                    var cRe = centerRe + (x / (double)pw - 0.5) * spanX;
+                    double zx = 0, zy = 0;
+                    double zx2 = 0, zy2 = 0;
                     var iter = 0;
-                    var zx2 = zx * zx;
-                    var zy2 = zy * zy;
 
                     while (iter < maxIter && zx2 + zy2 < 4)
                     {
@@ -220,21 +225,24 @@ namespace SpotifyWPF.View.Component
 
                     if (iter >= maxIter)
                     {
-                        // Interior stays near-black so the composition never washes out.
-                        color = unchecked((int)0xFF060608);
+                        color = unchecked((int)0xFF05040A);
                     }
                     else
                     {
-                        // Smooth (non-banded) escape-time domain coloring.
-                        var t = (iter + 1 - Math.Log(Math.Log(zx2 + zy2) / 2 / Math.Log(2)) / Math.Log(2)) / maxIter;
+                        var logZn = Math.Log(zx2 + zy2) / 2;
+                        var nu = Math.Log(logZn / Math.Log(2)) / Math.Log(2);
+                        var t = (iter + 1 - nu) / maxIter;
                         t = t < 0 ? 0 : t > 1 ? 1 : t;
-                        color = HsvToBgra(hue + t * 210, saturation,
-                            (0.16 + 0.84 * Math.Pow(t, 0.6)) * brightness);
+
+                        // Soft plasma: deep indigo → violet → muted magenta (no harsh banding).
+                        var hue = 255 + t * 55 + hueShift * 0.05;
+                        var sat = 0.42 + 0.22 * (1 - t);
+                        var val = (0.05 + 0.90 * Math.Pow(t, 0.62)) * brightness;
+                        color = HsvToBgra(hue, sat, val);
                     }
 
                     if (mini)
                     {
-                        // Feather out over the mini player's transparent center disc.
                         var dx = x - cx;
                         var dy = y - cy;
                         var dist = Math.Sqrt(dx * dx + dy * dy);

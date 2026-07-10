@@ -1,5 +1,5 @@
 using System;
-using System.Diagnostics;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
 using SpotifyWPF.Service.Visual;
@@ -7,18 +7,17 @@ using SpotifyWPF.Service.Visual;
 namespace SpotifyWPF.View.Component
 {
     /// <summary>
-    /// Plasma-style circular equalizer drawn in the annulus between the ring's inner bar band and
-    /// the outer rim. Bars radiate outward from the inner radius, glow, and may overshoot the rim
-    /// slightly on peaks. Heights come pre-smoothed from <see cref="IVisualEnergyProvider"/> (per-bar
-    /// decay, no global normalization); this class only maps them to geometry and color, so the same
-    /// values render identically on the full page and in the mini player.
+    /// Modern Winamp-style cascading spectrum on the *outer* ring band (outside the beat coverage
+    /// bars): translucent radial bars with falling peak caps. Soft enough not to overwhelm the
+    /// beat map underneath / inside.
     /// </summary>
     public sealed class CircularEqualizerRenderer
     {
-        /// <summary>Bars may cross the outer rim by this fraction of the annulus on peaks.</summary>
-        private const double RimOvershoot = 1.18;
+        /// <summary>Overall opacity so beat bars stay readable underneath.</summary>
+        private const double GlobalAlpha = 0.52;
 
-        private static readonly Stopwatch Clock = Stopwatch.StartNew();
+        /// <summary>LED-style segments per bar (modern take on classic blocky spectrum).</summary>
+        private const int SegmentCount = 12;
 
         public void Render(DrawingContext dc, IVisualEnergyProvider energy, Point center,
             double innerRadius, double outerRadius)
@@ -27,109 +26,122 @@ namespace SpotifyWPF.View.Component
                 return;
 
             var bars = energy.BarHeights;
+            var peaks = energy.PeakHeights;
 
             if (bars == null || bars.Count == 0)
                 return;
 
             var count = bars.Count;
-            var annulus = outerRadius - innerRadius;
+            var band = outerRadius - innerRadius;
 
-            if (annulus <= 2)
+            if (band <= 4)
                 return;
 
-            var barWidth = Math.Max(1.5, Math.Min(7.0, Math.PI * 2 * innerRadius / count * 0.5));
+            var barWidth = Math.Max(1.4, Math.Min(6.0, Math.PI * 2 * innerRadius / count * 0.55));
+            var gap = Math.Max(0.6, band / SegmentCount * 0.22);
+            var segmentLen = (band - gap * (SegmentCount - 1)) / SegmentCount;
 
-            // Slow base hue drift plus a capped kick on each beat (+~25° max — no strobing).
-            var hueBase = Clock.Elapsed.TotalSeconds * (4 + 10 * energy.GlobalEnergy) % 360;
-            var hueKick = energy.BeatPulse * 25;
+            if (segmentLen < 0.8)
+                return;
 
             for (var i = 0; i < count; i++)
             {
                 var height = bars[i];
+                var peak = peaks != null && i < peaks.Count ? peaks[i] : height;
 
-                if (height <= 0.004)
+                if (height <= 0.01 && peak <= 0.01)
                     continue;
 
                 var angle = i / (double)count * Math.PI * 2 - Math.PI / 2;
-                var length = height * annulus * RimOvershoot;
-                var tip = innerRadius + length;
-                var color = PlasmaColor(height, hueBase + hueKick);
+                var cos = Math.Cos(angle);
+                var sin = Math.Sin(angle);
 
-                // Soft glow underlay, then the hot core bar.
-                DrawRadial(dc, center, innerRadius, tip, angle,
-                    MakePen(color, barWidth * 2.8, 0.10 + 0.16 * height));
-                DrawRadial(dc, center, innerRadius, tip, angle,
-                    MakePen(color, barWidth, 0.45 + 0.55 * height));
+                DrawSegmentedBar(dc, center, innerRadius, height, segmentLen, gap, SegmentCount,
+                    cos, sin, barWidth);
 
-                // Bright tip cap on strong bars, so peaks visibly pierce the rim.
-                if (height > 0.55)
-                {
-                    var tipPoint = new Point(center.X + tip * Math.Cos(angle),
-                        center.Y + tip * Math.Sin(angle));
-                    dc.DrawEllipse(MakeBrush(Colors.White, (height - 0.55) * 0.8), null,
-                        tipPoint, barWidth * 0.5, barWidth * 0.5);
-                }
+                if (peak > height + 0.02)
+                    DrawPeakCap(dc, center, innerRadius, peak, band, cos, sin, barWidth);
             }
         }
 
-        /// <summary>Plasma palette: quiet bars deep violet/blue, loud bars hot orange/pink.</summary>
-        private static Color PlasmaColor(double height, double hue)
+        private static void DrawSegmentedBar(DrawingContext dc, Point center, double inner,
+            double height, double segmentLen, double gap, int segments,
+            double cos, double sin, double barWidth)
         {
-            var mapped = (hue + 275 - height * 235) % 360;
+            var lit = (int)Math.Ceiling(height * segments);
+            lit = lit < 0 ? 0 : lit > segments ? segments : lit;
 
-            if (mapped < 0)
-                mapped += 360;
+            for (var s = 0; s < lit; s++)
+            {
+                var t0 = s / (double)segments;
+                var t1 = (s + 1) / (double)segments;
+                var r0 = inner + s * (segmentLen + gap);
+                var r1 = r0 + segmentLen;
+                var color = SpectrumColor(t1);
+                var alpha = GlobalAlpha * (0.55 + 0.45 * t1);
 
-            return FromHsl(mapped, 0.72 + 0.2 * height, 0.42 + 0.24 * height);
+                DrawRadial(dc, center, r0, r1, cos, sin, MakePen(color, barWidth, alpha));
+            }
         }
 
-        private static void DrawRadial(DrawingContext dc, Point center, double inner, double outer,
-            double angle, Pen pen)
+        private static void DrawPeakCap(DrawingContext dc, Point center, double inner, double peak,
+            double band, double cos, double sin, double barWidth)
         {
-            var cos = Math.Cos(angle);
-            var sin = Math.Sin(angle);
+            var r = inner + peak * band;
+            var half = Math.Max(1.2, barWidth * 0.55);
+            var p0 = new Point(center.X + (r - half * 0.15) * cos, center.Y + (r - half * 0.15) * sin);
+            var p1 = new Point(center.X + (r + half * 0.15) * cos, center.Y + (r + half * 0.15) * sin);
+
+            // Thin bright cap — classic Winamp falling peak, slightly soft for a modern look.
+            dc.DrawLine(MakePen(Color.FromRgb(0xFF, 0xF0, 0xA0), barWidth * 0.95, GlobalAlpha * 0.9),
+                p0, p1);
+            dc.DrawLine(MakePen(Colors.White, barWidth * 0.45, GlobalAlpha * 0.7), p0, p1);
+        }
+
+        /// <summary>Classic spectrum ramp: green floor → yellow mid → red/orange peaks.</summary>
+        private static Color SpectrumColor(double t)
+        {
+            if (t < 0.4)
+                return Lerp(Color.FromRgb(0x1D, 0xB9, 0x54), Color.FromRgb(0xC8, 0xE0, 0x3A), t / 0.4);
+
+            if (t < 0.7)
+                return Lerp(Color.FromRgb(0xC8, 0xE0, 0x3A), Color.FromRgb(0xF0, 0xA0, 0x20),
+                    (t - 0.4) / 0.3);
+
+            return Lerp(Color.FromRgb(0xF0, 0xA0, 0x20), Color.FromRgb(0xE8, 0x3A, 0x3A),
+                (t - 0.7) / 0.3);
+        }
+
+        private static Color Lerp(Color a, Color b, double t)
+        {
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            return Color.FromRgb(
+                (byte)(a.R + (b.R - a.R) * t),
+                (byte)(a.G + (b.G - a.G) * t),
+                (byte)(a.B + (b.B - a.B) * t));
+        }
+
+        private static void DrawRadial(DrawingContext dc, Point center, double r0, double r1,
+            double cos, double sin, Pen pen)
+        {
             dc.DrawLine(pen,
-                new Point(center.X + inner * cos, center.Y + inner * sin),
-                new Point(center.X + outer * cos, center.Y + outer * sin));
+                new Point(center.X + r0 * cos, center.Y + r0 * sin),
+                new Point(center.X + r1 * cos, center.Y + r1 * sin));
         }
 
         private static Pen MakePen(Color color, double thickness, double alpha)
         {
-            var pen = new Pen(MakeBrush(color, alpha), thickness)
-            {
-                StartLineCap = PenLineCap.Round,
-                EndLineCap = PenLineCap.Round
-            };
-            pen.Freeze();
-            return pen;
-        }
-
-        private static Brush MakeBrush(Color color, double alpha)
-        {
+            thickness = Math.Max(0.5, thickness);
             alpha = alpha < 0 ? 0 : alpha > 1 ? 1 : alpha;
             var brush = new SolidColorBrush(Color.FromArgb((byte)(alpha * 255), color.R, color.G, color.B));
             brush.Freeze();
-            return brush;
-        }
-
-        private static Color FromHsl(double hue, double saturation, double lightness)
-        {
-            saturation = saturation > 1 ? 1 : saturation;
-            lightness = lightness > 1 ? 1 : lightness;
-            var c = (1 - Math.Abs(2 * lightness - 1)) * saturation;
-            var hp = hue / 60.0;
-            var x = c * (1 - Math.Abs(hp % 2 - 1));
-            double r = 0, g = 0, b = 0;
-
-            if (hp < 1) { r = c; g = x; }
-            else if (hp < 2) { r = x; g = c; }
-            else if (hp < 3) { g = c; b = x; }
-            else if (hp < 4) { g = x; b = c; }
-            else if (hp < 5) { r = x; b = c; }
-            else { r = c; b = x; }
-
-            var m = lightness - c / 2;
-            return Color.FromRgb((byte)((r + m) * 255), (byte)((g + m) * 255), (byte)((b + m) * 255));
+            var pen = new Pen(brush, thickness)
+            {
+                StartLineCap = PenLineCap.Flat,
+                EndLineCap = PenLineCap.Flat
+            };
+            pen.Freeze();
+            return pen;
         }
     }
 }

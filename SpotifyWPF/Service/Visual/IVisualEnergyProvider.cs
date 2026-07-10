@@ -20,6 +20,9 @@ namespace SpotifyWPF.Service.Visual
         /// (no global normalization).</summary>
         IReadOnlyList<double> BarHeights { get; }
 
+        /// <summary>Winamp-style falling peak caps per bar (hold, then cascade down).</summary>
+        IReadOnlyList<double> PeakHeights { get; }
+
         /// <summary>Raised after each batch update of the values above (~30 fps while active).</summary>
         event Action Updated;
     }

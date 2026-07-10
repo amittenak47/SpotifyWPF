@@ -14,16 +14,26 @@ namespace SpotifyWPF.Service.Visual
     /// </summary>
     public class VisualEnergyState : IVisualEnergyProvider
     {
-        public const int BarCount = 64;
+        public const int BarCount = 96;
 
         /// <summary>Accessibility cap: beat spikes never slam the visuals to full brightness.</summary>
         private const double MaxBeatPulse = 0.85;
 
         private const double BeatPulseDecayMs = 230;
 
+        /// <summary>How long a peak cap hangs at its max before cascading (classic Winamp feel).</summary>
+        private const double PeakHoldMs = 280;
+
+        /// <summary>Peak fall speed in units/sec once hold expires.</summary>
+        private const double PeakFallPerSec = 0.85;
+
         private static readonly Stopwatch Clock = Stopwatch.StartNew();
 
         private readonly double[] _barHeights = new double[BarCount];
+
+        private readonly double[] _peakHeights = new double[BarCount];
+
+        private readonly double[] _peakHoldMsLeft = new double[BarCount];
 
         private DispatcherTimer _timer;
 
@@ -61,6 +71,8 @@ namespace SpotifyWPF.Service.Visual
         public double BeatPulse => _beatPulse;
 
         public IReadOnlyList<double> BarHeights => _barHeights;
+
+        public IReadOnlyList<double> PeakHeights => _peakHeights;
 
         public event Action Updated;
 
@@ -128,6 +140,8 @@ namespace SpotifyWPF.Service.Visual
             _globalEnergy = 0;
             _beatPulse = 0;
             Array.Clear(_barHeights, 0, _barHeights.Length);
+            Array.Clear(_peakHeights, 0, _peakHeights.Length);
+            Array.Clear(_peakHoldMsLeft, 0, _peakHoldMsLeft.Length);
             _timer?.Stop();
             Updated?.Invoke();
         }
@@ -170,6 +184,7 @@ namespace SpotifyWPF.Service.Visual
             UpdateBeatPulse(positionSec, loudness, dtMs);
             UpdateGlobalEnergy(_isPaused ? 0 : loudness);
             UpdateBars(_isPaused ? 0 : loudness, pitches, dtMs);
+            UpdatePeaks(dtMs);
 
             // Fully idle (paused and everything decayed): skip notifications, it's all zeros.
             if (_isPaused && _globalEnergy < 0.003 && _beatPulse < 0.003)
@@ -226,26 +241,60 @@ namespace SpotifyWPF.Service.Visual
             if (_wavePhase > Math.PI * 2000)
                 _wavePhase -= Math.PI * 2000;
 
+            // Winamp-style envelope: near-instant attack, slower gravity fall.
+            // Frame-rate independent decay (~half-life ~90 ms at 60 fps feel).
+            var fall = Math.Pow(0.86, dtMs / 16.0);
+
             for (var i = 0; i < BarCount; i++)
             {
                 // Spread the 12 chroma bins around the ring on the circle of fifths so adjacent
                 // sectors don't mirror each other — reads like a spectrum, not a repeat pattern.
                 var chroma = pitches != null ? pitches[i * 7 % 12] : 0;
                 var wave = 0.5 + 0.5 * Math.Sin(_wavePhase + i * (Math.PI * 2 * 3 / BarCount));
-                var target = loudness * (0.28 + 0.52 * chroma) +
-                             loudness * 0.14 * wave +
-                             _beatPulse * 0.22;
+                var target = loudness * (0.22 + 0.58 * chroma) +
+                             loudness * 0.12 * wave +
+                             _beatPulse * 0.28;
                 target = Clamp01(target);
 
                 var current = _barHeights[i];
 
-                // Per-bar attack/decay only — never normalized against other bars.
-                _barHeights[i] = target > current
-                    ? current + (target - current) * 0.5
-                    : current * 0.90;
+                // Snap up (Winamp bounce), then fall with gravity — no soft lerp on attack.
+                _barHeights[i] = target >= current
+                    ? target
+                    : current * fall;
 
                 if (_barHeights[i] < 0.001)
                     _barHeights[i] = 0;
+            }
+        }
+
+        /// <summary>Classic Winamp peaks: snap up with the bar, hold, then cascade down.</summary>
+        private void UpdatePeaks(double dtMs)
+        {
+            for (var i = 0; i < BarCount; i++)
+            {
+                var bar = _barHeights[i];
+
+                if (bar >= _peakHeights[i])
+                {
+                    _peakHeights[i] = bar;
+                    _peakHoldMsLeft[i] = PeakHoldMs;
+                    continue;
+                }
+
+                if (_peakHoldMsLeft[i] > 0)
+                {
+                    _peakHoldMsLeft[i] -= dtMs;
+                    continue;
+                }
+
+                _peakHeights[i] -= PeakFallPerSec * (dtMs / 1000.0);
+
+                if (_peakHeights[i] < bar)
+                    _peakHeights[i] = bar;
+
+                if (_peakHeights[i] < 0.001)
+                    _peakHeights[i] = 0;
             }
         }
 

@@ -766,12 +766,16 @@ namespace SpotifyWPF.View.Component
         }
 
         /// <summary>Closer branches are hotter (red/orange); farther branches are cooler (blue).</summary>
+        /// <summary>
+        /// Branch distance → muted steel/slate (no rainbow RGB glow). Closer = brighter silver,
+        /// farther = dimmer blue-grey.
+        /// </summary>
         private static Color DistanceBranchColor(double distance, double minDistance, double maxDistance)
         {
             var span = Math.Max(0.0001, maxDistance - minDistance);
             var t = Math.Max(0, Math.Min(1, (distance - minDistance) / span));
-            var hue = t * 220;
-            return FromHsl(hue, 0.78, 0.56);
+            // Near: cool silver; far: muted slate — saturation stays low.
+            return FromHsl(210, 0.18 + 0.12 * (1 - t), 0.62 - 0.22 * t);
         }
 
         private static void GetNeighborDistanceRange(IReadOnlyList<BeatEdge> neighbors,
@@ -1067,10 +1071,11 @@ namespace SpotifyWPF.View.Component
                     DrawChord(dc, center, layerRadius, a1, a2,
                         MakePen(locked ? LockColor : branchColor, width, alpha));
 
+                    // Small static destination markers — muted, no RGB bounce/glow.
                     var dot = Polar(center, layerRadius, a2);
-                    var dotAlpha = isHighlighted ? 1.0 : locked ? 0.9 : Math.Max(alpha, 0.42);
-                    var dotSize = isHighlighted ? 4.2 : locked ? 3.4 : 3.0;
-                    dc.DrawEllipse(MakeBrush(locked ? LockColor : branchColor, dotAlpha), null, dot,
+                    var dotAlpha = isHighlighted ? 0.95 : locked ? 0.75 : Math.Min(alpha, 0.55);
+                    var dotSize = isHighlighted ? 3.0 : locked ? 2.6 : 2.2;
+                    dc.DrawEllipse(MakeBrush(locked ? LockColor : GhostColor, dotAlpha), null, dot,
                         dotSize, dotSize);
                 }
 
@@ -1127,14 +1132,13 @@ namespace SpotifyWPF.View.Component
         private static readonly double[] SectionHues = { 210, 158, 278, 30, 190, 330 };
 
         // Render layer order (bottom → top):
-        //   0. FractalBackgroundControl — separate element *behind* this canvas in the visual tree
+        //   0. FractalBackgroundControl — Mandelbrot behind this canvas in the visual tree
         //   1. Center disc (skipped in mini player mode so the transport backdrop shows through)
-        //   2. Plasma equalizer bars — annulus between the inner bar band and the outer rim;
-        //      peaks intentionally overshoot the rim
+        //   2. Winamp cascading spectrum — outer ring band (outside beat rim), translucent
         //   3. Outer rim circle + section arcs
         //   4. Beat coverage bars (+ mini-player square-edge extensions), trail, headlights, playhead
         //   5. Branch landmarks/chords, planned-jump chord, jump flashes, locked branches
-        // Everything interactive (bars, chords, locks, scrub) stays on top of the equalizer.
+        // Spectrum sits behind beat bars so the map stays primary.
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);
@@ -1146,25 +1150,32 @@ namespace SpotifyWPF.View.Component
                 return;
 
             var center = new Point(width / 2, height / 2);
+            // Leave room outside the beat rim for the cascading spectrum band.
             var outer = Math.Min(width, height) / 2 - 2;
+            var spectrumOuter = outer;
+            var spectrumInner = outer * 0.78;
+            var rim = spectrumInner - 2;
+            var rIn = rim * BarBandInnerRatio;
 
-            // Mini player keeps the center transparent so the transport backdrop shows through.
+            // Shade only the inner hole so Mandelbrot shows in the beat annulus + spectrum band.
             if (!MiniPlayerMode)
-                dc.DrawEllipse(new SolidColorBrush(BackgroundColor), null, center, outer, outer);
+                dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0xF0, 0x0A, 0x0A, 0x0C)), null,
+                    center, rIn, rIn);
 
-            _equalizer.Render(dc, EnergyProvider, center, outer * BarBandInnerRatio, outer);
+            // Cascading Winamp bars live on the outer ring layer (outside beat coverage bars).
+            _equalizer.Render(dc, EnergyProvider, center, spectrumInner, spectrumOuter);
 
-            dc.DrawEllipse(null, MakePen(RimColor, 1), center, outer, outer);
+            dc.DrawEllipse(null, MakePen(RimColor, 1), center, rim, rim);
 
             var graph = Graph;
 
             if (graph == null || graph.Beats.Count == 0 || TotalMs() <= 0)
             {
-                RenderFallback(dc, center, outer);
+                RenderFallback(dc, center, rim);
                 return;
             }
 
-            RenderRing(dc, graph, center, outer);
+            RenderRing(dc, graph, center, rim);
         }
 
         /// <summary>No beat graph yet: plain progress ring plus a hint.</summary>
