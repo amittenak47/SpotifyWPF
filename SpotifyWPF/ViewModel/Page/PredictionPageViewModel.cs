@@ -99,7 +99,10 @@ namespace SpotifyWPF.ViewModel.Page
             _visualEffectsStore = visualEffectsStore;
             _visualEffectsSettings = visualEffectsStore.Get();
             _visualEffectsStore.SettingsChanged += (_, __) =>
+            {
                 RaisePropertyChanged(nameof(IsFractalBackgroundEnabled));
+                RaisePropertyChanged(nameof(ShowStatusOverlay));
+            };
             _jukeboxSettingsModel = _jukeboxSettings.Get();
             _spotify = spotify;
             _playbackHost = playbackHost;
@@ -304,6 +307,21 @@ namespace SpotifyWPF.ViewModel.Page
                     return;
 
                 _visualEffectsSettings.FractalBackgroundEnabled = value;
+                _visualEffectsStore.Save(_visualEffectsSettings);
+                RaisePropertyChanged();
+            }
+        }
+
+        /// <summary>When enabled, status/HUD info is available as a hover box under the title.</summary>
+        public bool ShowStatusOverlay
+        {
+            get => _visualEffectsSettings.ShowStatusOverlay;
+            set
+            {
+                if (_visualEffectsSettings.ShowStatusOverlay == value)
+                    return;
+
+                _visualEffectsSettings.ShowStatusOverlay = value;
                 _visualEffectsStore.Save(_visualEffectsSettings);
                 RaisePropertyChanged();
             }

@@ -5,11 +5,15 @@ namespace SpotifyWPF.Model
     {
         public bool FractalBackgroundEnabled { get; set; }
 
+        /// <summary>When true, status/HUD text can appear in a hover box under the title.</summary>
+        public bool ShowStatusOverlay { get; set; }
+
         public static VisualEffectsSettings CreateDefaults()
         {
             return new VisualEffectsSettings
             {
-                FractalBackgroundEnabled = false
+                FractalBackgroundEnabled = false,
+                ShowStatusOverlay = false
             };
         }
     }

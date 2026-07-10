@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using SpotifyWPF.ViewModel.Component;
 
@@ -15,17 +16,19 @@ namespace SpotifyWPF.View.Component
 
         public static readonly DependencyProperty IsExpandedProperty =
             DependencyProperty.Register(nameof(IsExpanded), typeof(bool), typeof(LoopLabBottomPanel),
-                new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnLayoutPropertyChanged));
+                new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
 
         public static readonly DependencyProperty ExpandedHeightProperty =
             DependencyProperty.Register(nameof(ExpandedHeight), typeof(double), typeof(LoopLabBottomPanel),
-                new FrameworkPropertyMetadata(220.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnLayoutPropertyChanged));
+                new FrameworkPropertyMetadata(220.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnExpandedHeightChanged));
 
-        private const double CollapsedHeight = 32;
+        private const double PeekHeight = 10;
         private const double MinExpandedHeight = 120;
         private const double MaxExpandedHeight = 520;
+        private static readonly TimeSpan SlideDuration = TimeSpan.FromMilliseconds(220);
 
         private bool _isResizing;
+        private bool _isOpen;
         private double _resizeStartY;
         private double _resizeStartHeight;
         private double _frozenHeight;
@@ -34,8 +37,12 @@ namespace SpotifyWPF.View.Component
         public LoopLabBottomPanel()
         {
             InitializeComponent();
-            UpdateHeight();
-            Loaded += (_, __) => UpdateHeight();
+            Height = PeekHeight;
+            Loaded += (_, __) =>
+            {
+                if (!_isOpen && !_isResizing)
+                    Height = PeekHeight;
+            };
             SizeChanged += (_, __) =>
             {
                 if (_isResizing)
@@ -64,17 +71,58 @@ namespace SpotifyWPF.View.Component
             set => SetValue(ExpandedHeightProperty, value);
         }
 
-        private static void OnLayoutPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private static void OnExpandedHeightChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (d is LoopLabBottomPanel panel && !panel._isResizing)
-                panel.UpdateHeight();
+            if (d is LoopLabBottomPanel panel && panel._isOpen && !panel._isResizing)
+                panel.Height = ClampExpandedHeight(panel.ExpandedHeight);
         }
 
-        private void UpdateHeight()
+        private void Root_MouseEnter(object sender, MouseEventArgs e)
         {
-            Height = IsExpanded
-                ? Math.Max(MinExpandedHeight, Math.Min(MaxExpandedHeight, ExpandedHeight))
-                : CollapsedHeight;
+            SlideOpen();
+        }
+
+        private void Root_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (_isResizing)
+                return;
+
+            SlideClosed();
+        }
+
+        private void SlideOpen()
+        {
+            _isOpen = true;
+            IsExpanded = true;
+            AnimateHeight(ClampExpandedHeight(ExpandedHeight));
+        }
+
+        private void SlideClosed()
+        {
+            _isOpen = false;
+            IsExpanded = false;
+            AnimateHeight(PeekHeight);
+        }
+
+        private void AnimateHeight(double to)
+        {
+            BeginAnimation(HeightProperty, null);
+            var animation = new DoubleAnimation(Height, to, SlideDuration)
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                FillBehavior = FillBehavior.Stop
+            };
+            animation.Completed += (_, __) =>
+            {
+                BeginAnimation(HeightProperty, null);
+                Height = to;
+            };
+            BeginAnimation(HeightProperty, animation, HandoffBehavior.SnapshotAndReplace);
+        }
+
+        private static double ClampExpandedHeight(double height)
+        {
+            return Math.Max(MinExpandedHeight, Math.Min(MaxExpandedHeight, height));
         }
 
         private void BeginResizePreview()
@@ -103,7 +151,7 @@ namespace SpotifyWPF.View.Component
 
         private void ResizeBar_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (!IsExpanded)
+            if (!_isOpen)
                 return;
 
             _isResizing = true;
@@ -112,6 +160,7 @@ namespace SpotifyWPF.View.Component
             _frozenHeight = Height;
             _previewHeight = _resizeStartHeight;
 
+            BeginAnimation(HeightProperty, null);
             Height = _frozenHeight;
             BeginResizePreview();
             Mouse.Capture(this);
@@ -160,7 +209,7 @@ namespace SpotifyWPF.View.Component
         private void UpdatePreviewFromMouse(double currentY)
         {
             var delta = _resizeStartY - currentY;
-            _previewHeight = Math.Max(MinExpandedHeight, Math.Min(MaxExpandedHeight, _resizeStartHeight + delta));
+            _previewHeight = ClampExpandedHeight(_resizeStartHeight + delta);
             UpdateResizePreview();
         }
 
@@ -173,7 +222,16 @@ namespace SpotifyWPF.View.Component
             Mouse.Capture(null);
             ExpandedHeight = _previewHeight;
             EndResizePreview();
-            UpdateHeight();
+
+            if (_isOpen || IsMouseOver)
+            {
+                _isOpen = true;
+                Height = ClampExpandedHeight(ExpandedHeight);
+            }
+            else
+            {
+                SlideClosed();
+            }
         }
     }
 }

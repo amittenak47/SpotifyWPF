@@ -3,8 +3,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SpotifyWPF.View.Component"
              x:Name="Root"
-             MinHeight="28"
-             ClipToBounds="False">
+             MinHeight="8"
+             ClipToBounds="True"
+             MouseEnter="Root_MouseEnter"
+             MouseLeave="Root_MouseLeave">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
@@ -12,63 +14,30 @@
 
     <Border Background="{DynamicResource AppSurfaceBrush}"
             BorderBrush="{DynamicResource AppBorderBrush}"
-            BorderThickness="1"
-            ClipToBounds="False">
-        <Grid ClipToBounds="False">
+            BorderThickness="1,1,1,0"
+            ClipToBounds="True">
+        <Grid ClipToBounds="True">
             <DockPanel x:Name="PanelContent" LastChildFill="True">
-                <ToggleButton DockPanel.Dock="Top"
-                              Style="{StaticResource ControlPanelHeaderToggleStyle}"
-                              IsChecked="{Binding IsExpanded, ElementName=Root, Mode=TwoWay}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Controls"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource AppForegroundBrush}"/>
-                        <TextBlock Margin="8,0,0,0"
-                                   FontFamily="Segoe UI Symbol"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource AppMutedForegroundBrush}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Text" Value="▶"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsExpanded, ElementName=Root}" Value="True">
-                                            <Setter Property="Text" Value="▼"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </StackPanel>
-                </ToggleButton>
+                <Border x:Name="ResizeBar"
+                        DockPanel.Dock="Top"
+                        Height="8"
+                        Background="{DynamicResource AppSurfaceAltBrush}"
+                        BorderBrush="{DynamicResource AppBorderBrush}"
+                        BorderThickness="0,0,0,1"
+                        Cursor="SizeNS"
+                        ToolTip="Hover to open Controls · Drag to resize"
+                        PreviewMouseLeftButtonDown="ResizeBar_PreviewMouseLeftButtonDown"
+                        PreviewMouseMove="ResizeBar_PreviewMouseMove"
+                        PreviewMouseLeftButtonUp="ResizeBar_PreviewMouseLeftButtonUp">
+                    <Border Width="48" Height="3"
+                            CornerRadius="2"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource AppBorderBrush}"/>
+                </Border>
 
-                <Grid Visibility="{Binding IsExpanded, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-
-                    <Border x:Name="ResizeBar"
-                            Grid.Row="0"
-                            Height="6"
-                            Background="{DynamicResource AppSurfaceAltBrush}"
-                            BorderBrush="{DynamicResource AppBorderBrush}"
-                            BorderThickness="0,0,0,1"
-                            Cursor="SizeNS"
-                            ToolTip="Drag to resize panel height"
-                            PreviewMouseLeftButtonDown="ResizeBar_PreviewMouseLeftButtonDown"
-                            PreviewMouseMove="ResizeBar_PreviewMouseMove"
-                            PreviewMouseLeftButtonUp="ResizeBar_PreviewMouseLeftButtonUp">
-                        <Border Width="48" Height="4"
-                                CornerRadius="2"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Background="{DynamicResource AppBorderBrush}"/>
-                    </Border>
-
-                    <TabControl Grid.Row="1"
-                                Style="{StaticResource ControlPanelTabControlStyle}"
-                                DataContext="{Binding DataContext, ElementName=Root}">
+                <TabControl Style="{StaticResource ControlPanelTabControlStyle}"
+                            DataContext="{Binding DataContext, ElementName=Root}">
                         <TabItem Header="Session">
                             <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
                                 <Grid>
@@ -374,13 +343,17 @@
                                     <CheckBox Content="Fractal background"
                                               Foreground="{DynamicResource AppForegroundBrush}"
                                               IsChecked="{Binding IsFractalBackgroundEnabled}"
-                                              ToolTip="Fractal background synced to the equalizer"/>
+                                              ToolTip="Fractal background synced to the equalizer"
+                                              Margin="0,0,0,4"/>
+                                    <CheckBox Content="Show status overlay"
+                                              Foreground="{DynamicResource AppForegroundBrush}"
+                                              IsChecked="{Binding ShowStatusOverlay}"
+                                              ToolTip="When enabled, hover under the title to reveal now-playing and analysis status"/>
                                     </StackPanel>
                                 </ScrollViewer>
                             </Border>
                         </TabItem>
                     </TabControl>
-                </Grid>
             </DockPanel>
 
             <Canvas x:Name="ResizePreviewCanvas"
