@@ -28,6 +28,7 @@ namespace SpotifyWPF.View.Component
         }
 
         private const double WheelDragThreshold = 10;
+        private const double WheelHoldDelayMs = 380;
         private const double WheelCenter = 42;
 
         private static readonly SolidColorBrush WheelGoldFill =
@@ -42,6 +43,8 @@ namespace SpotifyWPF.View.Component
         private readonly DispatcherTimer _lockHoldTimer;
         private readonly DispatcherTimer _transportHoldTimer;
 
+        private bool _lockHoldReady;
+        private bool _transportHoldReady;
         private bool _hopModeEnabled;
         private bool _lockPressActive;
         private bool _lockWheelActive;
@@ -61,13 +64,13 @@ namespace SpotifyWPF.View.Component
             _lockHoldTimer = CreateHoldTimer(() =>
             {
                 if (_lockPressActive)
-                    ShowLockWheel();
+                    _lockHoldReady = true;
             });
 
             _transportHoldTimer = CreateHoldTimer(() =>
             {
                 if (_transportPressActive)
-                    ShowTransportWheel();
+                    _transportHoldReady = true;
             });
 
             Loaded += (_, __) => UpdateHopModeChrome();
@@ -75,7 +78,7 @@ namespace SpotifyWPF.View.Component
 
         private static DispatcherTimer CreateHoldTimer(Action onTick)
         {
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(WheelHoldDelayMs) };
             timer.Tick += (_, __) =>
             {
                 timer.Stop();
@@ -242,7 +245,7 @@ namespace SpotifyWPF.View.Component
 
         private void LockToggle_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            BeginWheelPress(_lockHoldTimer, ref _lockPressActive, LockToggle);
+            BeginLockWheelPress();
             e.Handled = true;
         }
 
@@ -256,6 +259,7 @@ namespace SpotifyWPF.View.Component
         {
             _lockHoldTimer.Stop();
             _lockPressActive = false;
+            _lockHoldReady = false;
             ReleaseCapture(LockToggle);
 
             if (_lockWheelActive)
@@ -274,7 +278,7 @@ namespace SpotifyWPF.View.Component
 
         private void TransportButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            BeginWheelPress(_transportHoldTimer, ref _transportPressActive, TransportButton);
+            BeginTransportWheelPress();
             e.Handled = true;
         }
 
@@ -288,6 +292,7 @@ namespace SpotifyWPF.View.Component
         {
             _transportHoldTimer.Stop();
             _transportPressActive = false;
+            _transportHoldReady = false;
             ReleaseCapture(TransportButton);
 
             if (_transportWheelActive)
@@ -313,9 +318,22 @@ namespace SpotifyWPF.View.Component
             timer.Start();
         }
 
+        private void BeginLockWheelPress()
+        {
+            _lockHoldReady = false;
+            BeginWheelPress(_lockHoldTimer, ref _lockPressActive, LockToggle);
+        }
+
+        private void BeginTransportWheelPress()
+        {
+            _transportHoldReady = false;
+            BeginWheelPress(_transportHoldTimer, ref _transportPressActive, TransportButton);
+        }
+
         private void TrackLockWheelDrag()
         {
-            if (!TryReadWheelDelta(LockWheelOverlay, ref _lockWheelActive, ShowLockWheel, out var delta))
+            if (!TryReadWheelDelta(LockWheelOverlay, ref _lockWheelActive, _lockHoldReady, ShowLockWheel,
+                    horizontalOnly: false, out var delta))
                 return;
 
             if (_lockWheelActive)
@@ -327,7 +345,8 @@ namespace SpotifyWPF.View.Component
 
         private void TrackTransportWheelDrag()
         {
-            if (!TryReadWheelDelta(TransportWheelOverlay, ref _transportWheelActive, ShowTransportWheel, out var delta))
+            if (!TryReadWheelDelta(TransportWheelOverlay, ref _transportWheelActive, _transportHoldReady,
+                    ShowTransportWheel, horizontalOnly: true, out var delta))
                 return;
 
             if (_transportWheelActive)
@@ -337,19 +356,29 @@ namespace SpotifyWPF.View.Component
             }
         }
 
-        private bool TryReadWheelDelta(FrameworkElement overlay, ref bool wheelActive, Action showWheel, out Vector delta)
+        private bool TryReadWheelDelta(FrameworkElement overlay, ref bool wheelActive, bool holdReady,
+            Action showWheel, bool horizontalOnly, out Vector delta)
         {
             delta = default;
 
-            if (Mouse.LeftButton != MouseButtonState.Pressed)
+            if (Mouse.LeftButton != MouseButtonState.Pressed || !holdReady)
                 return false;
 
-            delta = overlay.Visibility == Visibility.Visible
-                ? (Vector)(Mouse.GetPosition(overlay) - _wheelPressPoint)
-                : (Vector)(Mouse.GetPosition(overlay) - _wheelPressPoint);
+            delta = (Vector)(Mouse.GetPosition(overlay) - _wheelPressPoint);
 
-            if (!wheelActive && (Math.Abs(delta.X) > 5 || Math.Abs(delta.Y) > 5))
+            if (!wheelActive)
             {
+                if (horizontalOnly)
+                {
+                    if (Math.Abs(delta.X) < WheelDragThreshold
+                        || Math.Abs(delta.X) < Math.Abs(delta.Y))
+                        return false;
+                }
+                else if (Math.Abs(delta.X) < WheelDragThreshold && Math.Abs(delta.Y) < WheelDragThreshold)
+                {
+                    return false;
+                }
+
                 showWheel();
                 wheelActive = true;
                 delta = (Vector)(Mouse.GetPosition(overlay) - _wheelPressPoint);
@@ -403,16 +432,18 @@ namespace SpotifyWPF.View.Component
             if (Math.Abs(delta.X) < WheelDragThreshold && Math.Abs(delta.Y) < WheelDragThreshold)
                 return LockWheelAction.None;
 
-            if (delta.X < 0 && delta.Y < 0)
-                return LockWheelAction.Clear;
+            var angle = (Math.Atan2(delta.Y, delta.X) * 180.0 / Math.PI + 360.0) % 360.0;
 
-            if (delta.X > 0 && delta.Y < 0)
+            if (angle >= 315 || angle < 45)
                 return LockWheelAction.Reset;
 
-            if (delta.X > 0 && delta.Y > 0)
+            if (angle < 135)
                 return LockWheelAction.Maximize;
 
-            return LockWheelAction.Hops;
+            if (angle < 225)
+                return LockWheelAction.Hops;
+
+            return LockWheelAction.Clear;
         }
 
         private static TransportWheelAction PickTransportWheelAction(Vector delta)

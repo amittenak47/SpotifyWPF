@@ -12,6 +12,10 @@ namespace SpotifyWPF.View.Component
             DependencyProperty.Register(nameof(Text), typeof(string), typeof(MarqueeTextBlock),
                 new PropertyMetadata(string.Empty, OnTextChanged));
 
+        public static readonly DependencyProperty AlwaysScrollProperty =
+            DependencyProperty.Register(nameof(AlwaysScroll), typeof(bool), typeof(MarqueeTextBlock),
+                new PropertyMetadata(false, OnTextChanged));
+
         private Storyboard _storyboard;
 
         public MarqueeTextBlock()
@@ -25,6 +29,12 @@ namespace SpotifyWPF.View.Component
         {
             get => (string)GetValue(TextProperty);
             set => SetValue(TextProperty, value);
+        }
+
+        public bool AlwaysScroll
+        {
+            get => (bool)GetValue(AlwaysScrollProperty);
+            set => SetValue(AlwaysScrollProperty, value);
         }
 
         private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -49,7 +59,10 @@ namespace SpotifyWPF.View.Component
             var textWidth = ScrollText.DesiredSize.Width;
             var hostWidth = ActualWidth;
 
-            if (hostWidth <= 0 || textWidth <= hostWidth + 4)
+            if (hostWidth <= 0)
+                return;
+
+            if (!AlwaysScroll && textWidth <= hostWidth + 4)
             {
                 ScrollTransform.X = 0;
                 return;
@@ -59,7 +72,7 @@ namespace SpotifyWPF.View.Component
             {
                 From = hostWidth,
                 To = -textWidth,
-                Duration = TimeSpan.FromSeconds(Math.Max(6, textWidth / 40)),
+                Duration = TimeSpan.FromSeconds(Math.Max(6, (hostWidth + textWidth) / 48)),
                 RepeatBehavior = RepeatBehavior.Forever
             };
 
