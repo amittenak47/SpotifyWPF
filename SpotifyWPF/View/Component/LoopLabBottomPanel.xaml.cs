@@ -50,7 +50,6 @@ namespace SpotifyWPF.View.Component
                     UpdateResizePreview();
             };
             PreviewMouseMove += OnPreviewMouseMoveWhileResizing;
-            PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUpWhileResizing;
             LostMouseCapture += OnLostMouseCapture;
         }
 
@@ -76,32 +75,6 @@ namespace SpotifyWPF.View.Component
         {
             if (d is LoopLabBottomPanel panel && panel._isOpen && !panel._isResizing)
                 panel.Height = ClampExpandedHeight(panel.ExpandedHeight);
-        }
-
-        private void PeekBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (_isResizing || _didResizeDrag)
-            {
-                _didResizeDrag = false;
-                return;
-            }
-
-            if (_isOpen)
-                SlideClosed();
-            else
-                SlideOpen();
-
-            e.Handled = true;
-        }
-
-        private void Root_MouseEnter(object sender, MouseEventArgs e)
-        {
-            // Click-to-toggle only; hover no longer opens the panel.
-        }
-
-        private void Root_MouseLeave(object sender, MouseEventArgs e)
-        {
-            // Click-to-toggle only; hover no longer closes the panel.
         }
 
         private void SlideOpen()
@@ -165,8 +138,13 @@ namespace SpotifyWPF.View.Component
 
         private void ResizeBar_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            // When closed, a click opens. When open, press may start a resize drag.
             if (!_isOpen)
+            {
+                SlideOpen();
+                e.Handled = true;
                 return;
+            }
 
             _isResizing = true;
             _didResizeDrag = false;
@@ -200,18 +178,18 @@ namespace SpotifyWPF.View.Component
             e.Handled = true;
         }
 
-        private void OnPreviewMouseLeftButtonUpWhileResizing(object sender, MouseButtonEventArgs e)
+        private void ResizeBar_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             if (!_isResizing)
                 return;
 
+            var dragged = _didResizeDrag;
             FinishResize();
-            e.Handled = true;
-        }
 
-        private void ResizeBar_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            FinishResize();
+            // Click (no drag) on the open peek/resize bar closes the panel.
+            if (!dragged)
+                SlideClosed();
+
             e.Handled = true;
         }
 
@@ -250,7 +228,6 @@ namespace SpotifyWPF.View.Component
             }
 
             EndResizePreview();
-            // Click without drag: toggle is handled by PeekBar_MouseLeftButtonUp.
         }
     }
 }

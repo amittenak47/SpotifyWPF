@@ -1693,7 +1693,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 RingGraph = null;
                 RingSectionStartsSec = Array.Empty<double>();
-                RingSegmentCountText = "No beat map — analyze track first";
+                RingSegmentCountText = "No beat map — analyze track to build the ring";
                 _visualEnergy.Clear();
                 return;
             }
@@ -1716,7 +1716,7 @@ namespace SpotifyWPF.ViewModel.Page
                     var graph = task.Status == TaskStatus.RanToCompletion ? task.Result : null;
                     RingGraph = graph;
                     RingSegmentCountText = graph == null
-                        ? "No beat map — analyze track first"
+                        ? "No beat map — analyze track to build the ring"
                         : $"{graph.Beats.Count} beats · {graph.TotalBranchCount} branches";
                 }));
         }

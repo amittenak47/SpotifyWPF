@@ -1234,13 +1234,15 @@ namespace SpotifyWPF.View.Component
                     MakePen(AccentColor, 2.5));
             }
 
-            // Mini player: shift the hint above the transport backdrop that covers the center.
-            var baseOffset = MiniPlayerMode ? -outer * 0.42 : 0;
-
-            DrawCenteredText(dc, center, baseOffset - 8, duration > 0 ? "no beat map" : "no track",
-                14, TextColor, FontWeights.SemiBold);
-            DrawCenteredText(dc, center, baseOffset + 12, "Analyze track to build the ring",
-                10, MutedTextColor, FontWeights.Normal);
+            // Mini player: keep a short center hint above the transport backdrop.
+            if (MiniPlayerMode)
+            {
+                var baseOffset = -outer * 0.42;
+                DrawCenteredText(dc, center, baseOffset - 8, duration > 0 ? "no beat map" : "no track",
+                    14, TextColor, FontWeights.SemiBold);
+                DrawCenteredText(dc, center, baseOffset + 12, "Analyze track to build the ring",
+                    10, MutedTextColor, FontWeights.Normal);
+            }
         }
 
         private void RenderRing(DrawingContext dc, BeatGraph graph, Point center, double outer)

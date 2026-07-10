@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -26,7 +25,6 @@ namespace SpotifyWPF.View.Page
         private const double MinStageZoom = 0.75;
         private const double MaxStageZoom = 2.0;
 
-        private bool _scrubStarted;
         private double _stageZoom = 1.0;
 
         public PredictionPage()
@@ -46,7 +44,7 @@ namespace SpotifyWPF.View.Page
                 EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
             });
 
-            // Full-page zoom lives on StageRoot so search/scrubber/wheel stay locked to the ring.
+            // Full-page zoom lives on StageRoot so search/wheel stay locked to the ring.
             RingView.OwnsWheelZoom = false;
             ApplyStageZoom();
 
@@ -134,51 +132,6 @@ namespace SpotifyWPF.View.Page
                 ViewModel.PlayFromInputCommand.Execute(null);
 
             e.Handled = true;
-        }
-
-        private void Scrubber_Loaded(object sender, RoutedEventArgs e)
-        {
-            if (!(sender is Slider slider))
-                return;
-
-            slider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(Scrubber_DragStarted), true);
-            slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(Scrubber_DragCompleted), true);
-        }
-
-        private void Scrubber_DragStarted(object sender, DragStartedEventArgs e)
-        {
-            _scrubStarted = true;
-            ViewModel?.BeginScrub();
-        }
-
-        private void Scrubber_DragCompleted(object sender, DragCompletedEventArgs e)
-        {
-            EndScrubIfActive();
-        }
-
-        private void Scrubber_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            _scrubStarted = true;
-            ViewModel?.BeginScrub();
-        }
-
-        private void Scrubber_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            EndScrubIfActive();
-        }
-
-        private void Scrubber_LostMouseCapture(object sender, MouseEventArgs e)
-        {
-            EndScrubIfActive();
-        }
-
-        private void EndScrubIfActive()
-        {
-            if (!_scrubStarted)
-                return;
-
-            _scrubStarted = false;
-            ViewModel?.EndScrub();
         }
 
         private void PaulLamereLink_RequestNavigate(object sender, RequestNavigateEventArgs e)

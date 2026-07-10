@@ -14,107 +14,129 @@
             BorderBrush="{DynamicResource AppBorderBrush}"
             BorderThickness="1,1,1,0"
             ClipToBounds="True">
-        <DockPanel LastChildFill="True">
-            <Border x:Name="PeekBar"
-                    DockPanel.Dock="Top"
-                    Height="8"
-                    Background="{DynamicResource AppSurfaceAltBrush}"
-                    BorderBrush="{DynamicResource AppBorderBrush}"
-                    BorderThickness="0,0,0,1"
-                    Cursor="Hand"
-                    ToolTip="Click to open/close Controls"
-                    MouseLeftButtonUp="PeekBar_MouseLeftButtonUp">
-                <Border Width="48" Height="3"
-                        CornerRadius="2"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Background="{DynamicResource AppBorderBrush}"/>
-            </Border>
+        <Grid ClipToBounds="True">
+            <DockPanel x:Name="PanelContent" LastChildFill="True">
+                <Border x:Name="ResizeBar"
+                        DockPanel.Dock="Top"
+                        Height="8"
+                        Background="{DynamicResource AppSurfaceAltBrush}"
+                        BorderBrush="{DynamicResource AppBorderBrush}"
+                        BorderThickness="0,0,0,1"
+                        Cursor="SizeNS"
+                        ToolTip="Click to open/close Controls · Drag to resize when open"
+                        PreviewMouseLeftButtonDown="ResizeBar_PreviewMouseLeftButtonDown"
+                        PreviewMouseMove="ResizeBar_PreviewMouseMove"
+                        PreviewMouseLeftButtonUp="ResizeBar_PreviewMouseLeftButtonUp">
+                    <Border Width="48" Height="3"
+                            CornerRadius="2"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource AppBorderBrush}"/>
+                </Border>
 
-            <TabControl Style="{StaticResource ControlPanelTabControlStyle}"
-                        DataContext="{Binding DataContext, ElementName=Root}">
-                <TabItem Header="Tracks">
-                    <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
+                <TabControl Style="{StaticResource ControlPanelTabControlStyle}"
+                            DataContext="{Binding DataContext, ElementName=Root}">
+                    <TabItem Header="Tracks">
+                        <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
 
-                            <StackPanel Grid.Row="0"
-                                        Style="{StaticResource ControlPanelToolbarStyle}"
-                                        HorizontalAlignment="Right">
-                                <TextBlock Text="Double-click a playlist or use Load Tracks."
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0"
-                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                                <Button Content="Load Tracks"
-                                        Command="{Binding LoadTracksCommand}"
-                                        CommandParameter="{Binding SelectedPlaylist}"
-                                        Focusable="False"
-                                        Padding="12,4"/>
-                            </StackPanel>
+                                <StackPanel Grid.Row="0"
+                                            Style="{StaticResource ControlPanelToolbarStyle}"
+                                            HorizontalAlignment="Right">
+                                    <TextBlock Text="Double-click a playlist or use Load Tracks."
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0"
+                                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                    <Button Content="Load Tracks"
+                                            Command="{Binding LoadTracksCommand}"
+                                            CommandParameter="{Binding SelectedPlaylist}"
+                                            Focusable="False"
+                                            Padding="12,4"/>
+                                </StackPanel>
 
-                            <DataGrid Grid.Row="1"
-                                      x:Name="TracksDataGrid"
-                                      ItemsSource="{Binding Tracks}"
-                                      AutoGenerateColumns="False"
-                                      CanUserAddRows="False"
-                                      IsReadOnly="True"
-                                      CanUserSortColumns="True"
-                                      HeadersVisibility="Column"
+                                <DataGrid Grid.Row="1"
+                                          x:Name="TracksDataGrid"
+                                          ItemsSource="{Binding Tracks}"
+                                          AutoGenerateColumns="False"
+                                          CanUserAddRows="False"
+                                          IsReadOnly="True"
+                                          CanUserSortColumns="True"
+                                          HeadersVisibility="Column"
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          VerticalAlignment="Stretch"
+                                          MinHeight="72">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="#" Binding="{Binding Position}" SortMemberPath="Position" Width="Auto"/>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding TrackName}" SortMemberPath="TrackName" Width="*"/>
+                                        <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}" SortMemberPath="Artists" Width="*"/>
+                                        <DataGridTextColumn Header="Album" Binding="{Binding Album}" SortMemberPath="Album" Width="*"/>
+                                        <DataGridTextColumn Header="Disc #" Binding="{Binding DiscNumber}" SortMemberPath="DiscNumber" Width="Auto"/>
+                                        <DataGridTextColumn Header="Track #" Binding="{Binding TrackNumber}" SortMemberPath="TrackNumber" Width="Auto"/>
+                                        <DataGridTextColumn Header="Duration" Binding="{Binding Duration}" SortMemberPath="Duration" Width="Auto"/>
+                                        <DataGridTextColumn Header="Type" Binding="{Binding ItemType}" SortMemberPath="ItemType" Width="Auto"/>
+                                        <DataGridTextColumn Header="Spotify ID" Binding="{Binding SpotifyId}" SortMemberPath="SpotifyId" Width="*"/>
+                                        <DataGridTextColumn Header="Note" Binding="{Binding StatusNote}" SortMemberPath="StatusNote" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+                    </TabItem>
+
+                    <TabItem Header="Actions">
+                        <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                            <TreeView x:Name="QueuedActionsTreeView"
+                                      ItemsSource="{Binding QueuedActions}"
+                                      FontFamily="Consolas"
+                                      FontSize="11"
                                       Background="Transparent"
                                       BorderThickness="0"
                                       VerticalAlignment="Stretch"
-                                      MinHeight="72">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="#" Binding="{Binding Position}" SortMemberPath="Position" Width="Auto"/>
-                                    <DataGridTextColumn Header="Name" Binding="{Binding TrackName}" SortMemberPath="TrackName" Width="*"/>
-                                    <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}" SortMemberPath="Artists" Width="*"/>
-                                    <DataGridTextColumn Header="Album" Binding="{Binding Album}" SortMemberPath="Album" Width="*"/>
-                                    <DataGridTextColumn Header="Disc #" Binding="{Binding DiscNumber}" SortMemberPath="DiscNumber" Width="Auto"/>
-                                    <DataGridTextColumn Header="Track #" Binding="{Binding TrackNumber}" SortMemberPath="TrackNumber" Width="Auto"/>
-                                    <DataGridTextColumn Header="Duration" Binding="{Binding Duration}" SortMemberPath="Duration" Width="Auto"/>
-                                    <DataGridTextColumn Header="Type" Binding="{Binding ItemType}" SortMemberPath="ItemType" Width="Auto"/>
-                                    <DataGridTextColumn Header="Spotify ID" Binding="{Binding SpotifyId}" SortMemberPath="SpotifyId" Width="*"/>
-                                    <DataGridTextColumn Header="Note" Binding="{Binding StatusNote}" SortMemberPath="StatusNote" Width="*"/>
-                                </DataGrid.Columns>
-                            </DataGrid>
-                        </Grid>
-                    </Border>
-                </TabItem>
+                                      MinHeight="72"
+                                      PreviewKeyDown="QueuedActionsTreeView_PreviewKeyDown">
+                                <TreeView.ItemTemplate>
+                                    <HierarchicalDataTemplate ItemsSource="{Binding DetailItems}">
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                        <HierarchicalDataTemplate.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding DisplayName}" Margin="4,1,0,1"/>
+                                            </DataTemplate>
+                                        </HierarchicalDataTemplate.ItemTemplate>
+                                    </HierarchicalDataTemplate>
+                                </TreeView.ItemTemplate>
+                            </TreeView>
+                        </Border>
+                    </TabItem>
 
-                <TabItem Header="Actions">
-                    <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
-                        <TreeView x:Name="QueuedActionsTreeView"
-                                  ItemsSource="{Binding QueuedActions}"
-                                  FontFamily="Consolas"
-                                  FontSize="11"
-                                  Background="Transparent"
-                                  BorderThickness="0"
-                                  VerticalAlignment="Stretch"
-                                  MinHeight="72"
-                                  PreviewKeyDown="QueuedActionsTreeView_PreviewKeyDown">
-                            <TreeView.ItemTemplate>
-                                <HierarchicalDataTemplate ItemsSource="{Binding DetailItems}">
-                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
-                                    <HierarchicalDataTemplate.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding DisplayName}" Margin="4,1,0,1"/>
-                                        </DataTemplate>
-                                    </HierarchicalDataTemplate.ItemTemplate>
-                                </HierarchicalDataTemplate>
-                            </TreeView.ItemTemplate>
-                        </TreeView>
-                    </Border>
-                </TabItem>
+                    <TabItem Header="Logs">
+                        <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                            <local:ActivityLogView DataContext="{Binding ActivityLog, ElementName=Root}"/>
+                        </Border>
+                    </TabItem>
+                </TabControl>
+            </DockPanel>
 
-                <TabItem Header="Logs">
-                    <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
-                        <local:ActivityLogView DataContext="{Binding ActivityLog, ElementName=Root}"/>
-                    </Border>
-                </TabItem>
-            </TabControl>
-        </DockPanel>
+            <Canvas x:Name="ResizePreviewCanvas"
+                    ClipToBounds="False"
+                    IsHitTestVisible="False"
+                    Panel.ZIndex="20">
+                <Border x:Name="ResizePreviewGhost"
+                        Background="#CC121212"
+                        BorderBrush="{DynamicResource AppBorderBrush}"
+                        BorderThickness="1"
+                        Visibility="Collapsed">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="16"
+                                          ShadowDepth="4"
+                                          Opacity="0.65"
+                                          Color="Black"/>
+                    </Border.Effect>
+                </Border>
+            </Canvas>
+        </Grid>
     </Border>
 </UserControl>

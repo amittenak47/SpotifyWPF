@@ -24,7 +24,6 @@
                         BorderThickness="0,0,0,1"
                         Cursor="SizeNS"
                         ToolTip="Click to open/close Controls · Drag to resize when open"
-                        MouseLeftButtonUp="PeekBar_MouseLeftButtonUp"
                         PreviewMouseLeftButtonDown="ResizeBar_PreviewMouseLeftButtonDown"
                         PreviewMouseMove="ResizeBar_PreviewMouseMove"
                         PreviewMouseLeftButtonUp="ResizeBar_PreviewMouseLeftButtonUp">

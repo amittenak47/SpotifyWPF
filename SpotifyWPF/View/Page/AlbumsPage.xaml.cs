@@ -1,13 +1,30 @@
+using System;
+using System.Windows;
+using System.Windows.Media.Animation;
+
 namespace SpotifyWPF.View.Page
 {
-    /// <summary>
-    /// Interaction logic for AlbumsPage.xaml
-    /// </summary>
     public partial class AlbumsPage
     {
         public AlbumsPage()
         {
             InitializeComponent();
+            IsVisibleChanged += AlbumsPage_IsVisibleChanged;
+        }
+
+        private void AlbumsPage_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (IsVisible)
+                FadeIn();
+        }
+
+        private void FadeIn()
+        {
+            Opacity = 0;
+            BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(450))
+            {
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
+            });
         }
     }
 }

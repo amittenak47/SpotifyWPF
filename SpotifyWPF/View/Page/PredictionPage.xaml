@@ -56,13 +56,12 @@
                          Margin="12,4">
                     <Grid x:Name="StageRoot"
                           Width="560"
-                          Height="646"
+                          Height="596"
                           RenderTransformOrigin="0.5,0.5"
                           Background="Transparent">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="560"/>
-                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Border x:Name="SearchHoverZone"
@@ -124,37 +123,6 @@
                                                                  DataContext="{Binding}"/>
                             </Border>
                         </Grid>
-
-                        <Border x:Name="ScrubberHoverZone"
-                                Grid.Row="2"
-                                Margin="0,10,0,0"
-                                Padding="0,4"
-                                Background="#01FFFFFF"
-                                Opacity="0.18"
-                                Width="560"
-                                HorizontalAlignment="Center"
-                                Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                MouseEnter="HoverZone_MouseEnter"
-                                MouseLeave="HoverZone_MouseLeave">
-                            <StackPanel>
-                                <TextBlock Text="{Binding PositionText}"
-                                           FontSize="10"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,0,0,4"
-                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                                <Slider Style="{StaticResource DarkMediaSliderStyle}"
-                                        Minimum="0"
-                                        Maximum="{Binding DurationMs, Mode=OneWay}"
-                                        Value="{Binding ScrubberPositionMs, Mode=TwoWay}"
-                                        IsMoveToPointEnabled="True"
-                                        IsEnabled="{Binding HasScrubbableTrack}"
-                                        HorizontalAlignment="Stretch"
-                                        Loaded="Scrubber_Loaded"
-                                        PreviewMouseLeftButtonDown="Scrubber_PreviewMouseLeftButtonDown"
-                                        PreviewMouseLeftButtonUp="Scrubber_PreviewMouseLeftButtonUp"
-                                        LostMouseCapture="Scrubber_LostMouseCapture"/>
-                            </StackPanel>
-                        </Border>
                     </Grid>
                 </Viewbox>
 
@@ -240,17 +208,20 @@
                                     </component:MarqueeTextBlock.Style>
                                 </component:MarqueeTextBlock>
                             </Grid>
+                            <TextBlock Text="{Binding RingSegmentCountText}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,4"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource AppForegroundBrush}"/>
                             <TextBlock Text="{Binding ElementName=RingView, Path=Ring.HudText}"
                                        FontSize="10"
                                        TextWrapping="Wrap"
                                        Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                            <TextBlock FontSize="10"
+                            <TextBlock Text="{Binding JukeboxBranchChanceText}"
+                                       FontSize="10"
                                        Margin="0,2,0,0"
-                                       Foreground="{DynamicResource AppMutedForegroundBrush}">
-                                <Run Text="{Binding RingSegmentCountText, Mode=OneWay}"/>
-                                <Run Text="  ·  "/>
-                                <Run Text="{Binding JukeboxBranchChanceText, Mode=OneWay}"/>
-                            </TextBlock>
+                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                             <TextBlock Text="{Binding AnalysisSourceText}"
                                        FontSize="10"
                                        Margin="0,2,0,0"
