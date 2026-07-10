@@ -138,6 +138,7 @@ namespace SpotifyWPF.ViewModel.Page
             AnalyzeTrackCommand = new RelayCommand(async () => await AnalyzeCurrentTrackAsync(),
                 () => HasCurrentTrack() && !IsAnalyzing);
             AnalyzeInputCommand = new RelayCommand(async () => await AnalyzeFromInputAsync(), CanAnalyzeInput);
+            PlayFromInputCommand = new RelayCommand(async () => await PlayFromInputAsync(), CanPlayFromInput);
             AnalyzeSessionTrackCommand = new RelayCommand(async () => await AnalyzeSessionTrackAsync(),
                 () => SelectedSessionTrack != null && !IsAnalyzing);
             PreviousSessionTrackCommand = new RelayCommand(() => NavigateSessionTrack(-1), () => CanNavigateSessionTrack(-1));
@@ -194,7 +195,10 @@ namespace SpotifyWPF.ViewModel.Page
             set
             {
                 if (Set(ref _trackInput, value))
+                {
                     AnalyzeInputCommand?.RaiseCanExecuteChanged();
+                    PlayFromInputCommand?.RaiseCanExecuteChanged();
+                }
             }
         }
 
@@ -470,6 +474,7 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     AnalyzeTrackCommand.RaiseCanExecuteChanged();
                     AnalyzeInputCommand.RaiseCanExecuteChanged();
+                    PlayFromInputCommand.RaiseCanExecuteChanged();
                     AnalyzeSessionTrackCommand.RaiseCanExecuteChanged();
                     NotifyTransportStateChanged();
                     RaisePropertyChanged(nameof(IsIndeterminateAnalysisProgress));
@@ -835,6 +840,8 @@ namespace SpotifyWPF.ViewModel.Page
 
         public RelayCommand AnalyzeInputCommand { get; }
 
+        public RelayCommand PlayFromInputCommand { get; }
+
         public RelayCommand AnalyzeSessionTrackCommand { get; }
 
         public RelayCommand PreviousSessionTrackCommand { get; }
@@ -969,7 +976,24 @@ namespace SpotifyWPF.ViewModel.Page
             }
 
             TrackInput = trackId;
-            await PlayTrackAsync(trackId, "prediction-page");
+            UpsertSessionTrack(trackId, trackId, "");
+
+            // Play immediately when analysis is already cached; otherwise analyze first, then play.
+            if (AnalysisCache.Exists(trackId))
+            {
+                await PlayTrackAsync(trackId, "prediction-page");
+                return;
+            }
+
+            await AnalyzeTrackByIdAsync(trackId, trackId);
+
+            if (AnalysisCache.Exists(trackId))
+                await PlayTrackAsync(trackId, "prediction-page");
+        }
+
+        private bool CanPlayFromInput()
+        {
+            return !IsAnalyzing && ParseTrackId(TrackInput) != null;
         }
 
         private async Task TogglePlayPauseAsync()

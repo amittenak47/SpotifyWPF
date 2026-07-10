@@ -20,7 +20,7 @@
                               Style="{StaticResource ControlPanelHeaderToggleStyle}"
                               IsChecked="{Binding IsExpanded, ElementName=Root, Mode=TwoWay}">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Control Panel"
+                        <TextBlock Text="Controls"
                                    FontWeight="SemiBold"
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource AppForegroundBrush}"/>
@@ -69,98 +69,6 @@
                     <TabControl Grid.Row="1"
                                 Style="{StaticResource ControlPanelTabControlStyle}"
                                 DataContext="{Binding DataContext, ElementName=Root}">
-                        <TabItem Header="Logs">
-                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
-                                <local:ActivityLogView DataContext="{Binding ActivityLog, ElementName=Root}"/>
-                            </Border>
-                        </TabItem>
-
-                        <TabItem Header="Tuning">
-                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                              VerticalAlignment="Stretch"
-                                              HorizontalScrollBarVisibility="Disabled">
-                                    <StackPanel>
-                                        <local:TuningSliderRow Label="Branch similarity threshold (lower = smoother)"
-                                                               ValueText="{Binding JukeboxSimilarityThresholdMaxText}"
-                                                               Minimum="25"
-                                                               Maximum="80"
-                                                               Value="{Binding JukeboxSimilarityThresholdMax}"/>
-                                        <local:TuningSliderRow Label="Branch probability min"
-                                                               ValueText="{Binding JukeboxBranchProbabilityMinText}"
-                                                               Minimum="0"
-                                                               Maximum="40"
-                                                               Value="{Binding JukeboxBranchProbabilityMinPercent}"/>
-                                        <local:TuningSliderRow Label="Branch probability max"
-                                                               ValueText="{Binding JukeboxBranchProbabilityMaxText}"
-                                                               Minimum="5"
-                                                               Maximum="60"
-                                                               Value="{Binding JukeboxBranchProbabilityMaxPercent}"/>
-                                        <local:TuningSliderRow Label="Ramp-up per beat"
-                                                               ValueText="{Binding JukeboxBranchRampText}"
-                                                               Minimum="0.2"
-                                                               Maximum="3"
-                                                               Value="{Binding JukeboxBranchRampPerBeatPercent}"/>
-                                        <local:TuningSliderRow Label="Seek lead (SDK latency)"
-                                                               ValueText="{Binding JukeboxSeekLeadMsText}"
-                                                               Minimum="0"
-                                                               Maximum="300"
-                                                               Value="{Binding JukeboxSeekLeadMs}"/>
-
-                                        <CheckBox Content="Allow only reverse branches"
-                                                  Foreground="{DynamicResource AppForegroundBrush}"
-                                                  IsChecked="{Binding JukeboxAllowOnlyReverseBranches}"
-                                                  Margin="0,0,0,4"/>
-                                        <CheckBox Content="Allow only long branches (16+ beats apart)"
-                                                  Foreground="{DynamicResource AppForegroundBrush}"
-                                                  IsChecked="{Binding JukeboxAllowOnlyLongBranches}"
-                                                  Margin="0,0,0,8"/>
-
-                                        <TextBlock Text="Sliders rebuild the beat graph from cached analysis (no re-capture). Use Analyze for a new track; Delete cache + Analyze to re-capture audio."
-                                                   FontSize="11"
-                                                   TextWrapping="Wrap"
-                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                                    </StackPanel>
-                                </ScrollViewer>
-                            </Border>
-                        </TabItem>
-
-                        <TabItem Header="Ring">
-                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
-                                <StackPanel>
-                                    <StackPanel Orientation="Horizontal">
-                                        <CheckBox Content="Locks only"
-                                                  VerticalAlignment="Center"
-                                                  Foreground="{DynamicResource AppForegroundBrush}"
-                                                  IsChecked="{Binding JukeboxLocksOnly}"
-                                                  ToolTip="Jukebox jumps travel only the branches locked on the ring"/>
-                                        <Button Content="Clear locks" MinWidth="88" Margin="16,0,0,0"
-                                                Command="{Binding ClearRingLocksCommand}"/>
-                                        <Button Content="Reset plays" MinWidth="88" Margin="8,0,0,0"
-                                                Command="{Binding ResetRingPlaysCommand}"
-                                                ToolTip="Clear the ring's play-coverage bars"/>
-                                        <TextBlock Text="{Binding RingLockCountText}"
-                                                   VerticalAlignment="Center"
-                                                   Margin="16,0,0,0"
-                                                   Foreground="#FFD166"/>
-                                    </StackPanel>
-
-                                    <local:TuningSliderRow Label="Branch preview hops"
-                                                           ValueText="{Binding RingPreviewHopDepth, StringFormat={}{0:0}}"
-                                                           Minimum="1"
-                                                           Maximum="3"
-                                                           Value="{Binding RingPreviewHopDepth}"
-                                                           Margin="0,8,0,0"/>
-
-                                    <TextBlock Text="hover a beat to see branches (hot = closer match) · aim along a chord to chain hops · click a chord to lock"
-                                               FontSize="11"
-                                               Margin="0,8,0,0"
-                                               TextWrapping="Wrap"
-                                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                                </StackPanel>
-                            </Border>
-                        </TabItem>
-
                         <TabItem Header="Session">
                             <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
                                 <Grid>
@@ -239,7 +147,87 @@
                             </Border>
                         </TabItem>
 
-                        <TabItem Header="Music Predictions">
+                        <TabItem Header="Tuning">
+                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              VerticalAlignment="Stretch"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel>
+                                        <local:TuningSliderRow Label="Branch similarity threshold (lower = smoother)"
+                                                               ValueText="{Binding JukeboxSimilarityThresholdMaxText}"
+                                                               Minimum="25"
+                                                               Maximum="80"
+                                                               Value="{Binding JukeboxSimilarityThresholdMax}"/>
+                                        <local:TuningSliderRow Label="Branch probability min"
+                                                               ValueText="{Binding JukeboxBranchProbabilityMinText}"
+                                                               Minimum="0"
+                                                               Maximum="40"
+                                                               Value="{Binding JukeboxBranchProbabilityMinPercent}"/>
+                                        <local:TuningSliderRow Label="Branch probability max"
+                                                               ValueText="{Binding JukeboxBranchProbabilityMaxText}"
+                                                               Minimum="5"
+                                                               Maximum="60"
+                                                               Value="{Binding JukeboxBranchProbabilityMaxPercent}"/>
+                                        <local:TuningSliderRow Label="Ramp-up per beat"
+                                                               ValueText="{Binding JukeboxBranchRampText}"
+                                                               Minimum="0.2"
+                                                               Maximum="3"
+                                                               Value="{Binding JukeboxBranchRampPerBeatPercent}"/>
+                                        <local:TuningSliderRow Label="Seek lead (SDK latency)"
+                                                               ValueText="{Binding JukeboxSeekLeadMsText}"
+                                                               Minimum="0"
+                                                               Maximum="300"
+                                                               Value="{Binding JukeboxSeekLeadMs}"/>
+
+                                        <CheckBox Content="Allow only reverse branches"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
+                                                  IsChecked="{Binding JukeboxAllowOnlyReverseBranches}"
+                                                  Margin="0,0,0,4"/>
+                                        <CheckBox Content="Allow only long branches (16+ beats apart)"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
+                                                  IsChecked="{Binding JukeboxAllowOnlyLongBranches}"
+                                                  Margin="0,0,0,8"/>
+
+                                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                            <CheckBox Content="Locks only"
+                                                      VerticalAlignment="Center"
+                                                      Foreground="{DynamicResource AppForegroundBrush}"
+                                                      IsChecked="{Binding JukeboxLocksOnly}"
+                                                      ToolTip="Jukebox jumps travel only the branches locked on the ring"/>
+                                            <Button Content="Clear locks" MinWidth="88" Margin="16,0,0,0"
+                                                    Command="{Binding ClearRingLocksCommand}"/>
+                                            <Button Content="Reset plays" MinWidth="88" Margin="8,0,0,0"
+                                                    Command="{Binding ResetRingPlaysCommand}"
+                                                    ToolTip="Clear the ring's play-coverage bars"/>
+                                            <TextBlock Text="{Binding RingLockCountText}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="16,0,0,0"
+                                                       Foreground="#FFD166"/>
+                                        </StackPanel>
+
+                                        <local:TuningSliderRow Label="Branch preview hops"
+                                                               ValueText="{Binding RingPreviewHopDepth, StringFormat={}{0:0}}"
+                                                               Minimum="1"
+                                                               Maximum="3"
+                                                               Value="{Binding RingPreviewHopDepth}"
+                                                               Margin="0,8,0,0"/>
+
+                                        <TextBlock Text="Sliders rebuild the beat graph from cached analysis (no re-capture). Use Session Analyze for a new track; Delete cache + Analyze to re-capture audio."
+                                                   FontSize="11"
+                                                   Margin="0,8,0,0"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                        <TextBlock Text="hover a beat to see branches (hot = closer match) - aim along a chord to chain hops - click a chord to lock"
+                                                   FontSize="11"
+                                                   Margin="0,4,0,0"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+                        </TabItem>
+
+                        <TabItem Header="Prediction">
                             <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
                                 <Grid>
                                 <Grid.ColumnDefinitions>
@@ -381,7 +369,12 @@
                                     <CheckBox Content="Ring mini player mode"
                                               Foreground="{DynamicResource AppForegroundBrush}"
                                               IsChecked="{Binding IsMiniPlayerMode, Mode=TwoWay}"
-                                              ToolTip="Show only the jukebox ring in a compact window (use the diagonal-arrow buttons on the transport bar to enter/exit)"/>
+                                              ToolTip="Show only the jukebox ring in a compact window (use Minimize on the transport wheel to enter)"
+                                              Margin="0,0,0,4"/>
+                                    <CheckBox Content="Fractal background"
+                                              Foreground="{DynamicResource AppForegroundBrush}"
+                                              IsChecked="{Binding IsFractalBackgroundEnabled}"
+                                              ToolTip="Fractal background synced to the equalizer"/>
                                     </StackPanel>
                                 </ScrollViewer>
                             </Border>

@@ -90,18 +90,20 @@ namespace SpotifyWPF.View.Page
             }
         }
 
-        /// <summary>Initial state and the failure path: loading out, form back in — no hard toggles.</summary>
+        /// <summary>Initial state and the failure path: loading out, form fades in.</summary>
         private void ShowForm(bool animate)
         {
             _formPanel.Visibility = Visibility.Visible;
 
             if (!animate)
             {
+                // Cold start: form still fades in so the page doesn't pop fully opaque.
                 _formPanel.BeginAnimation(UIElement.OpacityProperty, null);
                 _loadingOverlay.BeginAnimation(UIElement.OpacityProperty, null);
-                _formPanel.Opacity = 1;
+                _formPanel.Opacity = 0;
                 _loadingOverlay.Opacity = 0;
                 _loadingOverlay.Visibility = Visibility.Collapsed;
+                Fade(_formPanel, 1, FormFadeIn);
                 return;
             }
 

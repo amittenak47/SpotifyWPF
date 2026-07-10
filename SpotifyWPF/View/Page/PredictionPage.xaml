@@ -13,84 +13,6 @@
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-
-        <Style x:Key="TransportIconButtonStyle" TargetType="{x:Type Button}">
-            <Setter Property="Width" Value="36"/>
-            <Setter Property="Height" Value="36"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Margin" Value="2,0"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type Button}">
-                        <Border x:Name="Border"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="18">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.4"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="TransportGlyphStyle" TargetType="{x:Type TextBlock}">
-            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
-        </Style>
-
-        <Style x:Key="TransportToggleButtonStyle" TargetType="{x:Type ToggleButton}">
-            <Setter Property="Width" Value="36"/>
-            <Setter Property="Height" Value="36"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Margin" Value="2,0"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type ToggleButton}">
-                        <Border x:Name="Border"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="18">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
-                                <Setter TargetName="Border" Property="Background" Value="#331DB954"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.4"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
     </UserControl.Resources>
 
     <DockPanel Margin="8" Background="{DynamicResource AppBackgroundBrush}">
@@ -184,7 +106,6 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
@@ -226,127 +147,113 @@
                                    Foreground="#E05545"/>
                     </Border>
 
-                    <Border Grid.Row="2"
-                            Background="{DynamicResource AppSurfaceBrush}"
-                            BorderBrush="{DynamicResource AppBorderBrush}"
-                            BorderThickness="1"
-                            Padding="8"
-                            Margin="0,0,0,8"
-                            Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <Grid Grid.Row="0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <TextBox Grid.Column="0"
-                                         Text="{Binding TrackInput, UpdateSourceTrigger=PropertyChanged}"
-                                         VerticalContentAlignment="Center"
-                                         ToolTip="Track ID, spotify:track: URI, or open.spotify.com link"/>
-
-                                <StackPanel Grid.Column="1"
-                                            Orientation="Horizontal"
-                                            Margin="8,0,0,0"
-                                            VerticalAlignment="Center">
-                                    <Button Style="{StaticResource TransportIconButtonStyle}"
-                                            Command="{Binding PreviousSessionTrackCommand}">
-                                        <TextBlock Text="&#xE892;" Style="{StaticResource TransportGlyphStyle}"/>
-                                    </Button>
-
-                                    <Button Style="{StaticResource TransportIconButtonStyle}"
-                                            Command="{Binding TogglePlayPauseCommand}">
-                                        <TextBlock>
-                                            <TextBlock.Style>
-                                                <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource TransportGlyphStyle}">
-                                                    <Setter Property="Text" Value="&#xE768;"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding ShowPauseIcon}" Value="True">
-                                                            <Setter Property="Text" Value="&#xE769;"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </Button>
-
-                                    <Button Style="{StaticResource TransportIconButtonStyle}"
-                                            Command="{Binding StopPlaybackCommand}">
-                                        <TextBlock Text="&#xE71A;" Style="{StaticResource TransportGlyphStyle}"/>
-                                    </Button>
-
-                                    <Button Style="{StaticResource TransportIconButtonStyle}"
-                                            Command="{Binding NextSessionTrackCommand}">
-                                        <TextBlock Text="&#xE893;" Style="{StaticResource TransportGlyphStyle}"/>
-                                    </Button>
-
-                                    <Button Style="{StaticResource TransportIconButtonStyle}"
-                                            Command="{Binding EnterMiniPlayerCommand}">
-                                        <TextBlock Text="&#xE919;" Style="{StaticResource TransportGlyphStyle}"/>
-                                    </Button>
-
-                                    <ToggleButton Style="{StaticResource TransportToggleButtonStyle}"
-                                                  IsChecked="{Binding IsFractalBackgroundEnabled}"
-                                                  ToolTip="Fractal background (synced to the equalizer)">
-                                        <TextBlock Text="&#xE790;" Style="{StaticResource TransportGlyphStyle}"/>
-                                    </ToggleButton>
-
-                                    <Button Content="Analyze"
-                                            MinWidth="72"
-                                            Margin="8,0,0,0"
-                                            Command="{Binding AnalyzeInputCommand}"/>
-                                </StackPanel>
-                            </Grid>
-
-                            <Grid Grid.Row="1" Margin="0,8,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <Slider Grid.Column="0"
-                                        Style="{StaticResource DarkMediaSliderStyle}"
-                                        Minimum="0"
-                                        Maximum="{Binding DurationMs, Mode=OneWay}"
-                                        Value="{Binding ScrubberPositionMs, Mode=TwoWay}"
-                                        IsMoveToPointEnabled="True"
-                                        IsEnabled="{Binding HasScrubbableTrack}"
-                                        VerticalAlignment="Center"
-                                        Loaded="Scrubber_Loaded"
-                                        PreviewMouseLeftButtonDown="Scrubber_PreviewMouseLeftButtonDown"
-                                        PreviewMouseLeftButtonUp="Scrubber_PreviewMouseLeftButtonUp"
-                                        LostMouseCapture="Scrubber_LostMouseCapture"/>
-
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding PositionText}"
-                                           Margin="10,0,0,0"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                            </Grid>
-                        </Grid>
-                    </Border>
-
-                    <!-- Large centered ring (scroll wheel zooms in/out on the black area; clipped above control panel) -->
-                    <Border Grid.Row="3"
+                    <!-- Main stage: search above ring, scrubber + transport wheel below -->
+                    <Border x:Name="StageHost"
+                            Grid.Row="2"
                             Margin="0,0,0,8"
                             Background="{DynamicResource AppBackgroundBrush}"
                             ClipToBounds="True"
-                            Panel.ZIndex="0">
+                            Panel.ZIndex="0"
+                            SizeChanged="StageHost_SizeChanged">
                         <Grid>
-                            <!-- Optional fractal layer: above the black background, behind the ring. -->
                             <component:FractalBackgroundControl IsActive="{Binding IsFractalBackgroundEnabled}"
                                                                 EnergyProvider="{Binding VisualEnergy}"
                                                                 Opacity="0.9"
                                                                 IsHitTestVisible="False"/>
-                            <component:JukeboxRingView x:Name="RingView"
-                                                       HorizontalAlignment="Stretch"
-                                                       VerticalAlignment="Stretch"
-                                                       DataContext="{Binding}"/>
+
+                            <Grid x:Name="StageRoot"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Margin="24,8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <Border x:Name="SearchHoverZone"
+                                        Grid.Row="0"
+                                        Margin="0,0,0,10"
+                                        Padding="0,6"
+                                        Background="#01FFFFFF"
+                                        Opacity="0.18"
+                                        Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                        MouseEnter="HoverZone_MouseEnter"
+                                        MouseLeave="HoverZone_MouseLeave">
+                                    <TextBox x:Name="TrackSearchBox"
+                                             Width="{Binding ActualWidth, ElementName=RingStage}"
+                                             MinWidth="200"
+                                             Text="{Binding TrackInput, UpdateSourceTrigger=PropertyChanged}"
+                                             VerticalContentAlignment="Center"
+                                             HorizontalAlignment="Center"
+                                             Background="Transparent"
+                                             BorderBrush="{DynamicResource AppBorderBrush}"
+                                             BorderThickness="0,0,0,1"
+                                             CaretBrush="{DynamicResource AppForegroundBrush}"
+                                             Foreground="{DynamicResource AppForegroundBrush}"
+                                             ToolTip="Track ID, URI, or Spotify link — press Enter to play"
+                                             PreviewKeyDown="TrackSearchBox_PreviewKeyDown"/>
+                                </Border>
+
+                                <Grid x:Name="RingStage"
+                                      Grid.Row="1"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      MinWidth="160"
+                                      MinHeight="160">
+                                    <component:JukeboxRingView x:Name="RingView"
+                                                               HorizontalAlignment="Stretch"
+                                                               VerticalAlignment="Stretch"
+                                                               DataContext="{Binding}"/>
+                                </Grid>
+
+                                <Border x:Name="ScrubberHoverZone"
+                                        Grid.Row="2"
+                                        Margin="0,10,0,0"
+                                        Padding="0,8"
+                                        Background="#01FFFFFF"
+                                        Opacity="0.18"
+                                        Width="{Binding ActualWidth, ElementName=RingStage}"
+                                        HorizontalAlignment="Center"
+                                        Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                        MouseEnter="HoverZone_MouseEnter"
+                                        MouseLeave="HoverZone_MouseLeave">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <Slider Grid.Column="0"
+                                                Style="{StaticResource DarkMediaSliderStyle}"
+                                                Minimum="0"
+                                                Maximum="{Binding DurationMs, Mode=OneWay}"
+                                                Value="{Binding ScrubberPositionMs, Mode=TwoWay}"
+                                                IsMoveToPointEnabled="True"
+                                                IsEnabled="{Binding HasScrubbableTrack}"
+                                                VerticalAlignment="Center"
+                                                Loaded="Scrubber_Loaded"
+                                                PreviewMouseLeftButtonDown="Scrubber_PreviewMouseLeftButtonDown"
+                                                PreviewMouseLeftButtonUp="Scrubber_PreviewMouseLeftButtonUp"
+                                                LostMouseCapture="Scrubber_LostMouseCapture"/>
+
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding PositionText}"
+                                                   Margin="10,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                    </Grid>
+                                </Border>
+
+                                <component:TransportWheelControl Grid.Row="3"
+                                                                 Margin="0,12,0,4"
+                                                                 HorizontalAlignment="Center"
+                                                                 VerticalAlignment="Center"
+                                                                 DataContext="{Binding}"
+                                                                 Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            </Grid>
+
                             <Border x:Name="PlayerHostBorder"
                                     Width="1" Height="1"
                                     Opacity="0"
@@ -356,7 +263,7 @@
                         </Grid>
                     </Border>
 
-                    <component:LoopLabBottomPanel Grid.Row="4"
+                    <component:LoopLabBottomPanel Grid.Row="3"
                                                     Panel.ZIndex="2"
                                                     ActivityLog="{Binding ActivityLog}"
                                                     IsExpanded="{Binding IsBottomPanelExpanded, Mode=TwoWay}"

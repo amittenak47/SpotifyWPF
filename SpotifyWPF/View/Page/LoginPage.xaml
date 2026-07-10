@@ -16,6 +16,7 @@
                     MaxWidth="480"
                     Margin="24"
                     Panel.ZIndex="0"
+                    Opacity="0"
                     IsEnabled="{Binding IsLoginFormEnabled}">
             <TextBlock Text="Bring Your Own Spotify App"
                        FontSize="20" FontWeight="SemiBold"

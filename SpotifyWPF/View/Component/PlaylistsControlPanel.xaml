@@ -43,37 +43,6 @@
             <TabControl Style="{StaticResource ControlPanelTabControlStyle}"
                         DataContext="{Binding DataContext, ElementName=Root}"
                         Visibility="{Binding IsExpanded, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}">
-                <TabItem Header="Logs">
-                    <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
-                        <local:ActivityLogView DataContext="{Binding ActivityLog, ElementName=Root}"/>
-                    </Border>
-                </TabItem>
-
-                <TabItem Header="Actions">
-                    <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
-                        <TreeView x:Name="QueuedActionsTreeView"
-                                  ItemsSource="{Binding QueuedActions}"
-                                  FontFamily="Consolas"
-                                  FontSize="11"
-                                  Background="Transparent"
-                                  BorderThickness="0"
-                                  VerticalAlignment="Stretch"
-                                  MinHeight="72"
-                                  PreviewKeyDown="QueuedActionsTreeView_PreviewKeyDown">
-                            <TreeView.ItemTemplate>
-                                <HierarchicalDataTemplate ItemsSource="{Binding DetailItems}">
-                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
-                                    <HierarchicalDataTemplate.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding DisplayName}" Margin="4,1,0,1"/>
-                                        </DataTemplate>
-                                    </HierarchicalDataTemplate.ItemTemplate>
-                                </HierarchicalDataTemplate>
-                            </TreeView.ItemTemplate>
-                        </TreeView>
-                    </Border>
-                </TabItem>
-
                 <TabItem Header="Tracks">
                     <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
                         <Grid>
@@ -122,6 +91,37 @@
                                 </DataGrid.Columns>
                             </DataGrid>
                         </Grid>
+                    </Border>
+                </TabItem>
+
+                <TabItem Header="Actions">
+                    <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                        <TreeView x:Name="QueuedActionsTreeView"
+                                  ItemsSource="{Binding QueuedActions}"
+                                  FontFamily="Consolas"
+                                  FontSize="11"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  VerticalAlignment="Stretch"
+                                  MinHeight="72"
+                                  PreviewKeyDown="QueuedActionsTreeView_PreviewKeyDown">
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding DetailItems}">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                    <HierarchicalDataTemplate.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" Margin="4,1,0,1"/>
+                                        </DataTemplate>
+                                    </HierarchicalDataTemplate.ItemTemplate>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </Border>
+                </TabItem>
+
+                <TabItem Header="Logs">
+                    <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                        <local:ActivityLogView DataContext="{Binding ActivityLog, ElementName=Root}"/>
                     </Border>
                 </TabItem>
             </TabControl>

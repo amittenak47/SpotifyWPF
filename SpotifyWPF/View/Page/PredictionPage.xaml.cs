@@ -5,7 +5,8 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
-using System.Windows.Navigation;using CommonServiceLocator;
+using System.Windows.Navigation;
+using CommonServiceLocator;
 using SpotifyWPF.Service.Playback;
 using SpotifyWPF.ViewModel.Page;
 
@@ -18,6 +19,10 @@ namespace SpotifyWPF.View.Page
     /// </summary>
     public partial class PredictionPage
     {
+        private const double HoverDimOpacity = 0.18;
+        private const double HoverFullOpacity = 1.0;
+        private const double HoverFadeMs = 180;
+
         private bool _scrubStarted;
 
         public PredictionPage()
@@ -31,6 +36,7 @@ namespace SpotifyWPF.View.Page
         {
             // Fade the page in from black — after login this overlaps the login overlay's
             // fade-out, so the Infinite Jukebox appears underneath instead of popping in.
+            Opacity = 0;
             BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(450))
             {
                 EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
@@ -67,6 +73,68 @@ namespace SpotifyWPF.View.Page
 
             PlayerHostBorder.Child = null;
             (Window.GetWindow(this) as MainWindow)?.ParkWebPlaybackView(view);
+        }
+
+        private void StageHost_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateRingStageSize();
+        }
+
+        private void UpdateRingStageSize()
+        {
+            if (RingStage == null || StageHost == null)
+                return;
+
+            var chromeHeight = 0.0;
+            if (SearchHoverZone.Visibility == Visibility.Visible)
+                chromeHeight += Math.Max(SearchHoverZone.ActualHeight, 28);
+            if (ScrubberHoverZone.Visibility == Visibility.Visible)
+                chromeHeight += Math.Max(ScrubberHoverZone.ActualHeight, 28);
+            chromeHeight += 72; // transport wheel + margins
+
+            var availableWidth = Math.Max(160, StageHost.ActualWidth - 48);
+            var availableHeight = Math.Max(160, StageHost.ActualHeight - chromeHeight - 16);
+            var size = Math.Min(availableWidth, availableHeight);
+
+            if (Math.Abs(RingStage.Width - size) > 0.5 || Math.Abs(RingStage.Height - size) > 0.5)
+            {
+                RingStage.Width = size;
+                RingStage.Height = size;
+            }
+        }
+
+        private void HoverZone_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (sender is UIElement element)
+                FadeHoverZone(element, HoverFullOpacity);
+        }
+
+        private void HoverZone_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (sender is UIElement element)
+                FadeHoverZone(element, HoverDimOpacity);
+        }
+
+        private static void FadeHoverZone(UIElement element, double to)
+        {
+            element.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(to, TimeSpan.FromMilliseconds(HoverFadeMs))
+                {
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                    FillBehavior = FillBehavior.HoldEnd
+                },
+                HandoffBehavior.SnapshotAndReplace);
+        }
+
+        private void TrackSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+                return;
+
+            if (ViewModel?.PlayFromInputCommand.CanExecute(null) == true)
+                ViewModel.PlayFromInputCommand.Execute(null);
+
+            e.Handled = true;
         }
 
         private void Scrubber_Loaded(object sender, RoutedEventArgs e)
