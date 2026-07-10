@@ -34,7 +34,7 @@ namespace SpotifyWPF.View.Component
                 typeof(PlaylistsControlPanel),
                 new FrameworkPropertyMetadata(220.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnExpandedHeightChanged));
 
-        private const double PeekHeight = 10;
+        private const double PeekHeight = 32;
         private const double MinExpandedHeight = 120;
         private const double MaxExpandedHeight = 520;
         private const double PeekDimOpacity = 0.0;
@@ -111,6 +111,14 @@ namespace SpotifyWPF.View.Component
             AnimatePeekOpacity(PeekDimOpacity);
         }
 
+        private void ExpandToggle_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isOpen)
+                SlideClosed();
+            else
+                SlideOpen();
+        }
+
         private void SlideOpen()
         {
             _isOpen = true;
@@ -174,10 +182,10 @@ namespace SpotifyWPF.View.Component
                 return;
 
             var panelWidth = Math.Max(0, ActualWidth);
-            var anchorHeight = Math.Max(_frozenHeight, ActualHeight);
+            var top = ActualHeight - _previewHeight;
 
             System.Windows.Controls.Canvas.SetLeft(ResizePreviewGhost, 0);
-            System.Windows.Controls.Canvas.SetTop(ResizePreviewGhost, anchorHeight - _previewHeight);
+            System.Windows.Controls.Canvas.SetTop(ResizePreviewGhost, top);
             ResizePreviewGhost.Width = panelWidth;
             ResizePreviewGhost.Height = _previewHeight;
             ResizePreviewGhost.Visibility = Visibility.Visible;
@@ -194,11 +202,7 @@ namespace SpotifyWPF.View.Component
         private void ResizeBar_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (!_isOpen)
-            {
-                SlideOpen();
-                e.Handled = true;
                 return;
-            }
 
             _isResizing = true;
             _didResizeDrag = false;
@@ -237,18 +241,12 @@ namespace SpotifyWPF.View.Component
             if (!_isResizing)
                 return;
 
-            var dragged = _didResizeDrag;
             FinishResize();
-
-            if (!dragged)
-                SlideClosed();
-
             e.Handled = true;
         }
 
         private void ResizeBar_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            // Capture is on the control; control-level handler finishes resize.
         }
 
         private void OnLostMouseCapture(object sender, MouseEventArgs e)
@@ -275,19 +273,17 @@ namespace SpotifyWPF.View.Component
             _isResizing = false;
             Mouse.Capture(null);
 
+            EndResizePreview();
+
             if (_didResizeDrag)
             {
                 ExpandedHeight = _previewHeight;
-                EndResizePreview();
                 _isOpen = true;
                 IsExpanded = true;
                 BeginAnimation(OpacityProperty, null);
                 Opacity = PeekFullOpacity;
                 Height = ClampExpandedHeight(ExpandedHeight);
-                return;
             }
-
-            EndResizePreview();
         }
 
         private void QueuedActionsTreeView_PreviewKeyDown(object sender, KeyEventArgs e)

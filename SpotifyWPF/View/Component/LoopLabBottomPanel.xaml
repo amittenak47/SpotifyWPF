@@ -3,8 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SpotifyWPF.View.Component"
              x:Name="Root"
-             MinHeight="8"
-             ClipToBounds="True"
+             MinHeight="28"
+             ClipToBounds="False"
              Background="#01FFFFFF"
              MouseEnter="Root_MouseEnter"
              MouseLeave="Root_MouseLeave">
@@ -16,29 +16,89 @@
     <Border Background="{DynamicResource AppSurfaceBrush}"
             BorderBrush="{DynamicResource AppBorderBrush}"
             BorderThickness="1,1,1,0"
-            ClipToBounds="True">
-        <Grid ClipToBounds="True">
+            ClipToBounds="False">
+        <Grid ClipToBounds="False">
             <DockPanel x:Name="PanelContent" LastChildFill="True">
-                <Border x:Name="ResizeBar"
+                <!-- Open/close header (not a resize grip) -->
+                <Button x:Name="ExpandToggle"
                         DockPanel.Dock="Top"
-                        Height="8"
-                        Background="{DynamicResource AppSurfaceAltBrush}"
+                        Cursor="Hand"
+                        Focusable="False"
+                        Padding="8,6"
+                        Background="{DynamicResource AppSurfaceBrush}"
                         BorderBrush="{DynamicResource AppBorderBrush}"
                         BorderThickness="0,0,0,1"
-                        Cursor="SizeNS"
-                        ToolTip="Hover to reveal · Click to open/close · Drag to resize when open"
-                        PreviewMouseLeftButtonDown="ResizeBar_PreviewMouseLeftButtonDown"
-                        PreviewMouseMove="ResizeBar_PreviewMouseMove"
-                        PreviewMouseLeftButtonUp="ResizeBar_PreviewMouseLeftButtonUp">
-                    <Border Width="48" Height="3"
-                            CornerRadius="2"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Background="{DynamicResource AppBorderBrush}"/>
-                </Border>
+                        HorizontalContentAlignment="Stretch"
+                        ToolTip="Open/close Controls"
+                        Click="ExpandToggle_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="HeaderBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Stretch"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock Text="Controls"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource AppForegroundBrush}"/>
+                        <TextBlock Margin="8,0,0,0"
+                                   FontFamily="Segoe UI Symbol"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource AppMutedForegroundBrush}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="▲"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsExpanded, ElementName=Root}" Value="True">
+                                            <Setter Property="Text" Value="▼"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </Button>
 
-                <TabControl Style="{StaticResource ControlPanelTabControlStyle}"
-                            DataContext="{Binding DataContext, ElementName=Root}">
+                <!-- Body + resize grip only while open -->
+                <Grid Visibility="{Binding IsExpanded, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border x:Name="ResizeBar"
+                            Grid.Row="0"
+                            Height="6"
+                            Background="{DynamicResource AppSurfaceAltBrush}"
+                            BorderBrush="{DynamicResource AppBorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Cursor="SizeNS"
+                            ToolTip="Drag to resize"
+                            PreviewMouseLeftButtonDown="ResizeBar_PreviewMouseLeftButtonDown"
+                            PreviewMouseMove="ResizeBar_PreviewMouseMove"
+                            PreviewMouseLeftButtonUp="ResizeBar_PreviewMouseLeftButtonUp">
+                        <Border Width="48" Height="3"
+                                CornerRadius="2"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource AppBorderBrush}"/>
+                    </Border>
+
+                    <TabControl Grid.Row="1"
+                                Style="{StaticResource ControlPanelTabControlStyle}"
+                                DataContext="{Binding DataContext, ElementName=Root}">
                         <TabItem Header="Session">
                             <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
                                 <Grid>
@@ -355,6 +415,7 @@
                             </Border>
                         </TabItem>
                     </TabControl>
+                </Grid>
             </DockPanel>
 
             <Canvas x:Name="ResizePreviewCanvas"
