@@ -3,15 +3,17 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:component="clr-namespace:SpotifyWPF.View.Component"
         Title="Infinite Jukebox"
-        Width="400"
-        Height="400"
+        Width="388"
+        Height="472"
         MinWidth="360"
-        MinHeight="360"
+        MinHeight="440"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
         ResizeMode="CanResize"
         ShowInTaskbar="True"
         SnapsToDevicePixels="True">
-    <component:MiniPlayerView DataContext="{Binding PredictionPage, Source={StaticResource Locator}}"/>
+    <component:MiniPlayerView HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              DataContext="{Binding PredictionPage, Source={StaticResource Locator}}"/>
 </Window>

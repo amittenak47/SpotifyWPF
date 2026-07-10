@@ -8,9 +8,10 @@
              Background="{x:Null}">
     <Grid x:Name="ZoomHost"
           ClipToBounds="True"
-          Background="Transparent"
+          Background="{x:Null}"
           PreviewMouseWheel="ZoomHost_PreviewMouseWheel">
         <Grid x:Name="ZoomContent"
+              Background="{x:Null}"
               RenderTransformOrigin="0.5,0.5">
             <local:JukeboxRingCanvas x:Name="Ring"
                                      HorizontalAlignment="Stretch"

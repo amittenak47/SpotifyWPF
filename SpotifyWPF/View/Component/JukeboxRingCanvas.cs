@@ -21,9 +21,8 @@ namespace SpotifyWPF.View.Component
     /// Pure presentation: the beat graph is built service-side and handed in via <see cref="Graph"/>.
     ///
     /// In mini player mode the center disc stays transparent (the transport backdrop underneath
-    /// remains visible and draggable), hit-testing is limited to the beat-bar band and window
-    /// corners, and the bars extend to the square window edges so the transparent window has no
-    /// abrupt circular clip.
+    /// remains visible and draggable), hit-testing is limited to the circular bar band, and
+    /// beat bars stay within the ring (no square-edge extensions).
     /// </summary>
     public class JukeboxRingCanvas : FrameworkElement
     {
@@ -473,40 +472,82 @@ namespace SpotifyWPF.View.Component
 
         #region Hit testing / mouse interaction
 
+        public static readonly DependencyProperty MiniPlayerHopModeProperty =
+            DependencyProperty.Register(nameof(MiniPlayerHopMode), typeof(bool), typeof(JukeboxRingCanvas),
+                new PropertyMetadata(false, OnMiniPlayerHopModeChanged));
+
+        private static void OnMiniPlayerHopModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            ((JukeboxRingCanvas)d).InvalidateVisual();
+        }
+
+        public bool MiniPlayerHopMode
+        {
+            get => (bool)GetValue(MiniPlayerHopModeProperty);
+            set => SetValue(MiniPlayerHopModeProperty, value);
+        }
+
         protected override HitTestResult HitTestCore(PointHitTestParameters hitTestParameters)
         {
             if (ActualWidth <= 0 || ActualHeight <= 0)
                 return null;
 
-            if (!MiniPlayerMode)
-                return new PointHitTestResult(this, hitTestParameters.HitPoint);
+            if (MiniPlayerMode)
+            {
+                if (!MiniPlayerHopMode || !IsHopInteractionPoint(hitTestParameters.HitPoint))
+                    return null;
 
-            return IsInteractiveMiniPlayerPoint(hitTestParameters.HitPoint)
-                ? new PointHitTestResult(this, hitTestParameters.HitPoint)
-                : null;
+                return new PointHitTestResult(this, hitTestParameters.HitPoint);
+            }
+
+            return new PointHitTestResult(this, hitTestParameters.HitPoint);
         }
 
         /// <summary>
-        /// Mini player: the center disc passes clicks through (the transport backdrop underneath
-        /// handles window drag); the beat-bar band and the corner extensions stay interactive.
+        /// Mini player drag host calls this to avoid stealing hop/chord clicks when hop mode is on.
+        /// </summary>
+        public bool WouldHandleHopClick(Point point)
+        {
+            if (!MiniPlayerMode || !MiniPlayerHopMode || !IsHopInteractionPoint(point))
+                return false;
+
+            var graph = Graph;
+
+            if (graph == null)
+                return false;
+
+            UpdateHoverChain(point);
+            return TryGetClickedBranch(point, graph, ActivePreviewChain(), out _, out _);
+        }
+
+        private bool IsHopInteractionPoint(Point point)
+        {
+            var center = new Point(ActualWidth / 2, ActualHeight / 2);
+            var outer = Math.Min(ActualWidth, ActualHeight) / 2 - 2;
+            var spectrumInner = outer * 0.78;
+            var rim = spectrumInner - 2;
+            var rIn = rim * BarBandInnerRatio;
+            var dist = (point - center).Length;
+
+            return dist <= rIn;
+        }
+
+        public bool IsInHopDisc(Point point) => IsHopInteractionPoint(point);
+
+        /// <summary>
+        /// Mini player: center disc passes clicks through; only the circular bar/spectrum band
+        /// stays interactive (no square corner extensions).
         /// </summary>
         private bool IsInteractiveMiniPlayerPoint(Point point)
         {
             var center = new Point(ActualWidth / 2, ActualHeight / 2);
-            var outer = Math.Min(ActualWidth, ActualHeight) / 2 - 2;
-            var vector = point - center;
-            var dist = vector.Length;
+            var canvasOuter = Math.Min(ActualWidth, ActualHeight) / 2 - 2;
+            var spectrumInner = canvasOuter * 0.78;
+            var rim = spectrumInner - 2;
+            var rIn = rim * BarBandInnerRatio;
+            var dist = (point - center).Length;
 
-            if (dist < outer * BarBandInnerRatio)
-                return false;
-
-            if (dist <= outer)
-                return true;
-
-            var edgeDist = DistanceToSquareEdge(center, ActualWidth, ActualHeight,
-                Math.Atan2(vector.Y, vector.X));
-
-            return dist <= edgeDist;
+            return dist >= rIn && dist <= canvasOuter;
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
@@ -520,6 +561,9 @@ namespace SpotifyWPF.View.Component
                 ScrubToPoint(point);
                 return;
             }
+
+            if (MiniPlayerMode && !MiniPlayerHopMode)
+                return;
 
             var hit = HitTestBeat(point);
             var before = ChainSignature(_hoverChain);
@@ -557,7 +601,9 @@ namespace SpotifyWPF.View.Component
             var command = ToggleLockCommand;
             var point = e.GetPosition(this);
 
-            if (graph != null && command != null)
+            UpdateHoverChain(point);
+
+            if (graph != null && command != null && (!MiniPlayerMode || MiniPlayerHopMode))
             {
                 var chain = ActivePreviewChain();
 
@@ -581,7 +627,7 @@ namespace SpotifyWPF.View.Component
             }
 
             if (TryBeginRingScrub(point))
-                e.Handled = MiniPlayerMode;
+                e.Handled = MiniPlayerMode && !MiniPlayerHopMode;
         }
 
         protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -673,12 +719,7 @@ namespace SpotifyWPF.View.Component
                 return -1;
 
             if (radius > outer)
-            {
-                // Mini player: the corner extensions past the ring still map to their beat.
-                if (!MiniPlayerMode ||
-                    radius > DistanceToSquareEdge(center, ActualWidth, ActualHeight, Math.Atan2(dy, dx)))
-                    return -1;
-            }
+                return -1;
 
             var fraction = (Math.Atan2(dy, dx) + Math.PI / 2) / (Math.PI * 2);
             fraction = ((fraction % 1) + 1) % 1;
@@ -774,8 +815,8 @@ namespace SpotifyWPF.View.Component
         {
             var span = Math.Max(0.0001, maxDistance - minDistance);
             var t = Math.Max(0, Math.Min(1, (distance - minDistance) / span));
-            // Near: cool silver; far: muted slate — saturation stays low.
-            return FromHsl(210, 0.18 + 0.12 * (1 - t), 0.62 - 0.22 * t);
+            // Near: cool silver; far: muted slate — hairline ghost fan (reference look).
+            return FromHsl(215, 0.14 + 0.10 * (1 - t), 0.52 - 0.16 * t);
         }
 
         private static void GetNeighborDistanceRange(IReadOnlyList<BeatEdge> neighbors,
@@ -948,20 +989,20 @@ namespace SpotifyWPF.View.Component
             {
                 foreach (var branchLock in locks)
                 {
-                    DrawDest(branchLock.FromBeatIndex, branchLock.ToBeatIndex, 0.9, 3.4, LockColor);
+                    DrawDest(branchLock.FromBeatIndex, branchLock.ToBeatIndex, 0.72, 2.4, LockColor);
                 }
             }
 
             if (inspectBeat >= 0)
             {
                 foreach (var edge in beats[inspectBeat].Neighbors)
-                    DrawDest(inspectBeat, edge.DestinationIndex, 0.42, 3.0, GhostColor);
+                    DrawDest(inspectBeat, edge.DestinationIndex, 0.28, 2.0, GhostColor);
             }
 
             if (playheadBeat >= 0 && playheadBeat != inspectBeat)
             {
                 foreach (var edge in beats[playheadBeat].Neighbors)
-                    DrawDest(playheadBeat, edge.DestinationIndex, 0.24, 2.6, GhostColor);
+                    DrawDest(playheadBeat, edge.DestinationIndex, 0.16, 1.8, GhostColor);
             }
 
             if (chain != null)
@@ -972,7 +1013,7 @@ namespace SpotifyWPF.View.Component
                         break;
 
                     foreach (var edge in beats[chain[hop - 1]].Neighbors)
-                        DrawDest(chain[hop - 1], edge.DestinationIndex, 0.3, 2.8, GhostColor);
+                        DrawDest(chain[hop - 1], edge.DestinationIndex, 0.2, 1.9, GhostColor);
                 }
             }
         }
@@ -1049,7 +1090,7 @@ namespace SpotifyWPF.View.Component
                     break;
 
                 GetNeighborDistanceRange(edges, out var minDist, out var maxDist);
-                var layerAlpha = hop == 1 ? 0.82 : hop == 2 ? 0.52 : 0.34;
+                var layerAlpha = hop == 1 ? 0.40 : hop == 2 ? 0.26 : 0.16;
                 var layerRadius = rChord * (1 - (hop - 1) * 0.06);
                 var highlight = chain[hop];
 
@@ -1065,16 +1106,16 @@ namespace SpotifyWPF.View.Component
                     var branchColor = DistanceBranchColor(edge.Distance, minDist, maxDist);
                     var locked = IsBranchLocked(locks, parent, dest);
                     var isHighlighted = dest == highlight;
-                    var width = isHighlighted ? 2.5 : locked ? 2.0 : 1.35;
-                    var alpha = isHighlighted ? 1.0 : locked ? 0.88 : layerAlpha;
+                    var width = isHighlighted ? 1.15 : locked ? 0.95 : 0.75;
+                    var alpha = isHighlighted ? 0.72 : locked ? 0.62 : layerAlpha;
 
                     DrawChord(dc, center, layerRadius, a1, a2,
                         MakePen(locked ? LockColor : branchColor, width, alpha));
 
                     // Small static destination markers — muted, no RGB bounce/glow.
                     var dot = Polar(center, layerRadius, a2);
-                    var dotAlpha = isHighlighted ? 0.95 : locked ? 0.75 : Math.Min(alpha, 0.55);
-                    var dotSize = isHighlighted ? 3.0 : locked ? 2.6 : 2.2;
+                    var dotAlpha = isHighlighted ? 0.75 : locked ? 0.58 : Math.Min(alpha, 0.38);
+                    var dotSize = isHighlighted ? 2.4 : locked ? 2.0 : 1.6;
                     dc.DrawEllipse(MakeBrush(locked ? LockColor : GhostColor, dotAlpha), null, dot,
                         dotSize, dotSize);
                 }
@@ -1136,7 +1177,7 @@ namespace SpotifyWPF.View.Component
         //   1. Center disc (skipped in mini player mode so the transport backdrop shows through)
         //   2. Winamp cascading spectrum — outer ring band (outside beat rim), translucent
         //   3. Outer rim circle + section arcs
-        //   4. Beat coverage bars (+ mini-player square-edge extensions), trail, headlights, playhead
+        //   4. Beat coverage bars, trail, headlights, playhead
         //   5. Branch landmarks/chords, planned-jump chord, jump flashes, locked branches
         // Spectrum sits behind beat bars so the map stays primary.
         protected override void OnRender(DrawingContext dc)
@@ -1238,22 +1279,6 @@ namespace SpotifyWPF.View.Component
                     MakePen(BeatColor(beats[i], sectionColors), barWidth));
             }
 
-            // Mini player: extend beat bars to the square edges with section tint.
-            if (MiniPlayerMode)
-            {
-                for (var i = 0; i < beats.Count; i++)
-                {
-                    var angle = BeatAngle(beats[i], total);
-                    var edgeDist = DistanceToSquareEdge(center, ActualWidth, ActualHeight, angle);
-
-                    if (edgeDist <= outer + 0.5)
-                        continue;
-
-                    DrawRadialLine(dc, center, outer - 1, edgeDist, angle,
-                        MakePen(BeatColor(beats[i], sectionColors), barWidth, 0.45));
-                }
-            }
-
             // Fading trail of recently played beats.
             foreach (var (beatIndex, atMs) in _trail)
             {
@@ -1299,40 +1324,47 @@ namespace SpotifyWPF.View.Component
                     MakePen(HotColor, barWidth + 1.5));
             }
 
-            // Chained branch preview (distance-colored); pinned after lock so options stay visible.
+            // Chord / hop visuals only when hop mode is enabled in mini player.
             var previewChain = ActivePreviewChain();
             var inspectBeat = previewChain[0] >= 0 ? previewChain[0] : currentIndex;
+            var showHopChords = !MiniPlayerMode || MiniPlayerHopMode;
 
-            DrawBranchLandmarks(dc, graph, center, rChord, total, locks, inspectBeat, currentIndex,
-                previewChain);
+            if (showHopChords)
+            {
+                DrawBranchLandmarks(dc, graph, center, rChord, total, locks, inspectBeat, currentIndex,
+                    previewChain);
 
-            if (previewChain[0] >= 0)
-                DrawChainedBranchPreview(dc, graph, center, rChord, total, locks, previewChain);
+                if (previewChain[0] >= 0)
+                    DrawChainedBranchPreview(dc, graph, center, rChord, total, locks, previewChain);
+            }
 
             // The predictor's mind: one pulsing chord for the planned jump.
-            if (plannedFrom >= 0 && plannedTo >= 0 && plannedFrom < beats.Count && plannedTo < beats.Count)
+            if (showHopChords && plannedFrom >= 0 && plannedTo >= 0 && plannedFrom < beats.Count && plannedTo < beats.Count)
             {
-                var pulse = 0.55 + 0.3 * Math.Sin(now / 140);
+                var pulse = 0.35 + 0.22 * Math.Sin(now / 140);
                 DrawChord(dc, center, rChord, BeatAngle(beats[plannedFrom], total),
-                    BeatAngle(beats[plannedTo], total), MakePen(AccentColor, 2, pulse));
+                    BeatAngle(beats[plannedTo], total), MakePen(AccentColor, 1.1, pulse));
                 var dot = Polar(center, rChord, BeatAngle(beats[plannedTo], total));
-                dc.DrawEllipse(MakeBrush(AccentColor, 1), null, dot, 3.2, 3.2);
+                dc.DrawEllipse(MakeBrush(AccentColor, 0.85), null, dot, 2.4, 2.4);
             }
 
             // Fired jumps flash white and decay.
-            foreach (var (from, to, atMs) in _flashes)
+            if (showHopChords)
             {
-                var alpha = 1 - (now - atMs) / FlashFadeMs;
+                foreach (var (from, to, atMs) in _flashes)
+                {
+                    var alpha = 1 - (now - atMs) / FlashFadeMs;
 
-                if (alpha <= 0 || from >= beats.Count || to >= beats.Count)
-                    continue;
+                    if (alpha <= 0 || from >= beats.Count || to >= beats.Count)
+                        continue;
 
-                DrawChord(dc, center, rChord, BeatAngle(beats[from], total),
-                    BeatAngle(beats[to], total), MakePen(HotColor, 1 + 2.4 * alpha, alpha * 0.9));
+                    DrawChord(dc, center, rChord, BeatAngle(beats[from], total),
+                        BeatAngle(beats[to], total), MakePen(HotColor, 0.75 + 1.1 * alpha, alpha * 0.65));
+                }
             }
 
             // Locked branches on beats not currently being inspected.
-            if (locks != null)
+            if (showHopChords && locks != null)
             {
                 var inspect = previewChain[0];
 
@@ -1347,13 +1379,13 @@ namespace SpotifyWPF.View.Component
 
                     var a1 = BeatAngle(beats[branchLock.FromBeatIndex], total);
                     var a2 = BeatAngle(beats[branchLock.ToBeatIndex], total);
-                    var alpha = inspect >= 0 ? 0.55 : 1.0;
-                    DrawChord(dc, center, rChord, a1, a2, MakePen(LockColor, inspect >= 0 ? 1.6 : 2.1, alpha));
+                    var alpha = inspect >= 0 ? 0.38 : 0.72;
+                    DrawChord(dc, center, rChord, a1, a2, MakePen(LockColor, inspect >= 0 ? 0.95 : 1.15, alpha));
 
                     if (inspect < 0)
                     {
                         var mid = ChordMidpoint(center, rChord, a1, a2);
-                        dc.DrawEllipse(MakeBrush(LockColor, 1), null, mid, 3.4, 3.4);
+                        dc.DrawEllipse(MakeBrush(LockColor, 0.85), null, mid, 2.4, 2.4);
                     }
                 }
             }
@@ -1416,7 +1448,7 @@ namespace SpotifyWPF.View.Component
                     continue;
 
                 DrawArc(dc, center, radius, a1, a2,
-                    MakePen(MakeColor(sectionColors[i], 0.7), 2.5, roundCaps: true));
+                    MakePen(MakeColor(sectionColors[i], 0.42), 1.15, roundCaps: true));
             }
         }
 

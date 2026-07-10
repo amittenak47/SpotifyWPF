@@ -42,13 +42,19 @@ namespace SpotifyWPF.View.Component
 
         private void ZoomHost_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if (MiniPlayerMode)
+            ApplyWheelZoom(e.Delta);
+            e.Handled = true;
+        }
+
+        /// <summary>Mouse wheel zoom; also called from mini player drag host.</summary>
+        public void ApplyWheelZoom(int delta)
+        {
+            if (delta == 0)
                 return;
 
-            var factor = e.Delta > 0 ? 1.1 : 1.0 / 1.1;
+            var factor = delta > 0 ? 1.1 : 1.0 / 1.1;
             _zoom = Math.Max(MinZoom, Math.Min(MaxZoom, _zoom * factor));
             ApplyZoom();
-            e.Handled = true;
         }
 
         private void ApplyZoom()
