@@ -21,10 +21,27 @@ namespace SpotifyWPF.View.Component
                 typeof(JukeboxRingView),
                 new PropertyMetadata(false, OnMiniPlayerModeChanged));
 
+        public static readonly DependencyProperty OwnsWheelZoomProperty =
+            DependencyProperty.Register(
+                nameof(OwnsWheelZoom),
+                typeof(bool),
+                typeof(JukeboxRingView),
+                new PropertyMetadata(true));
+
         public bool MiniPlayerMode
         {
             get => (bool)GetValue(MiniPlayerModeProperty);
             set => SetValue(MiniPlayerModeProperty, value);
+        }
+
+        /// <summary>
+        /// When false, mouse-wheel zoom is handled by a parent (e.g. the full Jukebox stage)
+        /// so chrome around the ring can scale in lockstep.
+        /// </summary>
+        public bool OwnsWheelZoom
+        {
+            get => (bool)GetValue(OwnsWheelZoomProperty);
+            set => SetValue(OwnsWheelZoomProperty, value);
         }
 
         public JukeboxRingCanvas RingCanvas => Ring;
@@ -42,6 +59,9 @@ namespace SpotifyWPF.View.Component
 
         private void ZoomHost_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
+            if (!OwnsWheelZoom)
+                return;
+
             ApplyWheelZoom(e.Delta);
             e.Handled = true;
         }

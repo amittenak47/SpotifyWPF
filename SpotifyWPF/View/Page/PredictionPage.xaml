@@ -147,112 +147,115 @@
                                    Foreground="#E05545"/>
                     </Border>
 
-                    <!-- Main stage: search above ring, scrubber + transport wheel below -->
+                    <!-- Main stage: ring fills the black area; search/scrubber/wheel scale with it -->
                     <Border x:Name="StageHost"
                             Grid.Row="2"
                             Margin="0,0,0,8"
                             Background="{DynamicResource AppBackgroundBrush}"
                             ClipToBounds="True"
                             Panel.ZIndex="0"
-                            SizeChanged="StageHost_SizeChanged">
+                            PreviewMouseWheel="StageHost_PreviewMouseWheel">
                         <Grid>
                             <component:FractalBackgroundControl IsActive="{Binding IsFractalBackgroundEnabled}"
                                                                 EnergyProvider="{Binding VisualEnergy}"
                                                                 Opacity="0.9"
                                                                 IsHitTestVisible="False"/>
 
-                            <Grid x:Name="StageRoot"
-                                  HorizontalAlignment="Center"
-                                  VerticalAlignment="Center"
-                                  Margin="24,8">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
+                            <Viewbox x:Name="StageViewbox"
+                                     Stretch="Uniform"
+                                     StretchDirection="Both"
+                                     HorizontalAlignment="Stretch"
+                                     VerticalAlignment="Stretch"
+                                     Margin="12,4">
+                                <Grid x:Name="StageRoot"
+                                      Width="560"
+                                      Height="742"
+                                      RenderTransformOrigin="0.5,0.5"
+                                      Background="Transparent">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="560"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
-                                <Border x:Name="SearchHoverZone"
-                                        Grid.Row="0"
-                                        Margin="0,0,0,10"
-                                        Padding="0,6"
-                                        Background="#01FFFFFF"
-                                        Opacity="0.18"
-                                        Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                        MouseEnter="HoverZone_MouseEnter"
-                                        MouseLeave="HoverZone_MouseLeave">
-                                    <TextBox x:Name="TrackSearchBox"
-                                             Width="{Binding ActualWidth, ElementName=RingStage}"
-                                             MinWidth="200"
-                                             Text="{Binding TrackInput, UpdateSourceTrigger=PropertyChanged}"
-                                             VerticalContentAlignment="Center"
-                                             HorizontalAlignment="Center"
-                                             Background="Transparent"
-                                             BorderBrush="{DynamicResource AppBorderBrush}"
-                                             BorderThickness="0,0,0,1"
-                                             CaretBrush="{DynamicResource AppForegroundBrush}"
-                                             Foreground="{DynamicResource AppForegroundBrush}"
-                                             ToolTip="Track ID, URI, or Spotify link — press Enter to play"
-                                             PreviewKeyDown="TrackSearchBox_PreviewKeyDown"/>
-                                </Border>
+                                    <Border x:Name="SearchHoverZone"
+                                            Grid.Row="0"
+                                            Margin="0,0,0,8"
+                                            Padding="0,4"
+                                            Background="#01FFFFFF"
+                                            Opacity="0.18"
+                                            Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                            MouseEnter="HoverZone_MouseEnter"
+                                            MouseLeave="HoverZone_MouseLeave">
+                                        <TextBox x:Name="TrackSearchBox"
+                                                 Width="560"
+                                                 Text="{Binding TrackInput, UpdateSourceTrigger=PropertyChanged}"
+                                                 TextAlignment="Center"
+                                                 HorizontalContentAlignment="Center"
+                                                 VerticalContentAlignment="Center"
+                                                 HorizontalAlignment="Center"
+                                                 FontSize="13"
+                                                 Padding="8,4"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 CaretBrush="{DynamicResource AppForegroundBrush}"
+                                                 Foreground="{DynamicResource AppForegroundBrush}"
+                                                 ToolTip="Track ID, URI, or Spotify link — press Enter to play"
+                                                 PreviewKeyDown="TrackSearchBox_PreviewKeyDown"/>
+                                    </Border>
 
-                                <Grid x:Name="RingStage"
-                                      Grid.Row="1"
-                                      HorizontalAlignment="Center"
-                                      VerticalAlignment="Center"
-                                      MinWidth="160"
-                                      MinHeight="160">
                                     <component:JukeboxRingView x:Name="RingView"
-                                                               HorizontalAlignment="Stretch"
-                                                               VerticalAlignment="Stretch"
+                                                               Grid.Row="1"
+                                                               Width="560"
+                                                               Height="560"
+                                                               OwnsWheelZoom="False"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
                                                                DataContext="{Binding}"/>
+
+                                    <Border x:Name="ScrubberHoverZone"
+                                            Grid.Row="2"
+                                            Margin="0,10,0,0"
+                                            Padding="0,4"
+                                            Background="#01FFFFFF"
+                                            Opacity="0.18"
+                                            Width="560"
+                                            HorizontalAlignment="Center"
+                                            Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                            MouseEnter="HoverZone_MouseEnter"
+                                            MouseLeave="HoverZone_MouseLeave">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding PositionText}"
+                                                       FontSize="10"
+                                                       HorizontalAlignment="Center"
+                                                       Margin="0,0,0,4"
+                                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                            <Slider Style="{StaticResource DarkMediaSliderStyle}"
+                                                    Minimum="0"
+                                                    Maximum="{Binding DurationMs, Mode=OneWay}"
+                                                    Value="{Binding ScrubberPositionMs, Mode=TwoWay}"
+                                                    IsMoveToPointEnabled="True"
+                                                    IsEnabled="{Binding HasScrubbableTrack}"
+                                                    HorizontalAlignment="Stretch"
+                                                    Loaded="Scrubber_Loaded"
+                                                    PreviewMouseLeftButtonDown="Scrubber_PreviewMouseLeftButtonDown"
+                                                    PreviewMouseLeftButtonUp="Scrubber_PreviewMouseLeftButtonUp"
+                                                    LostMouseCapture="Scrubber_LostMouseCapture"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <component:TransportWheelControl x:Name="TransportWheel"
+                                                                     Grid.Row="3"
+                                                                     Width="80"
+                                                                     Height="80"
+                                                                     Margin="0,14,0,4"
+                                                                     HorizontalAlignment="Center"
+                                                                     VerticalAlignment="Center"
+                                                                     DataContext="{Binding}"
+                                                                     Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 </Grid>
-
-                                <Border x:Name="ScrubberHoverZone"
-                                        Grid.Row="2"
-                                        Margin="0,10,0,0"
-                                        Padding="0,8"
-                                        Background="#01FFFFFF"
-                                        Opacity="0.18"
-                                        Width="{Binding ActualWidth, ElementName=RingStage}"
-                                        HorizontalAlignment="Center"
-                                        Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                        MouseEnter="HoverZone_MouseEnter"
-                                        MouseLeave="HoverZone_MouseLeave">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <Slider Grid.Column="0"
-                                                Style="{StaticResource DarkMediaSliderStyle}"
-                                                Minimum="0"
-                                                Maximum="{Binding DurationMs, Mode=OneWay}"
-                                                Value="{Binding ScrubberPositionMs, Mode=TwoWay}"
-                                                IsMoveToPointEnabled="True"
-                                                IsEnabled="{Binding HasScrubbableTrack}"
-                                                VerticalAlignment="Center"
-                                                Loaded="Scrubber_Loaded"
-                                                PreviewMouseLeftButtonDown="Scrubber_PreviewMouseLeftButtonDown"
-                                                PreviewMouseLeftButtonUp="Scrubber_PreviewMouseLeftButtonUp"
-                                                LostMouseCapture="Scrubber_LostMouseCapture"/>
-
-                                        <TextBlock Grid.Column="1"
-                                                   Text="{Binding PositionText}"
-                                                   Margin="10,0,0,0"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                                    </Grid>
-                                </Border>
-
-                                <component:TransportWheelControl Grid.Row="3"
-                                                                 Margin="0,12,0,4"
-                                                                 HorizontalAlignment="Center"
-                                                                 VerticalAlignment="Center"
-                                                                 DataContext="{Binding}"
-                                                                 Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                            </Grid>
+                            </Viewbox>
 
                             <Border x:Name="PlayerHostBorder"
                                     Width="1" Height="1"

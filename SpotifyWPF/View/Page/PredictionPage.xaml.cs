@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Navigation;
 using CommonServiceLocator;
@@ -22,8 +23,11 @@ namespace SpotifyWPF.View.Page
         private const double HoverDimOpacity = 0.18;
         private const double HoverFullOpacity = 1.0;
         private const double HoverFadeMs = 180;
+        private const double MinStageZoom = 0.75;
+        private const double MaxStageZoom = 2.0;
 
         private bool _scrubStarted;
+        private double _stageZoom = 1.0;
 
         public PredictionPage()
         {
@@ -41,6 +45,10 @@ namespace SpotifyWPF.View.Page
             {
                 EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
             });
+
+            // Full-page zoom lives on StageRoot so search/scrubber/wheel stay locked to the ring.
+            RingView.OwnsWheelZoom = false;
+            ApplyStageZoom();
 
             var host = ServiceLocator.Current.GetInstance<IWebPlaybackHost>();
             var view = host.GetOrCreateView();
@@ -75,32 +83,23 @@ namespace SpotifyWPF.View.Page
             (Window.GetWindow(this) as MainWindow)?.ParkWebPlaybackView(view);
         }
 
-        private void StageHost_SizeChanged(object sender, SizeChangedEventArgs e)
+        private void StageHost_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            UpdateRingStageSize();
-        }
-
-        private void UpdateRingStageSize()
-        {
-            if (RingStage == null || StageHost == null)
+            if (e.Delta == 0)
                 return;
 
-            var chromeHeight = 0.0;
-            if (SearchHoverZone.Visibility == Visibility.Visible)
-                chromeHeight += Math.Max(SearchHoverZone.ActualHeight, 28);
-            if (ScrubberHoverZone.Visibility == Visibility.Visible)
-                chromeHeight += Math.Max(ScrubberHoverZone.ActualHeight, 28);
-            chromeHeight += 72; // transport wheel + margins
+            var factor = e.Delta > 0 ? 1.1 : 1.0 / 1.1;
+            _stageZoom = Math.Max(MinStageZoom, Math.Min(MaxStageZoom, _stageZoom * factor));
+            ApplyStageZoom();
+            e.Handled = true;
+        }
 
-            var availableWidth = Math.Max(160, StageHost.ActualWidth - 48);
-            var availableHeight = Math.Max(160, StageHost.ActualHeight - chromeHeight - 16);
-            var size = Math.Min(availableWidth, availableHeight);
+        private void ApplyStageZoom()
+        {
+            if (StageRoot == null)
+                return;
 
-            if (Math.Abs(RingStage.Width - size) > 0.5 || Math.Abs(RingStage.Height - size) > 0.5)
-            {
-                RingStage.Width = size;
-                RingStage.Height = size;
-            }
+            StageRoot.RenderTransform = new ScaleTransform(_stageZoom, _stageZoom);
         }
 
         private void HoverZone_MouseEnter(object sender, MouseEventArgs e)
