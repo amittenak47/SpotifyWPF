@@ -4,22 +4,26 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using SpotifyWPF.Model;
 using SpotifyWPF.Service.Theme;
+using SpotifyWPF.Service.Visual;
 
 namespace SpotifyWPF.View
 {
     public partial class PreferencesWindow
     {
         private readonly IAppThemeStore _themeStore;
+        private readonly IVisualEffectsStore _visualEffectsStore;
         private readonly AppThemePalette _workingPalette;
         private readonly List<ColorFieldBinding> _bindings = new List<ColorFieldBinding>();
 
-        public PreferencesWindow(IAppThemeStore themeStore)
+        public PreferencesWindow(IAppThemeStore themeStore, IVisualEffectsStore visualEffectsStore)
         {
             _themeStore = themeStore;
+            _visualEffectsStore = visualEffectsStore;
             _workingPalette = _themeStore.Get();
             InitializeComponent();
             BuildColorFields();
             LoadPaletteIntoFields();
+            FractalBackgroundCheckBox.IsChecked = _visualEffectsStore.Get().FractalBackgroundEnabled;
         }
 
         private void BuildColorFields()
@@ -134,6 +138,14 @@ namespace SpotifyWPF.View
 
             _themeStore.Save(palette);
             AppThemeManager.Apply(palette);
+
+            var effects = _visualEffectsStore.Get();
+            if (effects.FractalBackgroundEnabled != (FractalBackgroundCheckBox.IsChecked == true))
+            {
+                effects.FractalBackgroundEnabled = FractalBackgroundCheckBox.IsChecked == true;
+                _visualEffectsStore.Save(effects);
+            }
+
             DialogResult = true;
             Close();
         }

@@ -11,11 +11,13 @@ using System.Windows;
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using Microsoft.Win32;
+using SpotifyWPF.Model;
 using SpotifyWPF.Model.Prediction;
 using SpotifyWPF.Service;
 using SpotifyWPF.Service.Audio;
 using SpotifyWPF.Service.Playback;
 using SpotifyWPF.Service.Prediction;
+using SpotifyWPF.Service.Visual;
 using SpotifyWPF.ViewModel.Component;
 
 namespace SpotifyWPF.ViewModel.Page
@@ -52,6 +54,13 @@ namespace SpotifyWPF.ViewModel.Page
 
         private readonly ILoopLabSessionStore _sessionStore;
 
+        private readonly IVisualEffectsStore _visualEffectsStore;
+
+        private readonly VisualEffectsSettings _visualEffectsSettings;
+
+        /// <summary>Shared beat/energy state feeding the plasma equalizer and fractal background.</summary>
+        private readonly VisualEnergyState _visualEnergy = new VisualEnergyState();
+
         private readonly JukeboxSettings _jukeboxSettingsModel;
 
         private readonly PredictorWeights _weights;
@@ -81,11 +90,16 @@ namespace SpotifyWPF.ViewModel.Page
             INextTrackPredictor predictor,
             ILoopRegionStore loopRegionStore,
             IJukeboxSettingsStore jukeboxSettings,
-            ILoopLabSessionStore sessionStore)
+            ILoopLabSessionStore sessionStore,
+            IVisualEffectsStore visualEffectsStore)
         {
             _loopRegionStore = loopRegionStore;
             _jukeboxSettings = jukeboxSettings;
             _sessionStore = sessionStore;
+            _visualEffectsStore = visualEffectsStore;
+            _visualEffectsSettings = visualEffectsStore.Get();
+            _visualEffectsStore.SettingsChanged += (_, __) =>
+                RaisePropertyChanged(nameof(IsFractalBackgroundEnabled));
             _jukeboxSettingsModel = _jukeboxSettings.Get();
             _spotify = spotify;
             _playbackHost = playbackHost;
@@ -208,7 +222,10 @@ namespace SpotifyWPF.ViewModel.Page
             set
             {
                 if (Set(ref _positionMs, value))
+                {
                     RaisePropertyChanged(nameof(PositionText));
+                    _visualEnergy.SetTransport(value, IsPaused);
+                }
             }
         }
 
@@ -263,7 +280,28 @@ namespace SpotifyWPF.ViewModel.Page
             set
             {
                 if (Set(ref _isPaused, value))
+                {
                     RaisePropertyChanged(nameof(ShowPauseIcon));
+                    _visualEnergy.SetTransport(PositionMs, value);
+                }
+            }
+        }
+
+        /// <summary>Shared energy source consumed by the equalizer and fractal background.</summary>
+        public IVisualEnergyProvider VisualEnergy => _visualEnergy;
+
+        /// <summary>Fractal background toggle; persisted, defaults to off (pure black).</summary>
+        public bool IsFractalBackgroundEnabled
+        {
+            get => _visualEffectsSettings.FractalBackgroundEnabled;
+            set
+            {
+                if (_visualEffectsSettings.FractalBackgroundEnabled == value)
+                    return;
+
+                _visualEffectsSettings.FractalBackgroundEnabled = value;
+                _visualEffectsStore.Save(_visualEffectsSettings);
+                RaisePropertyChanged();
             }
         }
 
@@ -1603,6 +1641,7 @@ namespace SpotifyWPF.ViewModel.Page
                 RingGraph = null;
                 RingSectionStartsSec = Array.Empty<double>();
                 RingSegmentCountText = "No track playing";
+                _visualEnergy.Clear();
                 return;
             }
 
@@ -1613,8 +1652,11 @@ namespace SpotifyWPF.ViewModel.Page
                 RingGraph = null;
                 RingSectionStartsSec = Array.Empty<double>();
                 RingSegmentCountText = "No beat map — analyze track first";
+                _visualEnergy.Clear();
                 return;
             }
+
+            _visualEnergy.LoadAnalysis(analysis);
 
             RingDurationMs = (long)(analysis.DurationSec * 1000);
             RingSectionStartsSec = analysis.Sections != null && analysis.Sections.Count > 0

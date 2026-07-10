@@ -1,8 +1,10 @@
+using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media.Animation;
 using System.Windows.Navigation;using CommonServiceLocator;
 using SpotifyWPF.Service.Playback;
 using SpotifyWPF.ViewModel.Page;
@@ -27,6 +29,13 @@ namespace SpotifyWPF.View.Page
 
         private async void PredictionPage_Loaded(object sender, RoutedEventArgs e)
         {
+            // Fade the page in from black — after login this overlaps the login overlay's
+            // fade-out, so the Infinite Jukebox appears underneath instead of popping in.
+            BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(450))
+            {
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
+            });
+
             var host = ServiceLocator.Current.GetInstance<IWebPlaybackHost>();
             var view = host.GetOrCreateView();
             var mainWindow = Window.GetWindow(this) as MainWindow;

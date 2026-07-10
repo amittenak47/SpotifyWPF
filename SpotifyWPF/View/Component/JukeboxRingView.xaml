@@ -29,6 +29,7 @@
                                      EndScrubCommand="{Binding EndRingScrubCommand}"
                                      ResetPlaysToken="{Binding RingResetPlaysToken, Mode=OneWay}"
                                      PreviewHopDepth="{Binding RingPreviewHopDepth, Mode=OneWay}"
+                                     EnergyProvider="{Binding VisualEnergy, Mode=OneWay}"
                                      MiniPlayerMode="{Binding MiniPlayerMode, RelativeSource={RelativeSource AncestorType=local:JukeboxRingView}}"/>
         </Grid>
     </Grid>

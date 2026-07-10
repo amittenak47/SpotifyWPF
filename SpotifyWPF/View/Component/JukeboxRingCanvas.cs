@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using SpotifyWPF.Model.Prediction;
 using SpotifyWPF.Service.Prediction;
+using SpotifyWPF.Service.Visual;
 
 namespace SpotifyWPF.View.Component
 {
@@ -69,6 +70,8 @@ namespace SpotifyWPF.View.Component
         private bool _isRingScrubbing;
 
         private string _lastHudText = string.Empty;
+
+        private readonly CircularEqualizerRenderer _equalizer = new CircularEqualizerRenderer();
 
         public JukeboxRingCanvas()
         {
@@ -154,6 +157,11 @@ namespace SpotifyWPF.View.Component
         public static readonly DependencyProperty HudTextProperty =
             DependencyProperty.Register(nameof(HudText), typeof(string), typeof(JukeboxRingCanvas),
                 new FrameworkPropertyMetadata(string.Empty));
+
+        public static readonly DependencyProperty EnergyProviderProperty =
+            DependencyProperty.Register(nameof(EnergyProvider), typeof(IVisualEnergyProvider),
+                typeof(JukeboxRingCanvas),
+                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
 
         public long DurationMs
         {
@@ -258,6 +266,13 @@ namespace SpotifyWPF.View.Component
             private set => SetValue(HudTextProperty, value);
         }
 
+        /// <summary>Shared music-energy source driving the plasma equalizer in the annulus.</summary>
+        public IVisualEnergyProvider EnergyProvider
+        {
+            get => (IVisualEnergyProvider)GetValue(EnergyProviderProperty);
+            set => SetValue(EnergyProviderProperty, value);
+        }
+
         private static void OnPositionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var canvas = (JukeboxRingCanvas)d;
@@ -306,11 +321,18 @@ namespace SpotifyWPF.View.Component
 
         private void OnAnimationTick()
         {
-            if (Graph == null)
+            var energy = EnergyProvider;
+            var energyActive = energy != null && (energy.GlobalEnergy > 0.003 || energy.BeatPulse > 0.003);
+
+            if (Graph == null && !energyActive)
                 return;
 
-            UpdatePlayCounts(EstimatedPositionMs());
-            SyncHudText();
+            if (Graph != null)
+            {
+                UpdatePlayCounts(EstimatedPositionMs());
+                SyncHudText();
+            }
+
             InvalidateVisual();
         }
 
@@ -1104,6 +1126,15 @@ namespace SpotifyWPF.View.Component
         /// <summary>Muted section hues (steel blue, sea green, violet, amber, teal, rose).</summary>
         private static readonly double[] SectionHues = { 210, 158, 278, 30, 190, 330 };
 
+        // Render layer order (bottom → top):
+        //   0. FractalBackgroundControl — separate element *behind* this canvas in the visual tree
+        //   1. Center disc (skipped in mini player mode so the transport backdrop shows through)
+        //   2. Plasma equalizer bars — annulus between the inner bar band and the outer rim;
+        //      peaks intentionally overshoot the rim
+        //   3. Outer rim circle + section arcs
+        //   4. Beat coverage bars (+ mini-player square-edge extensions), trail, headlights, playhead
+        //   5. Branch landmarks/chords, planned-jump chord, jump flashes, locked branches
+        // Everything interactive (bars, chords, locks, scrub) stays on top of the equalizer.
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);
@@ -1120,6 +1151,8 @@ namespace SpotifyWPF.View.Component
             // Mini player keeps the center transparent so the transport backdrop shows through.
             if (!MiniPlayerMode)
                 dc.DrawEllipse(new SolidColorBrush(BackgroundColor), null, center, outer, outer);
+
+            _equalizer.Render(dc, EnergyProvider, center, outer * BarBandInnerRatio, outer);
 
             dc.DrawEllipse(null, MakePen(RimColor, 1), center, outer, outer);
 

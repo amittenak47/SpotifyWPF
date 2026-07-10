@@ -6,13 +6,12 @@
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
 
-    <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-    </UserControl.Resources>
-
-    <!-- DataContext comes from MainWindow DataTemplate (LoginPageViewModel). Do not override here. -->
+    <!-- DataContext comes from MainWindow DataTemplate (LoginPageViewModel). Do not override here.
+         Opacity/visibility of the form and the loading overlay are choreographed by
+         LoginTransitionController (code-behind) from the view model's LoginPhase. -->
     <Grid Background="{DynamicResource AppBackgroundBrush}">
-        <StackPanel HorizontalAlignment="Center"
+        <StackPanel x:Name="LoginFormPanel"
+                    HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     MaxWidth="480"
                     Margin="24"
@@ -63,38 +62,88 @@
             </StackPanel>
         </StackPanel>
 
-        <Border Panel.ZIndex="1"
-                Background="#E6000000"
-                Visibility="{Binding IsLoggingIn,
-                                     Converter={StaticResource BooleanToVisibilityConverter},
-                                     FallbackValue=Collapsed,
-                                     TargetNullValue=Collapsed}">
+        <!-- Loading overlay: orbiting arc + pulsing core instead of a stock progress bar.
+             Starts fully transparent and collapsed; LoginTransitionController fades it. -->
+        <Border x:Name="LoadingOverlay"
+                Panel.ZIndex="1"
+                Background="#F2000000"
+                Opacity="0"
+                Visibility="Collapsed"
+                IsHitTestVisible="False">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="280">
-                <ProgressBar IsIndeterminate="True" Height="8" Margin="0,0,0,16"/>
-                <TextBlock Text="{Binding LoginStatusText}"
+                <Grid Width="72" Height="72" Margin="0,0,0,20" HorizontalAlignment="Center">
+                    <!-- Faint track ring -->
+                    <Ellipse Stroke="#26FFFFFF" StrokeThickness="3"/>
+
+                    <!-- Orbiting arc segment (one dash of the circumference, spun forever) -->
+                    <Ellipse Stroke="{DynamicResource AppAccentBrush}"
+                             StrokeThickness="3"
+                             StrokeDashArray="16 57"
+                             StrokeDashCap="Round"
+                             RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.RenderTransform>
+                            <RotateTransform x:Name="SpinnerRotate" Angle="0"/>
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
+
+                    <!-- Pulsing core -->
+                    <Ellipse x:Name="SpinnerCore"
+                             Width="12" Height="12"
+                             Fill="{DynamicResource AppAccentBrush}"
+                             RenderTransformOrigin="0.5,0.5"
+                             Opacity="0.9">
+                        <Ellipse.RenderTransform>
+                            <ScaleTransform x:Name="SpinnerCoreScale" ScaleX="1" ScaleY="1"/>
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
+
+                    <Grid.Triggers>
+                        <EventTrigger RoutedEvent="Loaded">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
+                                                     Storyboard.TargetProperty="Angle"
+                                                     From="0" To="360"
+                                                     Duration="0:0:1.4"
+                                                     RepeatBehavior="Forever"/>
+                                    <DoubleAnimation Storyboard.TargetName="SpinnerCoreScale"
+                                                     Storyboard.TargetProperty="ScaleX"
+                                                     From="0.72" To="1.18"
+                                                     Duration="0:0:0.9"
+                                                     AutoReverse="True"
+                                                     RepeatBehavior="Forever">
+                                        <DoubleAnimation.EasingFunction>
+                                            <SineEase EasingMode="EaseInOut"/>
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                    <DoubleAnimation Storyboard.TargetName="SpinnerCoreScale"
+                                                     Storyboard.TargetProperty="ScaleY"
+                                                     From="0.72" To="1.18"
+                                                     Duration="0:0:0.9"
+                                                     AutoReverse="True"
+                                                     RepeatBehavior="Forever">
+                                        <DoubleAnimation.EasingFunction>
+                                            <SineEase EasingMode="EaseInOut"/>
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                    <DoubleAnimation Storyboard.TargetName="SpinnerCore"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     From="0.55" To="1"
+                                                     Duration="0:0:0.9"
+                                                     AutoReverse="True"
+                                                     RepeatBehavior="Forever"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Grid.Triggers>
+                </Grid>
+
+                <TextBlock x:Name="LoginStatusTextBlock"
+                           Text="{Binding LoginStatusText, NotifyOnTargetUpdated=True}"
                            HorizontalAlignment="Center"
                            Foreground="{DynamicResource AppForegroundBrush}"
                            TextWrapping="Wrap"
                            TextAlignment="Center"/>
-            </StackPanel>
-        </Border>
-
-        <Border Panel.ZIndex="2"
-                Background="{DynamicResource AppBackgroundBrush}"
-                Visibility="{Binding ShowLoginBridge,
-                                     Converter={StaticResource BooleanToVisibilityConverter},
-                                     FallbackValue=Collapsed,
-                                     TargetNullValue=Collapsed}">
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                <TextBlock Text="Signed in"
-                           FontSize="28"
-                           FontWeight="SemiBold"
-                           HorizontalAlignment="Center"
-                           Foreground="{DynamicResource AppForegroundBrush}"/>
-                <TextBlock Text="Loading your library..."
-                           Margin="0,8,0,0"
-                           HorizontalAlignment="Center"
-                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
             </StackPanel>
         </Border>
     </Grid>

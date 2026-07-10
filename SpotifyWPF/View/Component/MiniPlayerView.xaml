@@ -94,6 +94,13 @@
     </UserControl.Resources>
 
     <Grid Background="{x:Null}">
+        <!-- Same fractal layer as PredictionPage; feathered out over the transparent center disc
+             so the transport backdrop and window drag behavior stay untouched. -->
+        <component:FractalBackgroundControl IsActive="{Binding IsFractalBackgroundEnabled}"
+                                            EnergyProvider="{Binding VisualEnergy}"
+                                            MiniPlayerMode="True"
+                                            Opacity="0.9"
+                                            IsHitTestVisible="False"/>
         <Viewbox Stretch="Uniform"
                  HorizontalAlignment="Stretch"
                  VerticalAlignment="Stretch">

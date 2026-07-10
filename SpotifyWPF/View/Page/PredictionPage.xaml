@@ -54,6 +54,43 @@
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
         </Style>
+
+        <Style x:Key="TransportToggleButtonStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="18">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
+                                <Setter TargetName="Border" Property="Background" Value="#331DB954"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <DockPanel Margin="8" Background="{DynamicResource AppBackgroundBrush}">
@@ -253,6 +290,12 @@
                                         <TextBlock Text="&#xE919;" Style="{StaticResource TransportGlyphStyle}"/>
                                     </Button>
 
+                                    <ToggleButton Style="{StaticResource TransportToggleButtonStyle}"
+                                                  IsChecked="{Binding IsFractalBackgroundEnabled}"
+                                                  ToolTip="Fractal background (synced to the equalizer)">
+                                        <TextBlock Text="&#xE790;" Style="{StaticResource TransportGlyphStyle}"/>
+                                    </ToggleButton>
+
                                     <Button Content="Analyze"
                                             MinWidth="72"
                                             Margin="8,0,0,0"
@@ -295,6 +338,11 @@
                             ClipToBounds="True"
                             Panel.ZIndex="0">
                         <Grid>
+                            <!-- Optional fractal layer: above the black background, behind the ring. -->
+                            <component:FractalBackgroundControl IsActive="{Binding IsFractalBackgroundEnabled}"
+                                                                EnergyProvider="{Binding VisualEnergy}"
+                                                                Opacity="0.9"
+                                                                IsHitTestVisible="False"/>
                             <component:JukeboxRingView x:Name="RingView"
                                                        HorizontalAlignment="Stretch"
                                                        VerticalAlignment="Stretch"

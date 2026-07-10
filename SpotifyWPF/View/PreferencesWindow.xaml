@@ -16,6 +16,8 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0"
@@ -41,14 +43,29 @@
             </Grid>
         </ScrollViewer>
 
+        <TextBlock Grid.Row="3"
+                   Text="Visual effects"
+                   FontSize="14"
+                   FontWeight="SemiBold"
+                   Margin="0,16,0,4"/>
+        <StackPanel Grid.Row="4" Margin="0,0,0,4">
+            <CheckBox x:Name="FractalBackgroundCheckBox"
+                      Content="Fractal background (synced to the equalizer)"
+                      Foreground="{DynamicResource AppForegroundBrush}"/>
+            <TextBlock Text="Animated generative background behind the Infinite Jukebox ring and mini player. Off keeps the background pure black."
+                       TextWrapping="Wrap"
+                       Margin="20,4,0,0"
+                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+        </StackPanel>
+
         <TextBlock x:Name="ValidationMessage"
-                   Grid.Row="3"
+                   Grid.Row="5"
                    Margin="0,8,0,0"
                    Foreground="{DynamicResource AppAccentBrush}"
                    TextWrapping="Wrap"
                    Visibility="Collapsed"/>
 
-        <StackPanel Grid.Row="4"
+        <StackPanel Grid.Row="6"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,16,0,0">

@@ -12,10 +12,34 @@ using SpotifyWPF.Service.MessageBoxes;
 
 namespace SpotifyWPF.ViewModel.Page
 {
+    /// <summary>Login transition state machine, animated by LoginTransitionController in the view.</summary>
+    public enum LoginPhase
+    {
+        /// <summary>Login form visible and interactive.</summary>
+        Form,
+
+        /// <summary>Form faded out, loading overlay faded in, waiting for authorization.</summary>
+        Loading,
+
+        /// <summary>Authorized: loading animation keeps running while the session bridge preps.</summary>
+        SuccessFade,
+
+        /// <summary>Bridge done: loading overlay fades out slowly, then the app page fades in.</summary>
+        Done
+    }
+
     public class LoginPageViewModel : ViewModelBase
     {
+        /// <summary>Minimum time the "Signed in" bridge stays up so the transition never feels abrupt.</summary>
+        private const int MinBridgeDurationMs = 750;
+
+        /// <summary>Fallback if the view never reports its fade-out finished (e.g. no view attached).</summary>
+        private const int MaxLoadingFadeWaitMs = 1500;
+
         private readonly IMessageBoxService _messageBoxService;
         private readonly ISpotify _spotify;
+
+        private TaskCompletionSource<bool> _loadingFadeTcs;
 
         public RelayCommand SpotifyLoginCommand { get; private set; }
 
@@ -38,14 +62,15 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
-        private bool _isLoggingIn;
+        private LoginPhase _phase = LoginPhase.Form;
 
-        public bool IsLoggingIn
+        /// <summary>Drives the fade choreography; the view animates on every change.</summary>
+        public LoginPhase Phase
         {
-            get => _isLoggingIn;
-            set
+            get => _phase;
+            private set
             {
-                if (Set(ref _isLoggingIn, value))
+                if (Set(ref _phase, value))
                 {
                     RaisePropertyChanged(nameof(IsLoginFormEnabled));
                     SpotifyLoginCommand?.RaiseCanExecuteChanged();
@@ -54,19 +79,7 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
-        private bool _showLoginBridge;
-
-        public bool ShowLoginBridge
-        {
-            get => _showLoginBridge;
-            set
-            {
-                if (Set(ref _showLoginBridge, value))
-                    RaisePropertyChanged(nameof(IsLoginFormEnabled));
-            }
-        }
-
-        public bool IsLoginFormEnabled => !IsLoggingIn && !ShowLoginBridge;
+        public bool IsLoginFormEnabled => Phase == LoginPhase.Form;
 
         private string _loginStatusText = "Waiting for Spotify authorization…";
 
@@ -89,18 +102,23 @@ namespace SpotifyWPF.ViewModel.Page
 
             MessengerInstance.Register<object>(this, "LoginFailed", _ =>
             {
-                IsLoggingIn = false;
-                ShowLoginBridge = false;
+                // Reverse fade: the view hides the loading overlay and restores the form.
                 LoginStatusText = "Authorization failed or was cancelled.";
+                Phase = LoginPhase.Form;
             });
         }
 
         public void ResetLoginState()
         {
             _spotify.ResetAuthenticationState();
-            IsLoggingIn = false;
-            ShowLoginBridge = false;
+            Phase = LoginPhase.Form;
             LoginStatusText = "Waiting for Spotify authorization…";
+        }
+
+        /// <summary>Called by the view when the loading overlay's final fade-out has completed.</summary>
+        public void NotifyLoadingFadeCompleted()
+        {
+            _loadingFadeTcs?.TrySetResult(true);
         }
 
         private async void ExecuteLogin()
@@ -118,9 +136,8 @@ namespace SpotifyWPF.ViewModel.Page
                     return;
                 }
 
-                IsLoggingIn = true;
-                ShowLoginBridge = false;
                 LoginStatusText = "Waiting for Spotify authorization…";
+                Phase = LoginPhase.Loading;
                 SaveClientId(UserClientId.Trim());
                 Properties.Settings.Default.Save();
 
@@ -129,8 +146,7 @@ namespace SpotifyWPF.ViewModel.Page
             catch (Exception ex)
             {
                 System.Windows.MessageBox.Show($"A hidden crash occurred:\n{ex.Message}", "Crash Detected");
-                IsLoggingIn = false;
-                ShowLoginBridge = false;
+                Phase = LoginPhase.Form;
             }
         }
 
@@ -149,9 +165,8 @@ namespace SpotifyWPF.ViewModel.Page
                     return;
                 }
 
-                IsLoggingIn = true;
-                ShowLoginBridge = false;
                 LoginStatusText = "Refreshing Spotify authorization…";
+                Phase = LoginPhase.Loading;
                 SaveClientId(UserClientId.Trim());
                 Properties.Settings.Default.Save();
 
@@ -160,14 +175,13 @@ namespace SpotifyWPF.ViewModel.Page
             catch (Exception ex)
             {
                 System.Windows.MessageBox.Show($"A hidden crash occurred:\n{ex.Message}", "Crash Detected");
-                IsLoggingIn = false;
-                ShowLoginBridge = false;
+                Phase = LoginPhase.Form;
             }
         }
 
         private bool CanExecuteLogin()
         {
-            return !IsLoggingIn && !ShowLoginBridge && !string.IsNullOrWhiteSpace(UserClientId);
+            return Phase == LoginPhase.Form && !string.IsNullOrWhiteSpace(UserClientId);
         }
 
         private void LoadSavedClientIds()
@@ -205,15 +219,27 @@ namespace SpotifyWPF.ViewModel.Page
         {
             Application.Current.Dispatcher.BeginInvoke(new Action(async () =>
             {
-                IsLoggingIn = false;
-                LoginStatusText = "Signed in. Opening playlists…";
-                ShowLoginBridge = true;
+                // The loading animation keeps running; only the status text cross-fades.
+                LoginStatusText = "Signed in — loading your library…";
+                Phase = LoginPhase.SuccessFade;
 
-                await Task.Delay(900);
+                // Minimum bridge duration instead of a blind fixed delay: long enough to read,
+                // short enough not to stall the reveal.
+                await Task.Delay(MinBridgeDurationMs);
 
-                ShowLoginBridge = false;
+                // Ask the view to fade the loading overlay out, and wait for it to finish
+                // (bounded by a timeout so a missing view can never wedge the login).
+                _loadingFadeTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                Phase = LoginPhase.Done;
+                await Task.WhenAny(_loadingFadeTcs.Task, Task.Delay(MaxLoadingFadeWaitMs));
+                _loadingFadeTcs = null;
+
                 // Pass new object() to avoid anonymous type matching bugs in MVVM Light
                 MessengerInstance.Send<object>(new object(), MessageType.LoginSuccessful);
+
+                // Reset quietly for the next visit (navigation has already left this page).
+                Phase = LoginPhase.Form;
+                LoginStatusText = "Waiting for Spotify authorization…";
             }));
         }
     }

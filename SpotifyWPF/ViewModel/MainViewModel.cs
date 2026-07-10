@@ -12,6 +12,8 @@ using GalaSoft.MvvmLight.Command;
 
 using SpotifyWPF.Service.Theme;
 
+using SpotifyWPF.Service.Visual;
+
 using SpotifyWPF.View;
 
 using SpotifyWPF.ViewModel.Component;
@@ -42,6 +44,8 @@ namespace SpotifyWPF.ViewModel
 
         private readonly IAppThemeStore _themeStore;
 
+        private readonly IVisualEffectsStore _visualEffectsStore;
+
 
 
         private ViewModelBase _currentPage;
@@ -62,7 +66,9 @@ namespace SpotifyWPF.ViewModel
 
             PredictionPageViewModel predictionPageViewModel,
 
-            IAppThemeStore themeStore)
+            IAppThemeStore themeStore,
+
+            IVisualEffectsStore visualEffectsStore)
 
         {
 
@@ -79,6 +85,8 @@ namespace SpotifyWPF.ViewModel
             _predictionPageViewModel = predictionPageViewModel;
 
             _themeStore = themeStore;
+
+            _visualEffectsStore = visualEffectsStore;
 
 
 
@@ -475,7 +483,7 @@ namespace SpotifyWPF.ViewModel
             if (Application.Current?.MainWindow == null)
                 return;
 
-            var window = new PreferencesWindow(_themeStore)
+            var window = new PreferencesWindow(_themeStore, _visualEffectsStore)
             {
                 Owner = Application.Current.MainWindow
             };
