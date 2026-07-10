@@ -4,7 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
+using System.Windows.Media.Animation;
 using SpotifyWPF.ViewModel.Page;
 
 namespace SpotifyWPF.View.Component
@@ -27,9 +27,9 @@ namespace SpotifyWPF.View.Component
             Next
         }
 
-        private const double WheelDragThreshold = 10;
-        private const double WheelHoldDelayMs = 380;
+        private const double WheelDragThreshold = 8;
         private const double WheelCenter = 42;
+        private const double WheelFadeMs = 140;
 
         private static readonly SolidColorBrush WheelGoldFill =
             new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xD1, 0x66));
@@ -40,11 +40,6 @@ namespace SpotifyWPF.View.Component
         private static readonly SolidColorBrush WheelMutedLabel =
             new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF));
 
-        private readonly DispatcherTimer _lockHoldTimer;
-        private readonly DispatcherTimer _transportHoldTimer;
-
-        private bool _lockHoldReady;
-        private bool _transportHoldReady;
         private bool _hopModeEnabled;
         private bool _lockPressActive;
         private bool _lockWheelActive;
@@ -60,31 +55,7 @@ namespace SpotifyWPF.View.Component
         public MiniPlayerView()
         {
             InitializeComponent();
-
-            _lockHoldTimer = CreateHoldTimer(() =>
-            {
-                if (_lockPressActive)
-                    _lockHoldReady = true;
-            });
-
-            _transportHoldTimer = CreateHoldTimer(() =>
-            {
-                if (_transportPressActive)
-                    _transportHoldReady = true;
-            });
-
             Loaded += (_, __) => UpdateHopModeChrome();
-        }
-
-        private static DispatcherTimer CreateHoldTimer(Action onTick)
-        {
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(WheelHoldDelayMs) };
-            timer.Tick += (_, __) =>
-            {
-                timer.Stop();
-                onTick();
-            };
-            return timer;
         }
 
         private void DragRoot_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -245,7 +216,11 @@ namespace SpotifyWPF.View.Component
 
         private void LockToggle_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            BeginLockWheelPress();
+            _lockPressActive = true;
+            _lockWheelActive = false;
+            _lockWheelAction = LockWheelAction.None;
+            _wheelPressPoint = new Point(WheelCenter, WheelCenter);
+            LockToggle.CaptureMouse();
             e.Handled = true;
         }
 
@@ -257,11 +232,6 @@ namespace SpotifyWPF.View.Component
 
         private void LockToggle_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            _lockHoldTimer.Stop();
-            _lockPressActive = false;
-            _lockHoldReady = false;
-            ReleaseCapture(LockToggle);
-
             if (_lockWheelActive)
             {
                 CommitLockWheelAction();
@@ -269,16 +239,33 @@ namespace SpotifyWPF.View.Component
             }
             else
             {
-                LockToggle.IsChecked = !LockToggle.IsChecked;
+                FireLockBaseAction();
             }
 
-            _lockWheelActive = false;
+            EndLockPress();
             e.Handled = true;
+        }
+
+        private void EndLockPress()
+        {
+            _lockPressActive = false;
+            _lockWheelActive = false;
+            _lockWheelAction = LockWheelAction.None;
+            ReleaseCapture(LockToggle);
+        }
+
+        private void FireLockBaseAction()
+        {
+            LockToggle.IsChecked = !LockToggle.IsChecked;
         }
 
         private void TransportButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            BeginTransportWheelPress();
+            _transportPressActive = true;
+            _transportWheelActive = false;
+            _transportWheelAction = TransportWheelAction.None;
+            _wheelPressPoint = new Point(WheelCenter, WheelCenter);
+            TransportButton.CaptureMouse();
             e.Handled = true;
         }
 
@@ -290,101 +277,74 @@ namespace SpotifyWPF.View.Component
 
         private void TransportButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            _transportHoldTimer.Stop();
-            _transportPressActive = false;
-            _transportHoldReady = false;
-            ReleaseCapture(TransportButton);
-
             if (_transportWheelActive)
             {
                 CommitTransportWheelAction();
                 HideTransportWheel();
             }
-            else if (DataContext is PredictionPageViewModel vm
-                     && vm.TogglePlayPauseCommand.CanExecute(null))
+            else
             {
-                vm.TogglePlayPauseCommand.Execute(null);
+                FireTransportBaseAction();
             }
 
-            _transportWheelActive = false;
+            EndTransportPress();
             e.Handled = true;
         }
 
-        private void BeginWheelPress(DispatcherTimer timer, ref bool pressActive, UIElement captureTarget)
+        private void EndTransportPress()
         {
-            pressActive = true;
-            _wheelPressPoint = new Point(WheelCenter, WheelCenter);
-            captureTarget.CaptureMouse();
-            timer.Start();
+            _transportPressActive = false;
+            _transportWheelActive = false;
+            _transportWheelAction = TransportWheelAction.None;
+            ReleaseCapture(TransportButton);
         }
 
-        private void BeginLockWheelPress()
+        private void FireTransportBaseAction()
         {
-            _lockHoldReady = false;
-            BeginWheelPress(_lockHoldTimer, ref _lockPressActive, LockToggle);
-        }
-
-        private void BeginTransportWheelPress()
-        {
-            _transportHoldReady = false;
-            BeginWheelPress(_transportHoldTimer, ref _transportPressActive, TransportButton);
+            if (DataContext is PredictionPageViewModel vm
+                && vm.TogglePlayPauseCommand.CanExecute(null))
+            {
+                vm.TogglePlayPauseCommand.Execute(null);
+            }
         }
 
         private void TrackLockWheelDrag()
         {
-            if (!TryReadWheelDelta(LockWheelOverlay, ref _lockWheelActive, _lockHoldReady, ShowLockWheel,
-                    horizontalOnly: false, out var delta))
+            if (Mouse.LeftButton != MouseButtonState.Pressed)
                 return;
 
-            if (_lockWheelActive)
+            var delta = (Vector)(Mouse.GetPosition(LockWheelOverlay) - _wheelPressPoint);
+
+            if (!_lockWheelActive)
             {
-                _lockWheelAction = PickLockWheelAction(delta);
-                UpdateLockWheelHighlight();
+                if (Math.Abs(delta.X) < WheelDragThreshold && Math.Abs(delta.Y) < WheelDragThreshold)
+                    return;
+
+                ShowLockWheel();
             }
+
+            _lockWheelAction = PickLockWheelAction(delta);
+            UpdateLockWheelHighlight();
         }
 
         private void TrackTransportWheelDrag()
         {
-            if (!TryReadWheelDelta(TransportWheelOverlay, ref _transportWheelActive, _transportHoldReady,
-                    ShowTransportWheel, horizontalOnly: true, out var delta))
+            if (Mouse.LeftButton != MouseButtonState.Pressed)
                 return;
 
-            if (_transportWheelActive)
+            var delta = (Vector)(Mouse.GetPosition(TransportWheelOverlay) - _wheelPressPoint);
+
+            if (!_transportWheelActive)
             {
-                _transportWheelAction = PickTransportWheelAction(delta);
-                UpdateTransportWheelHighlight();
-            }
-        }
+                if (Math.Abs(delta.X) < WheelDragThreshold
+                    || Math.Abs(delta.X) < Math.Abs(delta.Y))
+                    return;
 
-        private bool TryReadWheelDelta(FrameworkElement overlay, ref bool wheelActive, bool holdReady,
-            Action showWheel, bool horizontalOnly, out Vector delta)
-        {
-            delta = default;
-
-            if (Mouse.LeftButton != MouseButtonState.Pressed || !holdReady)
-                return false;
-
-            delta = (Vector)(Mouse.GetPosition(overlay) - _wheelPressPoint);
-
-            if (!wheelActive)
-            {
-                if (horizontalOnly)
-                {
-                    if (Math.Abs(delta.X) < WheelDragThreshold
-                        || Math.Abs(delta.X) < Math.Abs(delta.Y))
-                        return false;
-                }
-                else if (Math.Abs(delta.X) < WheelDragThreshold && Math.Abs(delta.Y) < WheelDragThreshold)
-                {
-                    return false;
-                }
-
-                showWheel();
-                wheelActive = true;
-                delta = (Vector)(Mouse.GetPosition(overlay) - _wheelPressPoint);
+                ShowTransportWheel();
             }
 
-            return wheelActive;
+            _transportWheelAction = PickTransportWheelAction(delta);
+            UpdateTransportWheelHighlight();
         }
 
         private static void ReleaseCapture(UIElement element)
@@ -397,7 +357,7 @@ namespace SpotifyWPF.View.Component
         {
             _lockWheelActive = true;
             _lockWheelAction = LockWheelAction.None;
-            LockWheelOverlay.Visibility = Visibility.Visible;
+            FadeWheel(LockWheelOverlay, show: true);
             Panel.SetZIndex(LockWheelOverlay, 0);
             Panel.SetZIndex(LockToggle, 1);
             UpdateLockWheelHighlight();
@@ -405,7 +365,7 @@ namespace SpotifyWPF.View.Component
 
         private void HideLockWheel()
         {
-            LockWheelOverlay.Visibility = Visibility.Collapsed;
+            FadeWheel(LockWheelOverlay, show: false);
             _lockWheelAction = LockWheelAction.None;
             UpdateLockWheelHighlight();
         }
@@ -414,7 +374,7 @@ namespace SpotifyWPF.View.Component
         {
             _transportWheelActive = true;
             _transportWheelAction = TransportWheelAction.None;
-            TransportWheelOverlay.Visibility = Visibility.Visible;
+            FadeWheel(TransportWheelOverlay, show: true);
             Panel.SetZIndex(TransportWheelOverlay, 0);
             Panel.SetZIndex(TransportButton, 1);
             UpdateTransportWheelHighlight();
@@ -422,11 +382,40 @@ namespace SpotifyWPF.View.Component
 
         private void HideTransportWheel()
         {
-            TransportWheelOverlay.Visibility = Visibility.Collapsed;
+            FadeWheel(TransportWheelOverlay, show: false);
             _transportWheelAction = TransportWheelAction.None;
             UpdateTransportWheelHighlight();
         }
 
+        private static void FadeWheel(UIElement overlay, bool show)
+        {
+            overlay.BeginAnimation(UIElement.OpacityProperty, null);
+
+            if (show)
+            {
+                overlay.Visibility = Visibility.Visible;
+                var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(WheelFadeMs))
+                {
+                    FillBehavior = FillBehavior.HoldEnd
+                };
+                overlay.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+                return;
+            }
+
+            var fadeOut = new DoubleAnimation(overlay.Opacity, 0, TimeSpan.FromMilliseconds(WheelFadeMs))
+            {
+                FillBehavior = FillBehavior.Stop
+            };
+            fadeOut.Completed += (_, __) =>
+            {
+                overlay.Visibility = Visibility.Collapsed;
+                overlay.Opacity = 0;
+            };
+            overlay.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+        }
+
+        // WPF Y grows downward: 0°=right, 90°=down, 180°=left, 270°=up.
+        // X dividers create cardinal slices: top=Restore, right=Reset, bottom=Hops, left=Clear.
         private static LockWheelAction PickLockWheelAction(Vector delta)
         {
             if (Math.Abs(delta.X) < WheelDragThreshold && Math.Abs(delta.Y) < WheelDragThreshold)
@@ -438,12 +427,12 @@ namespace SpotifyWPF.View.Component
                 return LockWheelAction.Reset;
 
             if (angle < 135)
-                return LockWheelAction.Maximize;
-
-            if (angle < 225)
                 return LockWheelAction.Hops;
 
-            return LockWheelAction.Clear;
+            if (angle < 225)
+                return LockWheelAction.Clear;
+
+            return LockWheelAction.Maximize;
         }
 
         private static TransportWheelAction PickTransportWheelAction(Vector delta)
@@ -478,7 +467,7 @@ namespace SpotifyWPF.View.Component
 
         private static void HighlightLabel(TextBlock label, bool selected)
         {
-            label.Opacity = selected ? 1.0 : 0.45;
+            label.Opacity = selected ? 1.0 : 0.55;
             label.Foreground = selected ? WheelGoldStroke : WheelMutedLabel;
         }
 
@@ -542,7 +531,9 @@ namespace SpotifyWPF.View.Component
             RingView.RingCanvas.MiniPlayerHopMode = _hopModeEnabled;
             RingView.RingCanvas.InvalidateVisual();
             HopModeIndicator.Visibility = _hopModeEnabled ? Visibility.Visible : Visibility.Collapsed;
-            LockWheelHopsLabel.Text = _hopModeEnabled ? "Hops on" : "Hops";
+            // Shuffle icon when hops off; filled/connected when on.
+            LockWheelHopsLabel.Text = _hopModeEnabled ? "\uE8CB" : "\uE8B1";
+            LockWheelHopsLabel.ToolTip = _hopModeEnabled ? "Hops on" : "Hops";
 
             Panel.SetZIndex(RingViewHost, _hopModeEnabled ? 2 : 0);
             Panel.SetZIndex(RingDragPad, _hopModeEnabled ? 0 : 2);

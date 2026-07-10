@@ -4,15 +4,22 @@
         xmlns:component="clr-namespace:SpotifyWPF.View.Component"
         Title="Infinite Jukebox"
         Width="288"
-        Height="378"
-        MinWidth="272"
-        MinHeight="360"
+        Height="340"
+        MinWidth="220"
+        MinHeight="260"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
         ResizeMode="CanResize"
         ShowInTaskbar="True"
         SnapsToDevicePixels="True">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="8"
+                      GlassFrameThickness="0"
+                      CornerRadius="0"
+                      UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
     <component:MiniPlayerView HorizontalAlignment="Stretch"
                               VerticalAlignment="Stretch"
                               DataContext="{Binding PredictionPage, Source={StaticResource Locator}}"/>

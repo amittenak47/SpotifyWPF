@@ -25,13 +25,14 @@
                             <Border x:Name="Border"
                                     HorizontalAlignment="Stretch"
                                     VerticalAlignment="Stretch"
-                                    Background="#01FFFFFF"
+                                    Background="#22000000"
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="12"
                                     SnapsToDevicePixels="True"/>
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
+                                              Margin="0,0.5,0,0"
                                               IsHitTestVisible="False"/>
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -62,13 +63,14 @@
                             <Border x:Name="Border"
                                     HorizontalAlignment="Stretch"
                                     VerticalAlignment="Stretch"
-                                    Background="#01FFFFFF"
+                                    Background="#22000000"
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="12"
                                     SnapsToDevicePixels="True"/>
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
+                                              Margin="0,0.5,0,0"
                                               IsHitTestVisible="False"/>
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -85,9 +87,23 @@
         <Style x:Key="TransportGlyphStyle" TargetType="{x:Type TextBlock}">
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
             <Setter Property="FontSize" Value="9"/>
+            <Setter Property="Width" Value="14"/>
+            <Setter Property="Height" Value="14"/>
+            <Setter Property="TextAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+        </Style>
+
+        <Style x:Key="WheelSliceIconStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="#AAFFFFFF"/>
+            <Setter Property="Opacity" Value="0.55"/>
             <Setter Property="IsHitTestVisible" Value="False"/>
         </Style>
 
@@ -113,10 +129,12 @@
 
         <Grid Grid.Row="0"
               Height="14"
-              Margin="24,20,24,0"
+              Margin="40,16,40,0"
+              HorizontalAlignment="Stretch"
               ClipToBounds="True"
               IsHitTestVisible="False">
             <TextBlock Text="Nothing playing"
+                       HorizontalAlignment="Center"
                        VerticalAlignment="Center"
                        FontSize="9"
                        Foreground="{DynamicResource AppMutedForegroundBrush}">
@@ -134,7 +152,8 @@
             <component:MarqueeTextBlock Text="{Binding NowPlayingMarqueeText}"
                                         Height="14"
                                         FontSize="9"
-                                        AlwaysScroll="True"
+                                        AlwaysScroll="False"
+                                        HorizontalAlignment="Stretch"
                                         Foreground="{DynamicResource AppForegroundBrush}">
                 <component:MarqueeTextBlock.Style>
                     <Style TargetType="{x:Type component:MarqueeTextBlock}">
@@ -150,40 +169,45 @@
         </Grid>
 
         <Border Grid.Row="1"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Padding="24"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                Padding="16,8,16,20"
                 Background="Transparent">
-            <StackPanel Width="240" Background="Transparent">
-                <Grid x:Name="RingHostGrid" Width="240" Height="240" Background="Transparent">
-                    <Border x:Name="RingDragPad"
-                            Background="#01FFFFFF"
-                            Panel.ZIndex="0"
-                            PreviewMouseLeftButtonDown="RingDragPad_PreviewMouseLeftButtonDown"
-                            PreviewMouseMove="RingDragPad_PreviewMouseMove"
-                            PreviewMouseLeftButtonUp="RingDragPad_PreviewMouseLeftButtonUp"/>
-                    <Viewbox x:Name="RingViewHost"
-                             Stretch="Uniform"
-                             Panel.ZIndex="1"
-                             HorizontalAlignment="Stretch"
-                             VerticalAlignment="Stretch">
-                        <component:JukeboxRingView x:Name="RingView"
-                                                   Width="240" Height="240"
-                                                   DataContext="{Binding}"
-                                                   MiniPlayerMode="True"/>
-                    </Viewbox>
-                </Grid>
+            <Viewbox Stretch="Uniform"
+                     StretchDirection="Both"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center">
+                <Grid Width="240" Height="240" Background="Transparent">
+                    <Grid x:Name="RingHostGrid" Background="Transparent">
+                        <Border x:Name="RingDragPad"
+                                Background="#01FFFFFF"
+                                Panel.ZIndex="0"
+                                PreviewMouseLeftButtonDown="RingDragPad_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="RingDragPad_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="RingDragPad_PreviewMouseLeftButtonUp"/>
+                        <Viewbox x:Name="RingViewHost"
+                                 Stretch="Uniform"
+                                 Panel.ZIndex="1"
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Stretch">
+                            <component:JukeboxRingView x:Name="RingView"
+                                                       Width="240" Height="240"
+                                                       DataContext="{Binding}"
+                                                       MiniPlayerMode="True"/>
+                        </Viewbox>
+                    </Grid>
 
-                <!-- 68×68 hosts reserve equal space for 4-way wheels on both corners. -->
-                <Grid Height="68" Margin="0,4,0,0" Background="Transparent">
-                    <StackPanel HorizontalAlignment="Left"
-                                VerticalAlignment="Center"
-                                Orientation="Horizontal">
-                        <Viewbox Width="68" Height="68">
+                    <!-- Wheels overlay the lower ring so bottom padding cannot clip them. -->
+                    <Viewbox Width="48" Height="48"
+                             HorizontalAlignment="Left"
+                             VerticalAlignment="Bottom"
+                             Margin="0,0,0,4"
+                             Panel.ZIndex="3">
                         <Grid Width="84" Height="84">
                             <Canvas x:Name="LockWheelOverlay"
                                     Width="84"
                                     Height="84"
+                                    Opacity="0"
                                     Visibility="Collapsed"
                                     IsHitTestVisible="False">
                                 <Ellipse Width="80" Height="80"
@@ -194,21 +218,29 @@
                                 <Line X1="72" Y1="12" X2="12" Y2="72" Stroke="#22FFFFFF" StrokeThickness="1" IsHitTestVisible="False"/>
 
                                 <Path x:Name="LockWheelClearArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelNorthWestWedge}" IsHitTestVisible="False"/>
-                                <Path x:Name="LockWheelResetArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelNorthEastWedge}" IsHitTestVisible="False"/>
-                                <Path x:Name="LockWheelMaximizeArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelSouthEastWedge}" IsHitTestVisible="False"/>
+                                <Path x:Name="LockWheelMaximizeArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelNorthEastWedge}" IsHitTestVisible="False"/>
+                                <Path x:Name="LockWheelResetArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelSouthEastWedge}" IsHitTestVisible="False"/>
                                 <Path x:Name="LockWheelHopsArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelSouthWestWedge}" IsHitTestVisible="False"/>
 
-                                <TextBlock x:Name="LockWheelClearLabel" Text="Clear" Canvas.Left="6" Canvas.Top="16" FontSize="8" Foreground="#AAFFFFFF" Opacity="0.45" IsHitTestVisible="False"/>
-                                <TextBlock x:Name="LockWheelResetLabel" Text="Reset" Canvas.Left="56" Canvas.Top="16" FontSize="8" Foreground="#AAFFFFFF" Opacity="0.45" IsHitTestVisible="False"/>
-                                <TextBlock x:Name="LockWheelMaximizeLabel" Text="Restore" Canvas.Left="50" Canvas.Top="58" FontSize="8" Foreground="#AAFFFFFF" Opacity="0.45" IsHitTestVisible="False"/>
-                                <TextBlock x:Name="LockWheelHopsLabel" Text="Hops" Canvas.Left="8" Canvas.Top="58" FontSize="8" Foreground="#AAFFFFFF" Opacity="0.45" IsHitTestVisible="False"/>
+                                <TextBlock x:Name="LockWheelClearLabel" Text="&#xE74D;" ToolTip="Clear"
+                                           Style="{StaticResource WheelSliceIconStyle}"
+                                           Canvas.Left="8" Canvas.Top="34"/>
+                                <TextBlock x:Name="LockWheelMaximizeLabel" Text="&#xE923;" ToolTip="Restore"
+                                           Style="{StaticResource WheelSliceIconStyle}"
+                                           Canvas.Left="34" Canvas.Top="8"/>
+                                <TextBlock x:Name="LockWheelResetLabel" Text="&#xE72C;" ToolTip="Reset"
+                                           Style="{StaticResource WheelSliceIconStyle}"
+                                           Canvas.Left="60" Canvas.Top="34"/>
+                                <TextBlock x:Name="LockWheelHopsLabel" Text="&#xE8B1;" ToolTip="Hops"
+                                           Style="{StaticResource WheelSliceIconStyle}"
+                                           Canvas.Left="34" Canvas.Top="60"/>
                             </Canvas>
 
                             <ToggleButton x:Name="LockToggle"
                                           Style="{StaticResource MiniPlayerLockToggleStyle}"
                                           HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
-                                          ToolTip="Tap: locks only · Hold + drag: wheel"
+                                          ToolTip="Tap: locks only · Drag: wheel"
                                           IsChecked="{Binding JukeboxLocksOnly}"
                                           PreviewMouseLeftButtonDown="LockToggle_PreviewMouseLeftButtonDown"
                                           PreviewMouseMove="LockToggle_PreviewMouseMove"
@@ -216,44 +248,51 @@
                                 <TextBlock Text="&#xE72E;" Style="{StaticResource TransportGlyphStyle}" FontSize="10"/>
                             </ToggleButton>
                         </Grid>
-                        </Viewbox>
+                    </Viewbox>
 
-                        <TextBlock Text="{Binding RingLockCount}" VerticalAlignment="Center" Margin="3,0,0,0" FontSize="8" Foreground="#FFD166" IsHitTestVisible="False"/>
-                        <Ellipse x:Name="HopModeIndicator" Width="5" Height="5" Margin="3,0,0,0" VerticalAlignment="Center" Fill="#FFD166" Visibility="Collapsed" IsHitTestVisible="False"/>
-                    </StackPanel>
-
-                    <Viewbox Width="68" Height="68" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Viewbox Width="48" Height="48"
+                             HorizontalAlignment="Right"
+                             VerticalAlignment="Bottom"
+                             Margin="0,0,0,4"
+                             Panel.ZIndex="3">
                     <Grid Width="84" Height="84">
                         <Canvas x:Name="TransportWheelOverlay"
                                 Width="84"
                                 Height="84"
+                                Opacity="0"
                                 Visibility="Collapsed"
                                 IsHitTestVisible="False">
                             <Ellipse Width="80" Height="80"
                                      Canvas.Left="2" Canvas.Top="2"
                                      Fill="Transparent" Stroke="#55FFFFFF" StrokeThickness="1.5"
                                      IsHitTestVisible="False"/>
-                            <Line X1="8" Y1="42" X2="76" Y2="42" Stroke="#22FFFFFF" StrokeThickness="1" IsHitTestVisible="False"/>
+                            <Line X1="8" Y1="42" X2="26" Y2="42" Stroke="#22FFFFFF" StrokeThickness="1" IsHitTestVisible="False"/>
+                            <Line X1="58" Y1="42" X2="76" Y2="42" Stroke="#22FFFFFF" StrokeThickness="1" IsHitTestVisible="False"/>
 
                             <Path x:Name="TransportWheelPrevArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelWestHalf}" IsHitTestVisible="False"/>
                             <Path x:Name="TransportWheelNextArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelEastHalf}" IsHitTestVisible="False"/>
 
-                            <TextBlock x:Name="TransportWheelPrevLabel" Text="Prev" Canvas.Left="10" Canvas.Top="36" FontSize="8" Foreground="#AAFFFFFF" Opacity="0.45" IsHitTestVisible="False"/>
-                            <TextBlock x:Name="TransportWheelNextLabel" Text="Next" Canvas.Left="58" Canvas.Top="36" FontSize="8" Foreground="#AAFFFFFF" Opacity="0.45" IsHitTestVisible="False"/>
+                            <TextBlock x:Name="TransportWheelPrevLabel" Text="&#xE892;" ToolTip="Previous"
+                                       Style="{StaticResource WheelSliceIconStyle}"
+                                       Canvas.Left="8" Canvas.Top="34"/>
+                            <TextBlock x:Name="TransportWheelNextLabel" Text="&#xE893;" ToolTip="Next"
+                                       Style="{StaticResource WheelSliceIconStyle}"
+                                       Canvas.Left="60" Canvas.Top="34"/>
                         </Canvas>
 
                         <Button x:Name="TransportButton"
                                 Style="{StaticResource MiniPlayerWheelButtonStyle}"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                ToolTip="Tap: play/pause · Hold + drag: prev / next"
+                                ToolTip="Tap: play/pause · Drag: prev / next"
                                 PreviewMouseLeftButtonDown="TransportButton_PreviewMouseLeftButtonDown"
                                 PreviewMouseMove="TransportButton_PreviewMouseMove"
                                 PreviewMouseLeftButtonUp="TransportButton_PreviewMouseLeftButtonUp">
-                            <TextBlock FontSize="10">
+                            <TextBlock>
                                 <TextBlock.Style>
                                     <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource TransportGlyphStyle}">
                                         <Setter Property="Text" Value="&#xE768;"/>
+                                        <Setter Property="FontSize" Value="10"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding ShowPauseIcon}" Value="True">
                                                 <Setter Property="Text" Value="&#xE769;"/>
@@ -266,7 +305,19 @@
                     </Grid>
                     </Viewbox>
                 </Grid>
-            </StackPanel>
+            </Viewbox>
         </Border>
+
+        <!-- Lock count lives on the outer chrome, not inside the ring/wheel composition. -->
+        <StackPanel Grid.Row="0"
+                    Grid.RowSpan="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    Margin="12,0,0,10"
+                    IsHitTestVisible="False">
+            <TextBlock Text="{Binding RingLockCount}" FontSize="10" Foreground="#FFD166"/>
+            <Ellipse x:Name="HopModeIndicator" Width="6" Height="6" Margin="4,0,0,0" VerticalAlignment="Center" Fill="#FFD166" Visibility="Collapsed"/>
+        </StackPanel>
     </Grid>
 </UserControl>

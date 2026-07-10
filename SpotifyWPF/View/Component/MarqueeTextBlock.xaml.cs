@@ -64,7 +64,7 @@ namespace SpotifyWPF.View.Component
 
             if (!AlwaysScroll && textWidth <= hostWidth + 4)
             {
-                ScrollTransform.X = 0;
+                ScrollTransform.X = Math.Max(0, (hostWidth - textWidth) / 2);
                 return;
             }
 
