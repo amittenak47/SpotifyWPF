@@ -548,8 +548,15 @@ namespace SpotifyWPF.ViewModel.Page
 
                 var deletedCount = deleteResults.Count(result => result.Status == DeletionStatus.Deleted);
                 var failedCount = playlists.Count - deletedCount;
+                var retryAfter = deleteResults
+                    .Where(result => result.Status == DeletionStatus.RateLimited && result.RetryAfter.HasValue)
+                    .Select(result => result.RetryAfter.Value)
+                    .DefaultIfEmpty(TimeSpan.Zero)
+                    .FirstOrDefault();
                 Log(rateLimited
-                    ? $"Rate limited while deleting. Stopped remaining deletion work. Deleted {deletedCount} of {playlists.Count} staged playlist(s); failed or skipped {failedCount}."
+                    ? retryAfter > TimeSpan.Zero
+                        ? $"Rate limited while deleting. Stopped remaining deletion work. Retry-After: {(int)Math.Ceiling(retryAfter.TotalSeconds)} ({FormatRetryDelay(retryAfter)}). Deleted {deletedCount} of {playlists.Count} staged playlist(s); failed or skipped {failedCount}."
+                        : $"Rate limited while deleting. Stopped remaining deletion work. Deleted {deletedCount} of {playlists.Count} staged playlist(s); failed or skipped {failedCount}."
                     : cancelled
                         ? $"Cancelled staged deletion. Deleted {deletedCount} of {playlists.Count} staged playlist(s); failed or skipped {failedCount}."
                     : $"Deleted {deletedCount} of {playlists.Count} staged playlist(s); failed {failedCount}.");
@@ -645,11 +652,10 @@ namespace SpotifyWPF.ViewModel.Page
             }
             catch (APITooManyRequestsException ex)
             {
-                var retryDelay = GetRetryDelay(ex);
-                Log($"Spotify rate limited playlist loading. Retry after {FormatRetryDelay(retryDelay)}. Keeping cached playlists visible.");
+                Log($"Spotify rate limited playlist loading. {FormatRetryAfter(ex)}. Keeping cached playlists visible.");
                 Log($"Playlist load rate-limit exception: {ex}", true);
                 RefreshGridFromLocalFiles();
-                Status = $"Rate limited. Retry after {FormatRetryDelay(retryDelay)}.";
+                Status = $"Rate limited. {FormatRetryAfter(ex)}.";
                 return;
             }
             catch (OperationCanceledException)
@@ -688,11 +694,10 @@ namespace SpotifyWPF.ViewModel.Page
             }
             catch (APITooManyRequestsException ex)
             {
-                var retryDelay = GetRetryDelay(ex);
-                Log($"Spotify rate limited Load More. Retry after {FormatRetryDelay(retryDelay)}. Keeping cached playlists visible.");
+                Log($"Spotify rate limited Load More. {FormatRetryAfter(ex)}. Keeping cached playlists visible.");
                 Log($"Load More rate-limit exception: {ex}", true);
                 RefreshGridFromLocalFiles();
-                Status = $"Rate limited. Retry after {FormatRetryDelay(retryDelay)}.";
+                Status = $"Rate limited. {FormatRetryAfter(ex)}.";
             }
             catch (Exception ex)
             {
@@ -742,11 +747,10 @@ namespace SpotifyWPF.ViewModel.Page
             }
             catch (APITooManyRequestsException ex)
             {
-                var retryDelay = GetRetryDelay(ex);
-                Log($"Spotify rate limited Load All. Stopping page fetches. Retry after {FormatRetryDelay(retryDelay)}.");
+                Log($"Spotify rate limited Load All. Stopping page fetches. {FormatRetryAfter(ex)}.");
                 Log($"Load All rate-limit exception: {ex}", true);
                 RefreshGridFromLocalFiles();
-                Status = $"Rate limited. Retry after {FormatRetryDelay(retryDelay)}.";
+                Status = $"Rate limited. {FormatRetryAfter(ex)}.";
             }
             catch (OperationCanceledException)
             {
@@ -963,9 +967,8 @@ namespace SpotifyWPF.ViewModel.Page
                     }
                     catch (APITooManyRequestsException ex)
                     {
-                        var retryDelay = GetRetryDelay(ex);
-                        Log($"Spotify rate limited selected playlist refresh. Retry after {FormatRetryDelay(retryDelay)}.");
-                        Status = $"Rate limited. Retry after {FormatRetryDelay(retryDelay)}.";
+                        Log($"Spotify rate limited selected playlist refresh. {FormatRetryAfter(ex)}.");
+                        Status = $"Rate limited. {FormatRetryAfter(ex)}.";
                         break;
                     }
                     catch (APIException ex) when (ContainsExceptionMessage(ex, "not found") || ContainsExceptionMessage(ex, "404"))
@@ -1054,10 +1057,9 @@ namespace SpotifyWPF.ViewModel.Page
             }
             catch (APITooManyRequestsException ex)
             {
-                var retryDelay = GetRetryDelay(ex);
-                Log($"Spotify rate limited playlist creation. Retry after {FormatRetryDelay(retryDelay)}.");
+                Log($"Spotify rate limited playlist creation. {FormatRetryAfter(ex)}.");
                 Log($"Playlist create rate-limit exception: {ex}", true);
-                Status = $"Rate limited. Retry after {FormatRetryDelay(retryDelay)}.";
+                Status = $"Rate limited. {FormatRetryAfter(ex)}.";
             }
             catch (OperationCanceledException)
             {
@@ -1323,9 +1325,8 @@ namespace SpotifyWPF.ViewModel.Page
             }
             catch (APITooManyRequestsException ex)
             {
-                var retryDelay = GetRetryDelay(ex);
-                Log($"Spotify rate limited queued action execution. Retry after {FormatRetryDelay(retryDelay)}.");
-                Status = $"Rate limited. Retry after {FormatRetryDelay(retryDelay)}.";
+                Log($"Spotify rate limited queued action execution. {FormatRetryAfter(ex)}.");
+                Status = $"Rate limited. {FormatRetryAfter(ex)}.";
             }
             catch (Exception ex)
             {
@@ -1657,10 +1658,9 @@ namespace SpotifyWPF.ViewModel.Page
             }
             catch (APITooManyRequestsException ex)
             {
-                var retryDelay = GetRetryDelay(ex);
-                Log($"Spotify rate limited track loading. Retry after {FormatRetryDelay(retryDelay)}.");
+                Log($"Spotify rate limited track loading. {FormatRetryAfter(ex)}.");
                 Log($"Track load rate-limit exception: {ex}", true);
-                Status = $"Rate limited. Retry after {FormatRetryDelay(retryDelay)}.";
+                Status = $"Rate limited. {FormatRetryAfter(ex)}.";
             }
             catch (OperationCanceledException)
             {

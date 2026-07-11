@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using SpotifyAPI.Web;
+using SpotifyWPF.Service;
 
 namespace SpotifyWPF.Service.Playback
 {
@@ -122,7 +123,7 @@ namespace SpotifyWPF.Service.Playback
                 }
                 catch (APITooManyRequestsException ex) when (attempt < MaxRetries)
                 {
-                    var delay = ex.RetryAfter > TimeSpan.Zero ? ex.RetryAfter : TimeSpan.FromSeconds(1);
+                    var delay = SpotifyApiErrorHelper.GetRetryDelay(ex);
                     await Task.Delay(delay);
                 }
             }

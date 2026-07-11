@@ -12,6 +12,7 @@ using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using SpotifyAPI.Web;
 using SpotifyWPF.Service;
+using static SpotifyWPF.Service.SpotifyApiErrorHelper;
 
 namespace SpotifyWPF.ViewModel.Page
 {
@@ -92,7 +93,7 @@ namespace SpotifyWPF.ViewModel.Page
             }
             catch (APITooManyRequestsException ex)
             {
-                Status = $"Rate limited. Retry after {GetRetryDelay(ex)}.";
+                Status = $"Rate limited. {FormatRetryAfter(ex)}.";
             }
             catch (OperationCanceledException)
             {
@@ -126,7 +127,7 @@ namespace SpotifyWPF.ViewModel.Page
             }
             catch (APITooManyRequestsException ex)
             {
-                Status = $"Rate limited. Retry after {GetRetryDelay(ex)}.";
+                Status = $"Rate limited. {FormatRetryAfter(ex)}.";
             }
             catch (OperationCanceledException)
             {
@@ -238,7 +239,7 @@ namespace SpotifyWPF.ViewModel.Page
             }
             catch (APITooManyRequestsException ex)
             {
-                Status = $"Rate limited. Retry after {GetRetryDelay(ex)}.";
+                Status = $"Rate limited. {FormatRetryAfter(ex)}.";
             }
             catch (OperationCanceledException)
             {
@@ -325,12 +326,6 @@ namespace SpotifyWPF.ViewModel.Page
         {
             _currentActionCancellationTokenSource?.Cancel();
             Status = "Cancelling...";
-        }
-
-        private static TimeSpan GetRetryDelay(APITooManyRequestsException ex)
-        {
-            object retryAfter = ex.RetryAfter;
-            return retryAfter is TimeSpan timeSpan ? timeSpan : TimeSpan.FromSeconds(1);
         }
 
         private static IEnumerable<List<T>> Batch<T>(IEnumerable<T> source, int batchSize)

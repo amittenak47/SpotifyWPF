@@ -87,10 +87,8 @@ namespace SpotifyWPF.Service
 
                 try
                 {
-                    results.Add(new DeletePlaylistResult(
-                        playlist,
-                        await DeletePlaylistWithRetryAsync(playlist.Playlist, cancellationTokenSource)
-                    ));
+                    var (status, retryAfter) = await DeletePlaylistWithRetryAsync(playlist.Playlist, cancellationTokenSource);
+                    results.Add(new DeletePlaylistResult(playlist, status, retryAfter));
                 }
                 catch (OperationCanceledException)
                 {
@@ -101,14 +99,14 @@ namespace SpotifyWPF.Service
             return results;
         }
 
-        private async Task<DeletionStatus> DeletePlaylistWithRetryAsync(PlaylistCacheItem playlist, CancellationTokenSource cancellationTokenSource)
+        private async Task<(DeletionStatus Status, TimeSpan? RetryAfter)> DeletePlaylistWithRetryAsync(PlaylistCacheItem playlist, CancellationTokenSource cancellationTokenSource)
         {
             var transientAttempt = 0;
 
             while (true)
             {
                 if (cancellationTokenSource.IsCancellationRequested)
-                    return DeletionStatus.Failed;
+                    return (DeletionStatus.Failed, null);
 
                 try
                 {
@@ -118,19 +116,20 @@ namespace SpotifyWPF.Service
                         cancellationTokenSource.Token);
 
                     Log($"Successfully deleted playlist '{playlist.Name}'.");
-                    return DeletionStatus.Deleted;
+                    return (DeletionStatus.Deleted, null);
                 }
                 catch (APITooManyRequestsException ex)
                 {
-                    Log($"Spotify rate limit while deleting '{playlist.Name}'. Cancelling remaining staged deletions. Retry-After: {SpotifyApiErrorHelper.FormatRetryDelay(SpotifyApiErrorHelper.GetRetryDelay(ex))}.");
+                    var retryAfter = SpotifyApiErrorHelper.GetRetryDelay(ex);
+                    Log($"Spotify rate limit while deleting '{playlist.Name}'. Cancelling remaining staged deletions. {SpotifyApiErrorHelper.FormatRetryAfter(ex)}.");
                     cancellationTokenSource.Cancel();
-                    return DeletionStatus.RateLimited;
+                    return (DeletionStatus.RateLimited, retryAfter);
                 }
                 catch (APIException ex) when (SpotifyApiErrorHelper.IsInsufficientScope(ex))
                 {
                     Log($"Cannot delete playlist '{playlist.Name}': Spotify says the token has insufficient scope. Re-login may be required to grant playlist-modify-private and playlist-modify-public.");
                     Log($"Insufficient scope exception for '{playlist.Name}': {ex}", true);
-                    return DeletionStatus.Failed;
+                    return (DeletionStatus.Failed, null);
                 }
                 catch (APIException ex) when (SpotifyApiErrorHelper.IsTransientApiException(ex) && transientAttempt < MaxTransientDeleteAttempts)
                 {
@@ -145,7 +144,7 @@ namespace SpotifyWPF.Service
                     }
                     catch (OperationCanceledException)
                     {
-                        return DeletionStatus.Failed;
+                        return (DeletionStatus.Failed, null);
                     }
                 }
                 catch (Exception ex) when (SpotifyApiErrorHelper.IsTransientApiException(ex) && transientAttempt < MaxTransientDeleteAttempts)
@@ -161,18 +160,18 @@ namespace SpotifyWPF.Service
                     }
                     catch (OperationCanceledException)
                     {
-                        return DeletionStatus.Failed;
+                        return (DeletionStatus.Failed, null);
                     }
                 }
                 catch (OperationCanceledException)
                 {
-                    return DeletionStatus.Failed;
+                    return (DeletionStatus.Failed, null);
                 }
                 catch (Exception ex)
                 {
                     Log($"Failed to delete playlist '{playlist.Name}': {ex.Message}");
                     Log($"Delete playlist exception for '{playlist.Name}': {ex}", true);
-                    return DeletionStatus.Failed;
+                    return (DeletionStatus.Failed, null);
                 }
             }
         }
