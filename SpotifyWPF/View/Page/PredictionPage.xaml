@@ -72,22 +72,58 @@
                                 Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"
                                 MouseEnter="HoverZone_MouseEnter"
                                 MouseLeave="HoverZone_MouseLeave">
-                            <TextBox x:Name="TrackSearchBox"
-                                     Width="560"
-                                     Opacity="0.35"
-                                     Text="{Binding TrackInput, UpdateSourceTrigger=PropertyChanged}"
-                                     TextAlignment="Center"
-                                     HorizontalContentAlignment="Center"
-                                     VerticalContentAlignment="Center"
-                                     HorizontalAlignment="Center"
-                                     FontSize="13"
-                                     Padding="8,4"
-                                     Background="Transparent"
-                                     BorderThickness="0"
-                                     CaretBrush="{DynamicResource AppForegroundBrush}"
-                                     Foreground="{DynamicResource AppForegroundBrush}"
-                                     ToolTip="Track ID, URI, or Spotify link — press Enter to play"
-                                     PreviewKeyDown="TrackSearchBox_PreviewKeyDown"/>
+                            <StackPanel>
+                                <TextBox x:Name="TrackSearchBox"
+                                         Width="560"
+                                         Opacity="0.35"
+                                         Text="{Binding TrackInput, UpdateSourceTrigger=PropertyChanged}"
+                                         TextAlignment="Center"
+                                         HorizontalContentAlignment="Center"
+                                         VerticalContentAlignment="Center"
+                                         HorizontalAlignment="Center"
+                                         FontSize="13"
+                                         Padding="8,4"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         CaretBrush="{DynamicResource AppForegroundBrush}"
+                                         Foreground="{DynamicResource AppForegroundBrush}"
+                                         ToolTip="Track ID, URI, or Spotify link — press Enter to play"
+                                         PreviewKeyDown="TrackSearchBox_PreviewKeyDown"/>
+                                <TextBlock Text="{Binding RingPlaybackRateText}"
+                                           HorizontalAlignment="Center"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Margin="0,2,0,0"
+                                           IsHitTestVisible="False"
+                                           Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                           ToolTip="Local WAV playback speed — drag the center disc to change; snaps to 1.00×">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Opacity" Value="0"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsRingPlaybackRateModified}" Value="True">
+                                                    <DataTrigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                 To="0.85" Duration="0:0:0.18"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.EnterActions>
+                                                    <DataTrigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                 To="0" Duration="0:0:0.28"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.ExitActions>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
                         </Border>
 
                         <Grid Grid.Row="1"

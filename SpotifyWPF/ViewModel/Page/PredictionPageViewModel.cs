@@ -107,6 +107,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 RaisePropertyChanged(nameof(IsFractalBackgroundEnabled));
                 RaisePropertyChanged(nameof(ShowStatusOverlay));
+                RaisePropertyChanged(nameof(SelectedEqualizerPreset));
             };
             _jukeboxSettingsModel = _jukeboxSettings.Get();
             _spotify = spotify;
@@ -198,6 +199,7 @@ namespace SpotifyWPF.ViewModel.Page
             RingScrubToCommand = new RelayCommand<long>(ScrubToPositionMs, ms => DurationMs > 0 && CanPlayTransport());
             EndRingScrubCommand = new RelayCommand(EndScrub);
             HoldRingSpeedCommand = new RelayCommand<bool>(SetRingHoldSpeed);
+            SetRingPlaybackRateCommand = new RelayCommand<double>(SetRingPlaybackRate);
             ClearRingLocksCommand = new RelayCommand(ClearRingLocks);
             ClearBranchPreferencesCommand = new RelayCommand(ClearBranchPreferences,
                 () => _loopController.PreferenceEdgeCount > 0);
@@ -359,6 +361,49 @@ namespace SpotifyWPF.ViewModel.Page
                 _visualEffectsStore.Save(_visualEffectsSettings);
                 RaisePropertyChanged();
             }
+        }
+
+        public ObservableCollection<string> EqualizerPresetOptions { get; } =
+            new ObservableCollection<string> { "Cascading bars", "Wave ring" };
+
+        /// <summary>Outer-ring equalizer look (Window / Preferences).</summary>
+        public string SelectedEqualizerPreset
+        {
+            get => EqualizerPresetToLabel(_visualEffectsSettings.EqualizerPreset);
+            set
+            {
+                var mode = LabelToEqualizerPreset(value);
+
+                if (string.Equals(_visualEffectsSettings.EqualizerPreset, mode, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                _visualEffectsSettings.EqualizerPreset = mode;
+                _visualEffectsStore.Save(_visualEffectsSettings);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(EqualizerPresetKey));
+            }
+        }
+
+        /// <summary>Raw preset key bound into the ring canvas (<c>bars</c> / <c>wave-ring</c>).</summary>
+        public string EqualizerPresetKey =>
+            string.IsNullOrWhiteSpace(_visualEffectsSettings.EqualizerPreset)
+                ? "bars"
+                : _visualEffectsSettings.EqualizerPreset;
+
+        private static string EqualizerPresetToLabel(string mode)
+        {
+            if (string.Equals(mode, "wave-ring", StringComparison.OrdinalIgnoreCase))
+                return "Wave ring";
+
+            return "Cascading bars";
+        }
+
+        private static string LabelToEqualizerPreset(string label)
+        {
+            if (string.Equals(label, "Wave ring", StringComparison.OrdinalIgnoreCase))
+                return "wave-ring";
+
+            return "bars";
         }
 
         /// <summary>True when the transport bar should show the pause icon (actively playing).</summary>
@@ -1606,6 +1651,8 @@ namespace SpotifyWPF.ViewModel.Page
 
         public RelayCommand<bool> HoldRingSpeedCommand { get; }
 
+        public RelayCommand<double> SetRingPlaybackRateCommand { get; }
+
         public RelayCommand ClearRingLocksCommand { get; }
 
         public RelayCommand ClearBranchPreferencesCommand { get; }
@@ -1825,26 +1872,66 @@ namespace SpotifyWPF.ViewModel.Page
             Log($"Scrubbed to {FormatMs(_scrubPositionMs)} — replanned jukebox from here.", verbose: true);
         }
 
+        private double _ringPlaybackRate = 1.0;
+
+        /// <summary>Speed dial readout under the search bar (empty / faded at 1×).</summary>
+        public string RingPlaybackRateText =>
+            Math.Abs(_ringPlaybackRate - 1.0) < 0.001
+                ? string.Empty
+                : string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:0.00}×", _ringPlaybackRate);
+
+        /// <summary>True when the dial is off 1× — drives the fade-in/out under search.</summary>
+        public bool IsRingPlaybackRateModified => Math.Abs(_ringPlaybackRate - 1.0) >= 0.001;
+
         private void SetRingHoldSpeed(bool holding)
         {
-            if (!UseLocalPlayback)
-            {
-                if (holding)
-                {
-                    Status = IsLocalPlaybackAvailable
-                        ? "Hold-to-scan needs Local WAV — toggle Playback source to Local WAV."
-                        : "Hold-to-scan needs Local WAV playback (capture this track first).";
-                    Log(Status, verbose: true);
-                }
+            // Legacy hold binding kept for safety; dial path uses SetRingPlaybackRate.
+            SetRingPlaybackRate(holding ? 2.0 : 1.0);
+        }
 
-                _transport.SetPlaybackRate(1.0);
+        private void SetRingPlaybackRate(double rate)
+        {
+            rate = Math.Max(0.5, Math.Min(2.5, rate));
+
+            if (Math.Abs(rate - 1.0) < 0.06)
+                rate = 1.0;
+
+            if (Math.Abs(_ringPlaybackRate - rate) < 0.0005)
+            {
+                ApplyLocalPlaybackRate(rate);
                 return;
             }
 
-            _transport.SetPlaybackRate(holding ? 2.0 : 1.0);
+            _ringPlaybackRate = rate;
+            RaisePropertyChanged(nameof(RingPlaybackRateText));
+            RaisePropertyChanged(nameof(IsRingPlaybackRateModified));
 
-            if (holding)
-                Log("Playback 2× while holding center.", verbose: true);
+            if (!UseLocalPlayback)
+            {
+                if (IsLocalPlaybackAvailable)
+                {
+                    Status = $"Speed dial {rate:0.00}× — switch Playback source to Local WAV to hear it.";
+                    Log(Status, verbose: true);
+                }
+                else
+                {
+                    Status = "Speed dial needs Local WAV (Analyze/capture this track first).";
+                    Log(Status, verbose: true);
+                }
+
+                return;
+            }
+
+            ApplyLocalPlaybackRate(rate);
+
+            if (Math.Abs(rate - 1.0) > 0.001)
+                Log($"Playback rate {rate:0.00}×.", verbose: true);
+        }
+
+        private void ApplyLocalPlaybackRate(double rate)
+        {
+            if (UseLocalPlayback)
+                _transport.SetPlaybackRate(rate);
         }
 
         /// <summary>Defer disk writes while a tuning slider is being dragged.</summary>
@@ -1947,6 +2034,7 @@ namespace SpotifyWPF.ViewModel.Page
                         return;
                     }
 
+                    _transportRouter.Local.SetPlaybackRate(_ringPlaybackRate);
                     _pendingPlaySource = source;
                     DeviceText = "Local WAV";
                     Status = "Playing locally (cached WAV).";

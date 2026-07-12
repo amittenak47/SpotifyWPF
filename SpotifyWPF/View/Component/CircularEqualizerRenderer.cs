@@ -7,20 +7,30 @@ using SpotifyWPF.Service.Visual;
 namespace SpotifyWPF.View.Component
 {
     /// <summary>
-    /// Modern Winamp-style cascading spectrum on the *outer* ring band (outside the beat coverage
-    /// bars): translucent radial bars with falling peak caps. Soft enough not to overwhelm the
-    /// beat map underneath / inside.
+    /// Outer-ring music visualizer. Presets:
+    /// <list type="bullet">
+    /// <item><c>bars</c> — modern Winamp cascading segmented spectrum.</item>
+    /// <item><c>wave-ring</c> — soft wave envelope with a single outer contour (no radial ticks).</item>
+    /// </list>
     /// </summary>
     public sealed class CircularEqualizerRenderer
     {
+        public const string PresetBars = "bars";
+
+        public const string PresetWaveRing = "wave-ring";
+
         /// <summary>Overall opacity so beat bars stay readable underneath.</summary>
         private const double GlobalAlpha = 0.52;
 
         /// <summary>LED-style segments per bar (modern take on classic blocky spectrum).</summary>
         private const int SegmentCount = 12;
 
+        private double[] _smoothScratch;
+
+        private double[] _waveScratch;
+
         public void Render(DrawingContext dc, IVisualEnergyProvider energy, Point center,
-            double innerRadius, double outerRadius)
+            double innerRadius, double outerRadius, string preset = PresetBars)
         {
             if (energy == null)
                 return;
@@ -31,12 +41,24 @@ namespace SpotifyWPF.View.Component
             if (bars == null || bars.Count == 0)
                 return;
 
-            var count = bars.Count;
             var band = outerRadius - innerRadius;
 
             if (band <= 4)
                 return;
 
+            if (string.Equals(preset, PresetWaveRing, StringComparison.OrdinalIgnoreCase))
+            {
+                RenderWaveRing(dc, energy, bars, center, innerRadius, outerRadius, band);
+                return;
+            }
+
+            RenderBars(dc, bars, peaks, center, innerRadius, band);
+        }
+
+        private void RenderBars(DrawingContext dc, IReadOnlyList<double> bars,
+            IReadOnlyList<double> peaks, Point center, double innerRadius, double band)
+        {
+            var count = bars.Count;
             var barWidth = Math.Max(1.4, Math.Min(6.0, Math.PI * 2 * innerRadius / count * 0.55));
             var gap = Math.Max(0.6, band / SegmentCount * 0.22);
             var segmentLen = (band - gap * (SegmentCount - 1)) / SegmentCount;
@@ -64,6 +86,116 @@ namespace SpotifyWPF.View.Component
             }
         }
 
+        /// <summary>
+        /// Soft wave fill + single outer contour. No radial ticks or particle debris.
+        /// </summary>
+        private void RenderWaveRing(DrawingContext dc, IVisualEnergyProvider energy,
+            IReadOnlyList<double> bars, Point center,
+            double innerRadius, double outerRadius, double band)
+        {
+            var count = bars.Count;
+            EnsureScratch(count);
+
+            SmoothCircular(bars, _smoothScratch, radius: 1);
+            for (var i = 0; i < count; i++)
+            {
+                var raw = Clamp01(bars[i]);
+                var mixed = raw * 0.78 + Clamp01(_smoothScratch[i]) * 0.22;
+                // Push amplitude so crests reach near the outer radius.
+                _waveScratch[i] = Clamp01(Math.Pow(mixed, 0.78) * 1.45);
+            }
+
+            var pulse = 0.9 + 0.1 * Clamp01(energy.BeatPulse);
+            var global = Clamp01(energy.GlobalEnergy);
+            var floor = innerRadius;
+            var maxR = outerRadius - 1.0;
+
+            var geometry = new StreamGeometry();
+
+            using (var ctx = geometry.Open())
+            {
+                for (var i = 0; i <= count; i++)
+                {
+                    var idx = i % count;
+                    var angle = idx / (double)count * Math.PI * 2 - Math.PI / 2;
+                    var h = _waveScratch[idx];
+                    var r = Math.Min(maxR, floor + h * band * pulse);
+                    var pt = new Point(
+                        center.X + r * Math.Cos(angle),
+                        center.Y + r * Math.Sin(angle));
+
+                    if (i == 0)
+                        ctx.BeginFigure(pt, true, true);
+                    else
+                        ctx.LineTo(pt, true, false);
+                }
+            }
+
+            geometry.Freeze();
+
+            var fill = new SolidColorBrush(Color.FromArgb(
+                (byte)(18 + 32 * global), 0x6A, 0x3A, 0xC8));
+            fill.Freeze();
+            dc.DrawGeometry(fill, null, geometry);
+
+            // Single outer boundary — cyan contour only.
+            dc.DrawGeometry(null,
+                MakePen(Color.FromRgb(0x5C, 0xE8, 0xFF), Math.Max(1.4, band * 0.04),
+                    0.55 + 0.35 * global),
+                geometry);
+        }
+
+        private void EnsureScratch(int count)
+        {
+            if (_smoothScratch == null || _smoothScratch.Length != count)
+                _smoothScratch = new double[count];
+
+            if (_waveScratch == null || _waveScratch.Length != count)
+                _waveScratch = new double[count];
+        }
+
+        private static void SmoothCircular(IReadOnlyList<double> source, double[] dest, int radius)
+        {
+            var n = source.Count;
+
+            for (var i = 0; i < n; i++)
+            {
+                double sum = 0;
+                double wsum = 0;
+
+                for (var d = -radius; d <= radius; d++)
+                {
+                    var j = (i + d + n * 8) % n;
+                    var w = radius + 1 - Math.Abs(d);
+                    sum += source[j] * w;
+                    wsum += w;
+                }
+
+                dest[i] = sum / wsum;
+            }
+        }
+
+        private static void SmoothCircular(double[] source, double[] dest, int radius)
+        {
+            var n = source.Length;
+
+            for (var i = 0; i < n; i++)
+            {
+                double sum = 0;
+                double wsum = 0;
+
+                for (var d = -radius; d <= radius; d++)
+                {
+                    var j = (i + d + n * 8) % n;
+                    var w = radius + 1 - Math.Abs(d);
+                    sum += source[j] * w;
+                    wsum += w;
+                }
+
+                dest[i] = sum / wsum;
+            }
+        }
+
         private static void DrawSegmentedBar(DrawingContext dc, Point center, double inner,
             double height, double segmentLen, double gap, int segments,
             double cos, double sin, double barWidth)
@@ -73,7 +205,6 @@ namespace SpotifyWPF.View.Component
 
             for (var s = 0; s < lit; s++)
             {
-                var t0 = s / (double)segments;
                 var t1 = (s + 1) / (double)segments;
                 var r0 = inner + s * (segmentLen + gap);
                 var r1 = r0 + segmentLen;
@@ -92,13 +223,11 @@ namespace SpotifyWPF.View.Component
             var p0 = new Point(center.X + (r - half * 0.15) * cos, center.Y + (r - half * 0.15) * sin);
             var p1 = new Point(center.X + (r + half * 0.15) * cos, center.Y + (r + half * 0.15) * sin);
 
-            // Thin bright cap — classic Winamp falling peak, slightly soft for a modern look.
             dc.DrawLine(MakePen(Color.FromRgb(0xFF, 0xF0, 0xA0), barWidth * 0.95, GlobalAlpha * 0.9),
                 p0, p1);
             dc.DrawLine(MakePen(Colors.White, barWidth * 0.45, GlobalAlpha * 0.7), p0, p1);
         }
 
-        /// <summary>Classic spectrum ramp: green floor → yellow mid → red/orange peaks.</summary>
         private static Color SpectrumColor(double t)
         {
             if (t < 0.4)
@@ -143,5 +272,7 @@ namespace SpotifyWPF.View.Component
             pen.Freeze();
             return pen;
         }
+
+        private static double Clamp01(double v) => v < 0 ? 0 : v > 1 ? 1 : v;
     }
 }

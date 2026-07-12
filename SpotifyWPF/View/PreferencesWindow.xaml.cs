@@ -24,6 +24,8 @@ namespace SpotifyWPF.View
             BuildColorFields();
             LoadPaletteIntoFields();
             FractalBackgroundCheckBox.IsChecked = _visualEffectsStore.Get().FractalBackgroundEnabled;
+            EqualizerPresetCombo.ItemsSource = new[] { "Cascading bars", "Wave ring" };
+            EqualizerPresetCombo.SelectedItem = EqualizerPresetToLabel(_visualEffectsStore.Get().EqualizerPreset);
         }
 
         private void BuildColorFields()
@@ -140,14 +142,36 @@ namespace SpotifyWPF.View
             AppThemeManager.Apply(palette);
 
             var effects = _visualEffectsStore.Get();
-            if (effects.FractalBackgroundEnabled != (FractalBackgroundCheckBox.IsChecked == true))
+            var fractal = FractalBackgroundCheckBox.IsChecked == true;
+            var eqPreset = LabelToEqualizerPreset(EqualizerPresetCombo.SelectedItem as string);
+            var changed = effects.FractalBackgroundEnabled != fractal ||
+                          !string.Equals(effects.EqualizerPreset, eqPreset, System.StringComparison.OrdinalIgnoreCase);
+
+            if (changed)
             {
-                effects.FractalBackgroundEnabled = FractalBackgroundCheckBox.IsChecked == true;
+                effects.FractalBackgroundEnabled = fractal;
+                effects.EqualizerPreset = eqPreset;
                 _visualEffectsStore.Save(effects);
             }
 
             DialogResult = true;
             Close();
+        }
+
+        private static string EqualizerPresetToLabel(string mode)
+        {
+            if (string.Equals(mode, "wave-ring", System.StringComparison.OrdinalIgnoreCase))
+                return "Wave ring";
+
+            return "Cascading bars";
+        }
+
+        private static string LabelToEqualizerPreset(string label)
+        {
+            if (string.Equals(label, "Wave ring", System.StringComparison.OrdinalIgnoreCase))
+                return "wave-ring";
+
+            return "bars";
         }
 
         private sealed class ColorFieldBinding

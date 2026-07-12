@@ -3,15 +3,22 @@ using NAudio.Wave;
 namespace SpotifyWPF.Service.Playback
 {
     /// <summary>
-    /// Simple hold-to-scan rate control: consumes source samples faster/slower (pitch shifts with rate).
+    /// Variable-rate Local WAV playback: consumes source samples faster/slower (pitch shifts with rate).
+    /// Always tries to fill the requested output buffer so WaveOut does not underrun.
     /// </summary>
     internal sealed class VariableRateSampleProvider : ISampleProvider
     {
         private readonly ISampleProvider _source;
 
-        private float[] _scratch = new float[4096];
+        private float[] _scratch = new float[8192];
 
         private double _rate = 1.0;
+
+        private double _srcCursor;
+
+        private int _scratchFrames;
+
+        private bool _sourceEnded;
 
         public VariableRateSampleProvider(ISampleProvider source)
         {
@@ -31,31 +38,33 @@ namespace SpotifyWPF.Service.Playback
             if (count <= 0)
                 return 0;
 
-            if (System.Math.Abs(_rate - 1.0) < 0.02)
-                return _source.Read(buffer, offset, count);
-
             var channels = WaveFormat.Channels;
-            var framesNeeded = count / channels;
-            var sourceFrames = (int)System.Math.Ceiling(framesNeeded * _rate) + 2;
-            var sourceSamples = sourceFrames * channels;
 
-            if (_scratch.Length < sourceSamples)
-                _scratch = new float[sourceSamples];
-
-            var read = _source.Read(_scratch, 0, sourceSamples);
-
-            if (read <= 0)
+            if (channels <= 0)
                 return 0;
 
-            var availableFrames = read / channels;
+            if (System.Math.Abs(_rate - 1.0) < 0.02 && _scratchFrames == 0 && _srcCursor < 0.01)
+            {
+                _sourceEnded = false;
+                return _source.Read(buffer, offset, count);
+            }
+
+            var framesNeeded = count / channels;
             var outFrames = 0;
 
-            for (var frame = 0; frame < framesNeeded; frame++)
+            while (outFrames < framesNeeded)
             {
-                var srcFrame = frame * _rate;
-
-                if (srcFrame >= availableFrames - 1)
+                if (!EnsureScratch(channels))
                     break;
+
+                var srcFrame = _srcCursor;
+
+                if (srcFrame >= _scratchFrames - 1)
+                {
+                    _scratchFrames = 0;
+                    _srcCursor = 0;
+                    continue;
+                }
 
                 var i0 = (int)srcFrame;
                 var frac = (float)(srcFrame - i0);
@@ -69,9 +78,53 @@ namespace SpotifyWPF.Service.Playback
                 }
 
                 outFrames++;
+                _srcCursor += _rate;
             }
 
             return outFrames * channels;
+        }
+
+        private bool EnsureScratch(int channels)
+        {
+            if (_scratchFrames >= 2 && _srcCursor < _scratchFrames - 1)
+                return true;
+
+            if (_sourceEnded)
+                return false;
+
+            // Keep a leftover frame for interpolation continuity when refilling.
+            var keep = 0;
+
+            if (_scratchFrames >= 2 && _srcCursor < _scratchFrames)
+            {
+                keep = 1;
+                var from = (int)_srcCursor;
+                for (var ch = 0; ch < channels; ch++)
+                    _scratch[ch] = _scratch[from * channels + ch];
+                _srcCursor -= from;
+            }
+            else
+            {
+                _srcCursor = 0;
+            }
+
+            var wantFrames = 2048;
+            var wantSamples = wantFrames * channels;
+
+            if (_scratch.Length < wantSamples + channels)
+                _scratch = new float[wantSamples + channels * 4];
+
+            var read = _source.Read(_scratch, keep * channels, wantSamples);
+
+            if (read <= 0)
+            {
+                _sourceEnded = true;
+                _scratchFrames = keep;
+                return _scratchFrames >= 2;
+            }
+
+            _scratchFrames = keep + read / channels;
+            return _scratchFrames >= 2;
         }
     }
 }

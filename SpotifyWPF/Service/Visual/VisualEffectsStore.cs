@@ -47,6 +47,9 @@ namespace SpotifyWPF.Service.Visual
                 {
                     _cached = JsonSerializer.Deserialize<VisualEffectsSettings>(File.ReadAllText(path)) ??
                               VisualEffectsSettings.CreateDefaults();
+
+                    if (string.IsNullOrWhiteSpace(_cached.EqualizerPreset))
+                        _cached.EqualizerPreset = "bars";
                 }
                 else
                 {

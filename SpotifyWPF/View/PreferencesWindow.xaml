@@ -56,6 +56,17 @@
                        TextWrapping="Wrap"
                        Margin="20,4,0,0"
                        Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+            <TextBlock Text="Equalizer preset"
+                       Margin="0,12,0,4"
+                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+            <ComboBox x:Name="EqualizerPresetCombo"
+                      MinWidth="220"
+                      HorizontalAlignment="Left"
+                      ToolTip="Cascading bars = Winamp segments. Wave ring = soft spectrum wave + cyan ticks."/>
+            <TextBlock Text="Outer-ring music visualizer around the beat map."
+                       TextWrapping="Wrap"
+                       Margin="0,4,0,0"
+                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
         </StackPanel>
 
         <TextBlock x:Name="ValidationMessage"

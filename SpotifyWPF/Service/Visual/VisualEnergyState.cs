@@ -14,7 +14,7 @@ namespace SpotifyWPF.Service.Visual
     /// </summary>
     public class VisualEnergyState : IVisualEnergyProvider
     {
-        public const int BarCount = 96;
+        public const int BarCount = 144;
 
         /// <summary>Accessibility cap: beat spikes never slam the visuals to full brightness.</summary>
         private const double MaxBeatPulse = 0.85;
@@ -250,11 +250,12 @@ namespace SpotifyWPF.Service.Visual
                 // Spread the 12 chroma bins around the ring on the circle of fifths so adjacent
                 // sectors don't mirror each other — reads like a spectrum, not a repeat pattern.
                 var chroma = pitches != null ? pitches[i * 7 % 12] : 0;
-                var wave = 0.5 + 0.5 * Math.Sin(_wavePhase + i * (Math.PI * 2 * 3 / BarCount));
-                var target = loudness * (0.22 + 0.58 * chroma) +
-                             loudness * 0.12 * wave +
-                             _beatPulse * 0.28;
-                target = Clamp01(target);
+                var wave = 0.5 + 0.5 * Math.Sin(_wavePhase + i * (Math.PI * 2 * 5 / BarCount));
+                // Stronger chroma contrast so adjacent bins read as distinct frequencies.
+                var target = loudness * (0.12 + 0.78 * chroma) +
+                             loudness * 0.08 * wave +
+                             _beatPulse * 0.22;
+                target = Clamp01(Math.Pow(target, 0.88) * 1.18);
 
                 var current = _barHeights[i];
 
