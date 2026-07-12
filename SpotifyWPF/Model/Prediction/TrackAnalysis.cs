@@ -6,8 +6,7 @@ namespace SpotifyWPF.Model.Prediction
     /// <summary>
     /// Normalized structural map of a track — the shared schema both analysis paths produce
     /// (Spotify's audio-analysis endpoint, or the local WASAPI + librosa pipeline) and the only
-    /// shape the loop engine consumes. Mirrors Spotify's audio-analysis layout: beats are the
-    /// jump-graph nodes, segments carry the pitch/timbre similarity features.
+    /// shape the loop engine consumes. Slice 2 adds Classic beat-synchronous feature vectors.
     /// </summary>
     public class TrackAnalysis
     {
@@ -47,6 +46,54 @@ namespace SpotifyWPF.Model.Prediction
 
         [JsonPropertyName("segments")]
         public List<AnalysisSegment> Segments { get; set; } = new List<AnalysisSegment>();
+
+        /// <summary>"beatthis" | "beatthis-onnx" | "librosa-dp".</summary>
+        [JsonPropertyName("beatTracker")]
+        public string BeatTracker { get; set; }
+
+        [JsonPropertyName("stackSteps")]
+        public int StackSteps { get; set; }
+
+        [JsonPropertyName("gapSplitInserts")]
+        public int GapSplitInserts { get; set; }
+
+        [JsonPropertyName("dpAgreement")]
+        public DpBeatAgreement DpAgreement { get; set; }
+
+        /// <summary>Per-beat Classic feature vectors (z-scored, median-synced; no MFCC-0).</summary>
+        [JsonPropertyName("beatFeatures")]
+        public List<List<double>> BeatFeatures { get; set; }
+
+        /// <summary>Time-delay stacked beat features (stack_memory, n_steps = StackSteps).</summary>
+        [JsonPropertyName("stackedFeatures")]
+        public List<List<double>> StackedFeatures { get; set; }
+
+        /// <summary>True when Slice 2 Classic vectors are present for graph assembly.</summary>
+        [JsonIgnore]
+        public bool HasClassicFeatures =>
+            StackedFeatures != null && StackedFeatures.Count > 0 &&
+            Beats != null && StackedFeatures.Count == Beats.Count;
+    }
+
+    public class DpBeatAgreement
+    {
+        [JsonPropertyName("fMeasure")]
+        public double FMeasure { get; set; }
+
+        [JsonPropertyName("precision")]
+        public double Precision { get; set; }
+
+        [JsonPropertyName("recall")]
+        public double Recall { get; set; }
+
+        [JsonPropertyName("toleranceMs")]
+        public int ToleranceMs { get; set; }
+
+        [JsonPropertyName("dpBeatCount")]
+        public int DpBeatCount { get; set; }
+
+        [JsonPropertyName("beatCount")]
+        public int BeatCount { get; set; }
     }
 
     public class AnalysisInterval
@@ -59,6 +106,10 @@ namespace SpotifyWPF.Model.Prediction
 
         [JsonPropertyName("confidence")]
         public double Confidence { get; set; }
+
+        /// <summary>True when BeatThis (or bar grid) marks this beat as a downbeat.</summary>
+        [JsonPropertyName("isDownbeat")]
+        public bool IsDownbeat { get; set; }
     }
 
     public class AnalysisSection : AnalysisInterval

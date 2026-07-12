@@ -36,65 +36,55 @@ namespace SpotifyWPF.Service.Prediction
 
         public List<BeatNode> Beats { get; } = new List<BeatNode>();
 
-        /// <summary>Similarity threshold the tuning loop settled on.</summary>
+        /// <summary>Quality distance cap settled for this build (percentile threshold or legacy auto-tune).</summary>
         public double BranchDistanceThreshold { get; set; }
 
         /// <summary>Latest beat that has a backward branch — the "point of no return" guard.</summary>
         public int LastBranchPointIndex { get; set; }
 
+        /// <summary>"classic" (Slice 2 vectors) or "legacy" (Echo Nest segment distance).</summary>
+        public string MetricMode { get; set; } = "legacy";
+
         public int TotalBranchCount => Beats.Sum(b => b.Neighbors.Count);
+
+        public int BranchableBeatCount => Beats.Count(b => b.Neighbors.Count > 0);
     }
 
     /// <summary>
-    /// Port of the Infinite Jukebox beat-similarity graph (after rigdern/InfiniteJukeboxAlgorithm,
-    /// itself extracted from the Echo Nest jukebox player). For every beat it builds a feature view
-    /// from the segments overlapping that beat (pitches, timbre, loudness, duration, confidence,
-    /// position in bar) and connects beats whose pairwise segment distance falls under a threshold.
-    /// The threshold is auto-tuned upward until enough branches exist for an "infinite" feel.
+    /// Builds the Infinite Jukebox beat graph. Slice 2 Classic path: beat-synchronous stacked
+    /// vectors + z-scored Euclidean + kNN with a track-wide percentile quality cap. Legacy Path A /
+    /// old caches without Classic vectors still use Echo Nest-style segment distance.
     /// </summary>
     public class BeatGraphBuilder
     {
-        /// <summary>Max outgoing branches kept per beat (mix of nearest and farthest under threshold).</summary>
         public int MaxNeighbors { get; set; } = 6;
 
-        /// <summary>Closest similarity matches kept per beat (hot/red on the ring).</summary>
         public int MaxNearestNeighbors { get; set; } = 3;
 
-        /// <summary>Farthest similarity matches kept per beat (cool/blue long hops on the ring).</summary>
         public int MaxFarthestNeighbors { get; set; } = 3;
 
-        /// <summary>Hard ceiling for the tuning loop; matches the original's maxBranchDistance.</summary>
         public double MaxBranchDistance { get; set; } = 80;
 
-        /// <summary>Tuning starts tight and relaxes: threshold candidates.</summary>
         public double InitialBranchDistance { get; set; } = 15;
 
         public double BranchDistanceStep { get; set; } = 5;
 
-        /// <summary>Tuning goal: this fraction of beats should have at least one branch.</summary>
         public double TargetBranchableBeatRatio { get; set; } = 0.1;
 
-        /// <summary>Branches shorter than this many beats apart sound like stutters; skip them.</summary>
         public int MinimumJumpDistanceInBeats { get; set; } = 4;
 
-        // Distance weights from the original algorithm.
         private const double TimbreWeight = 1;
         private const double PitchWeight = 10;
         private const double LoudStartWeight = 1;
         private const double LoudMaxWeight = 1;
         private const double DurationWeight = 100;
         private const double ConfidenceWeight = 1;
-
-        /// <summary>Distance charged for a missing counterpart segment.</summary>
         private const double MissingSegmentPenalty = 100;
-
-        /// <summary>Penalty for beats sitting at different positions within their bars.</summary>
         private const double DifferentBarPositionPenalty = 100;
 
         public BeatGraph Build(TrackAnalysis analysis, JukeboxSettings settings = null)
         {
             settings = settings ?? JukeboxSettings.CreateDefaults();
-            var maxDistance = Math.Max(InitialBranchDistance, settings.BranchSimilarityThresholdMax);
 
             if (analysis == null)
                 throw new ArgumentNullException(nameof(analysis));
@@ -102,25 +92,92 @@ namespace SpotifyWPF.Service.Prediction
             if (analysis.Beats == null || analysis.Beats.Count == 0)
                 throw new InvalidOperationException("Analysis has no beats.");
 
-            var graph = new BeatGraph { TrackId = analysis.TrackId };
+            if (analysis.HasClassicFeatures)
+                return BuildClassic(analysis, settings);
 
-            for (var i = 0; i < analysis.Beats.Count; i++)
+            return BuildLegacy(analysis, settings);
+        }
+
+        private BeatGraph BuildClassic(TrackAnalysis analysis, JukeboxSettings settings)
+        {
+            var graph = CreateGraphSkeleton(analysis);
+            AssignBarPositions(graph, analysis);
+            AssignDownbeatBarPositions(graph, analysis);
+
+            var minJump = Math.Max(4, settings.MinimumJumpBeats > 0 ? settings.MinimumJumpBeats : 8);
+            var k = Math.Max(1, settings.ClassicMaxNeighbors > 0 ? settings.ClassicMaxNeighbors : MaxNeighbors);
+            // Slider: lower = stricter. Map 25–80 UI range onto distance percentile 15–70.
+            var qualityPercentile = Math.Max(5, Math.Min(95, settings.BranchSimilarityThresholdMax));
+
+            var vectors = analysis.StackedFeatures;
+            var count = graph.Beats.Count;
+            var distances = new double[count][];
+            var allPairDistances = new List<double>(count * 8);
+
+            for (var i = 0; i < count; i++)
             {
-                var beat = analysis.Beats[i];
-
-                graph.Beats.Add(new BeatNode
-                {
-                    Index = i,
-                    StartSec = beat.Start,
-                    DurationSec = beat.Duration
-                });
+                distances[i] = new double[count];
+                for (var j = 0; j < count; j++)
+                    distances[i][j] = i == j ? 0 : double.MaxValue;
             }
 
+            for (var i = 0; i < count; i++)
+            {
+                for (var j = i + 1; j < count; j++)
+                {
+                    if (Math.Abs(i - j) < minJump)
+                        continue;
+
+                    var distance = ClassicDistance(
+                        vectors[i], vectors[j],
+                        graph.Beats[i], graph.Beats[j],
+                        settings.PhasePenaltyMode);
+
+                    distances[i][j] = distance;
+                    distances[j][i] = distance;
+                    allPairDistances.Add(distance);
+                }
+            }
+
+            var threshold = allPairDistances.Count == 0
+                ? 0
+                : Percentile(allPairDistances, qualityPercentile);
+
+            for (var i = 0; i < count; i++)
+            {
+                var candidates = new List<BeatEdge>();
+
+                for (var j = 0; j < count; j++)
+                {
+                    if (Math.Abs(i - j) < minJump)
+                        continue;
+
+                    var distance = distances[i][j];
+
+                    if (distance > threshold || double.IsInfinity(distance) || double.IsNaN(distance))
+                        continue;
+
+                    candidates.Add(new BeatEdge { DestinationIndex = j, Distance = distance });
+                }
+
+                // k nearest only — never "farthest under T".
+                foreach (var edge in candidates.OrderBy(e => e.Distance).Take(k))
+                    graph.Beats[i].Neighbors.Add(edge);
+            }
+
+            graph.BranchDistanceThreshold = threshold;
+            graph.MetricMode = "classic";
+            FinishGraph(graph, distances, settings);
+            return graph;
+        }
+
+        private BeatGraph BuildLegacy(TrackAnalysis analysis, JukeboxSettings settings)
+        {
+            var maxDistance = Math.Max(InitialBranchDistance, settings.BranchSimilarityThresholdMax);
+            var graph = CreateGraphSkeleton(analysis);
             AssignBarPositions(graph, analysis);
 
             var overlapping = ComputeOverlappingSegments(graph, analysis);
-
-            // Pairwise beat distances (symmetric); n is a few hundred, so O(n²) is fine.
             var count = graph.Beats.Count;
             var distances = new double[count][];
 
@@ -137,12 +194,13 @@ namespace SpotifyWPF.Service.Prediction
                 }
             }
 
-            // Relax the threshold until enough beats can branch (the original's dial, automated).
             var threshold = InitialBranchDistance;
+            MinimumJumpDistanceInBeats = Math.Max(MinimumJumpDistanceInBeats,
+                settings.MinimumJumpBeats > 0 ? settings.MinimumJumpBeats : MinimumJumpDistanceInBeats);
 
             while (true)
             {
-                ConnectEdges(graph, distances, threshold);
+                ConnectEdgesLegacy(graph, distances, threshold);
 
                 var branchableBeats = graph.Beats.Count(b => b.Neighbors.Count > 0);
 
@@ -156,21 +214,97 @@ namespace SpotifyWPF.Service.Prediction
             }
 
             graph.BranchDistanceThreshold = Math.Min(threshold, maxDistance);
+            graph.MetricMode = "legacy";
+            FinishGraph(graph, distances, settings);
+            return graph;
+        }
 
+        private static BeatGraph CreateGraphSkeleton(TrackAnalysis analysis)
+        {
+            var graph = new BeatGraph { TrackId = analysis.TrackId };
+
+            for (var i = 0; i < analysis.Beats.Count; i++)
+            {
+                var beat = analysis.Beats[i];
+                graph.Beats.Add(new BeatNode
+                {
+                    Index = i,
+                    StartSec = beat.Start,
+                    DurationSec = beat.Duration
+                });
+            }
+
+            return graph;
+        }
+
+        private void FinishGraph(BeatGraph graph, double[][] distances, JukeboxSettings settings)
+        {
             if (settings.EnableEndLoop)
             {
-                EnsureLastEdge(graph, distances);
+                EnsureLastEdge(graph, distances, settings);
                 graph.LastBranchPointIndex = FindLastBranchPoint(graph);
             }
             else
             {
                 graph.LastBranchPointIndex = -1;
             }
-
-            return graph;
         }
 
-        private void ConnectEdges(BeatGraph graph, double[][] distances, double threshold)
+        private static double ClassicDistance(IReadOnlyList<double> a, IReadOnlyList<double> b,
+            BeatNode beatA, BeatNode beatB, string phaseMode)
+        {
+            if (a == null || b == null || a.Count == 0 || b.Count == 0)
+                return double.MaxValue;
+
+            var length = Math.Min(a.Count, b.Count);
+            double sum = 0;
+
+            for (var i = 0; i < length; i++)
+            {
+                var delta = a[i] - b[i];
+                sum += delta * delta;
+            }
+
+            var distance = Math.Sqrt(sum / Math.Max(1, length));
+            return distance + PhasePenalty(beatA.IndexInBar, beatB.IndexInBar, phaseMode);
+        }
+
+        private static double PhasePenalty(int barPosA, int barPosB, string mode)
+        {
+            if (string.IsNullOrEmpty(mode) ||
+                mode.Equals("off", StringComparison.OrdinalIgnoreCase))
+                return 0;
+
+            var delta = Math.Abs(barPosA - barPosB);
+
+            if (delta == 0)
+                return 0;
+
+            if (mode.Equals("hard", StringComparison.OrdinalIgnoreCase))
+                return DifferentBarPositionPenalty;
+
+            // Soft: graduated — same-bar-slot free; neighboring slots mild; opposite harder.
+            return Math.Min(DifferentBarPositionPenalty, delta * 25.0);
+        }
+
+        private static double Percentile(List<double> values, double percentile)
+        {
+            if (values == null || values.Count == 0)
+                return 0;
+
+            var ordered = values.OrderBy(v => v).ToList();
+            var rank = (percentile / 100.0) * (ordered.Count - 1);
+            var low = (int)Math.Floor(rank);
+            var high = (int)Math.Ceiling(rank);
+
+            if (low == high)
+                return ordered[low];
+
+            var weight = rank - low;
+            return ordered[low] * (1 - weight) + ordered[high] * weight;
+        }
+
+        private void ConnectEdgesLegacy(BeatGraph graph, double[][] distances, double threshold)
         {
             foreach (var beat in graph.Beats)
                 beat.Neighbors.Clear();
@@ -190,80 +324,49 @@ namespace SpotifyWPF.Service.Prediction
                         edges.Add(new BeatEdge { DestinationIndex = j, Distance = distances[i][j] });
                 }
 
-                graph.Beats[i].Neighbors.AddRange(SelectDiverseNeighbors(edges));
+                // Legacy path: nearest only (no farthest-under-T).
+                graph.Beats[i].Neighbors.AddRange(
+                    edges.OrderBy(e => e.Distance).Take(MaxNeighbors));
             }
         }
 
-        /// <summary>
-        /// Keeps both tight matches and looser long-hop matches so the ring shows red and blue chords.
-        /// </summary>
-        private List<BeatEdge> SelectDiverseNeighbors(List<BeatEdge> edges)
-        {
-            if (edges.Count == 0)
-                return edges;
-
-            var ordered = edges.OrderBy(e => e.Distance).ToList();
-            var selected = new List<BeatEdge>();
-            var seen = new HashSet<int>();
-
-            void AddEdge(BeatEdge edge)
-            {
-                if (edge == null || !seen.Add(edge.DestinationIndex))
-                    return;
-
-                selected.Add(edge);
-            }
-
-            foreach (var edge in ordered.Take(MaxNearestNeighbors))
-                AddEdge(edge);
-
-            foreach (var edge in ordered.Skip(Math.Max(0, ordered.Count - MaxFarthestNeighbors)))
-                AddEdge(edge);
-
-            if (selected.Count < MaxNeighbors)
-            {
-                foreach (var edge in ordered)
-                {
-                    AddEdge(edge);
-
-                    if (selected.Count >= MaxNeighbors)
-                        break;
-                }
-            }
-
-            return selected.Take(MaxNeighbors).ToList();
-        }
-
-        /// <summary>
-        /// The original's addLastEdge: if the tail of the song cannot branch backwards, playback
-        /// would inevitably run off the end. Give the last branchable region a guaranteed edge to
-        /// its most similar earlier beat, ignoring the threshold.
-        /// </summary>
-        private void EnsureLastEdge(BeatGraph graph, double[][] distances)
+        private void EnsureLastEdge(BeatGraph graph, double[][] distances, JukeboxSettings settings)
         {
             var count = graph.Beats.Count;
             var lastBranchPoint = FindLastBranchPoint(graph);
+            var minJump = Math.Max(4, settings.MinimumJumpBeats > 0 ? settings.MinimumJumpBeats : 8);
 
-            // Backward branch already exists in the last quarter of the song — nothing to fix.
             if (lastBranchPoint >= count * 3 / 4)
                 return;
 
+            // Prefer best backward splice in the last ~10% of beats.
+            var searchFrom = Math.Max(0, (int)(count * 0.9));
             var sourceIndex = count - 1;
+            var bestSource = sourceIndex;
             var bestTarget = -1;
             var bestDistance = double.MaxValue;
 
-            for (var j = 0; j < sourceIndex - MinimumJumpDistanceInBeats; j++)
+            for (var source = count - 1; source >= searchFrom; source--)
             {
-                if (distances[sourceIndex][j] < bestDistance)
+                for (var j = 0; j < source - minJump; j++)
                 {
-                    bestDistance = distances[sourceIndex][j];
-                    bestTarget = j;
+                    var distance = distances[source][j];
+
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        bestTarget = j;
+                        bestSource = source;
+                    }
                 }
             }
 
-            if (bestTarget >= 0)
+            if (bestTarget < 0)
+                return;
+
+            if (graph.Beats[bestSource].Neighbors.All(e => e.DestinationIndex != bestTarget))
             {
-                graph.Beats[sourceIndex].Neighbors.Add(new BeatEdge
+                graph.Beats[bestSource].Neighbors.Add(new BeatEdge
                 {
                     DestinationIndex = bestTarget,
                     Distance = bestDistance
@@ -280,6 +383,27 @@ namespace SpotifyWPF.Service.Prediction
             }
 
             return -1;
+        }
+
+        /// <summary>Prefer BeatThis downbeat flags for IndexInBar; fall back to bars list.</summary>
+        private static void AssignDownbeatBarPositions(BeatGraph graph, TrackAnalysis analysis)
+        {
+            if (analysis.Beats == null || analysis.Beats.Count == 0)
+                return;
+
+            if (!analysis.Beats.Any(b => b.IsDownbeat))
+                return;
+
+            var indexInBar = 0;
+
+            for (var i = 0; i < graph.Beats.Count; i++)
+            {
+                if (i > 0 && analysis.Beats[i].IsDownbeat)
+                    indexInBar = 0;
+
+                graph.Beats[i].IndexInBar = indexInBar;
+                indexInBar++;
+            }
         }
 
         private static void AssignBarPositions(BeatGraph graph, TrackAnalysis analysis)
@@ -347,7 +471,6 @@ namespace SpotifyWPF.Service.Prediction
             }
 
             var barPenalty = beat1.IndexInBar == beat2.IndexInBar ? 0 : DifferentBarPositionPenalty;
-
             return sum / segments1.Count + barPenalty;
         }
 
@@ -357,9 +480,9 @@ namespace SpotifyWPF.Service.Prediction
             var pitch = WeightedEuclidean(segment1.Pitches, segment2.Pitches) * PitchWeight;
             var loudStart = Math.Abs(segment1.LoudnessStart - segment2.LoudnessStart) * LoudStartWeight;
             var loudMax = Math.Abs(segment1.LoudnessMax - segment2.LoudnessMax) * LoudMaxWeight;
-            var duration = Math.Abs(segment1.Duration - segment2.Duration) * DurationWeight;
-            var confidence = Math.Abs(segment1.Confidence - segment2.Confidence) * ConfidenceWeight;
-
+            // Duration/confidence dropped for Path B Classic direction; keep mild for legacy Spotify.
+            var duration = Math.Abs(segment1.Duration - segment2.Duration) * DurationWeight * 0.25;
+            var confidence = Math.Abs(segment1.Confidence - segment2.Confidence) * ConfidenceWeight * 0.25;
             return timbre + pitch + loudStart + loudMax + duration + confidence;
         }
 

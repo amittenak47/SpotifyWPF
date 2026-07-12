@@ -312,7 +312,8 @@ namespace SpotifyWPF.Service.Prediction
 
                 LoopEvent?.Invoke(this,
                     $"Jukebox: built beat graph — {graph.Beats.Count} beats, {graph.TotalBranchCount} branches " +
-                    $"(threshold {graph.BranchDistanceThreshold:0}).");
+                    $"({graph.BranchableBeatCount} branchable, {graph.MetricMode}, " +
+                    $"threshold {graph.BranchDistanceThreshold:0.###}).");
 
                 return graph;
             }

@@ -50,6 +50,22 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("playbackSource")]
         public string PlaybackSource { get; set; } = "Spotify";
 
+        /// <summary>
+        /// Theiler window: minimum beat separation for Classic graph edges (Slice 2). Default 8.
+        /// </summary>
+        [JsonPropertyName("minimumJumpBeats")]
+        public int MinimumJumpBeats { get; set; } = 8;
+
+        /// <summary>Max outgoing Classic kNN neighbors per beat.</summary>
+        [JsonPropertyName("classicMaxNeighbors")]
+        public int ClassicMaxNeighbors { get; set; } = 6;
+
+        /// <summary>
+        /// Phase penalty mode for Classic distance: "off", "soft" (default), or "hard".
+        /// </summary>
+        [JsonPropertyName("phasePenaltyMode")]
+        public string PhasePenaltyMode { get; set; } = "soft";
+
         public static JukeboxSettings CreateDefaults() => new JukeboxSettings();
 
         /// <summary>True when a settings change requires rebuilding the beat graph (not just re-arming).</summary>
@@ -59,7 +75,11 @@ namespace SpotifyWPF.Model.Prediction
                 return true;
 
             return Math.Abs(before.BranchSimilarityThresholdMax - after.BranchSimilarityThresholdMax) > 0.01 ||
-                   before.EnableEndLoop != after.EnableEndLoop;
+                   before.EnableEndLoop != after.EnableEndLoop ||
+                   before.MinimumJumpBeats != after.MinimumJumpBeats ||
+                   before.ClassicMaxNeighbors != after.ClassicMaxNeighbors ||
+                   !string.Equals(before.PhasePenaltyMode ?? "", after.PhasePenaltyMode ?? "",
+                       StringComparison.OrdinalIgnoreCase);
         }
     }
 }

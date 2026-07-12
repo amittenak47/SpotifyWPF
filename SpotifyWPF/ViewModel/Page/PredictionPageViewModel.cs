@@ -613,7 +613,7 @@ namespace SpotifyWPF.ViewModel.Page
         }
 
         public string JukeboxSimilarityThresholdMaxText =>
-            $"{_jukeboxSettingsModel.BranchSimilarityThresholdMax:0}";
+            $"{_jukeboxSettingsModel.BranchSimilarityThresholdMax:0}th %ile";
 
         public string JukeboxBranchProbabilityMinText =>
             $"{_jukeboxSettingsModel.BranchProbabilityMin * 100:0.#}%";
@@ -1862,6 +1862,10 @@ namespace SpotifyWPF.ViewModel.Page
             _jukeboxSettingsModel.EnableEndLoop = snapshot.EnableEndLoop;
             if (!string.IsNullOrEmpty(snapshot.PlaybackSource))
                 _jukeboxSettingsModel.PlaybackSource = snapshot.PlaybackSource;
+            _jukeboxSettingsModel.MinimumJumpBeats = snapshot.MinimumJumpBeats;
+            _jukeboxSettingsModel.ClassicMaxNeighbors = snapshot.ClassicMaxNeighbors;
+            if (!string.IsNullOrEmpty(snapshot.PhasePenaltyMode))
+                _jukeboxSettingsModel.PhasePenaltyMode = snapshot.PhasePenaltyMode;
 
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMax));
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMaxText));
@@ -1972,7 +1976,10 @@ namespace SpotifyWPF.ViewModel.Page
                 AllowOnlyLongBranches = source.AllowOnlyLongBranches,
                 LongBranchMinBeats = source.LongBranchMinBeats,
                 EnableEndLoop = source.EnableEndLoop,
-                PlaybackSource = source.PlaybackSource
+                PlaybackSource = source.PlaybackSource,
+                MinimumJumpBeats = source.MinimumJumpBeats,
+                ClassicMaxNeighbors = source.ClassicMaxNeighbors,
+                PhasePenaltyMode = source.PhasePenaltyMode
             };
         }
 
@@ -2103,7 +2110,7 @@ namespace SpotifyWPF.ViewModel.Page
                     RingGraph = graph;
                     RingSegmentCountText = graph == null
                         ? "No beat map — analyze track to build the ring"
-                        : $"{graph.Beats.Count} beats · {graph.TotalBranchCount} branches";
+                        : $"{graph.Beats.Count} beats · {graph.TotalBranchCount} branches · {graph.MetricMode}";
                 }));
         }
 

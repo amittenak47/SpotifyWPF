@@ -201,9 +201,9 @@
                                               VerticalAlignment="Stretch"
                                               HorizontalScrollBarVisibility="Disabled">
                                     <StackPanel>
-                                        <local:TuningSliderRow Label="Branch similarity threshold (lower = smoother)"
+                                        <local:TuningSliderRow Label="Branch quality percentile (lower = stricter / smoother)"
                                                                ValueText="{Binding JukeboxSimilarityThresholdMaxText}"
-                                                               Minimum="25"
+                                                               Minimum="15"
                                                                Maximum="80"
                                                                Value="{Binding JukeboxSimilarityThresholdMax}"/>
                                         <local:TuningSliderRow Label="Branch probability min"
