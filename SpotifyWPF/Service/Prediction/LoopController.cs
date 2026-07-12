@@ -36,7 +36,7 @@ namespace SpotifyWPF.Service.Prediction
         /// <summary>Raised whenever the active track or loop state changes (UI refresh).</summary>
         event EventHandler ActiveLoopChanged;
 
-        void InvalidateGraphCache();
+        void InvalidateGraphCache(bool rearmIfActive = true);
 
         /// <summary>
         /// After a user scrub/seek, drop the armed jump and replan from the new playhead so an
@@ -353,13 +353,13 @@ namespace SpotifyWPF.Service.Prediction
             });
         }
 
-        public void InvalidateGraphCache()
+        public void InvalidateGraphCache(bool rearmIfActive = true)
         {
             _graphCache.Clear();
             _navigator = null;
             _plannedJump = null;
 
-            if (IsLoopActive && ActiveProfile.Mode == LoopModes.Jukebox)
+            if (rearmIfActive && IsLoopActive && ActiveProfile.Mode == LoopModes.Jukebox)
                 Rearm();
         }
 

@@ -1830,7 +1830,13 @@ namespace SpotifyWPF.ViewModel.Page
             if (!UseLocalPlayback)
             {
                 if (holding)
-                    Log("Hold-to-scan needs Local WAV playback.", verbose: true);
+                {
+                    Status = IsLocalPlaybackAvailable
+                        ? "Hold-to-scan needs Local WAV — toggle Playback source to Local WAV."
+                        : "Hold-to-scan needs Local WAV playback (capture this track first).";
+                    Log(Status, verbose: true);
+                }
+
                 _transport.SetPlaybackRate(1.0);
                 return;
             }
@@ -2686,30 +2692,7 @@ namespace SpotifyWPF.ViewModel.Page
                 RebuildBeatGraphForTrack(trackId, invalidateCache: false);
         }
 
-        /// <summary>
-        /// Rebuilds the beat graph from cached analysis using current tuning — no audio capture or librosa.
-        /// </summary>
-        private void RebuildBeatGraphForTrack(string trackId, bool invalidateCache = true)
-        {
-            if (string.IsNullOrEmpty(trackId))
-                return;
-
-            var analysis = AnalysisCache.Load(trackId);
-
-            if (analysis == null)
-                return;
-
-            if (invalidateCache)
-                _loopController.InvalidateGraphCache();
-
-            if (trackId != _loopController.CurrentTrackId)
-                return;
-
-            RefreshRingVisualization(trackId);
-
-            if (!_jukeboxSuppressedForCapture)
-                ApplyLoopSettings();
-        }
+        private int _ringGraphBuildGeneration;
 
         private void SaveWeightsDeferred()
         {
@@ -2722,10 +2705,51 @@ namespace SpotifyWPF.ViewModel.Page
             _predictor.SaveWeights(_weights);
         }
 
+        /// <summary>
+        /// Rebuilds the beat graph from cached analysis using current tuning — no audio capture or librosa.
+        /// </summary>
+        private void RebuildBeatGraphForTrack(string trackId, bool invalidateCache = true)
+        {
+            if (string.IsNullOrEmpty(trackId))
+                return;
+
+            var analysis = AnalysisCache.Load(trackId);
+
+            if (analysis == null)
+            {
+                // Still drop stale graphs when analysis was deleted mid-rebuild race.
+                if (invalidateCache)
+                    _loopController.InvalidateGraphCache();
+
+                var activeMissing = _loopController.CurrentTrackId ?? _currentPlay?.TrackId;
+                if (string.Equals(trackId, activeMissing, StringComparison.Ordinal))
+                    RefreshRingVisualization(trackId);
+
+                return;
+            }
+
+            if (invalidateCache)
+                _loopController.InvalidateGraphCache();
+
+            var activeId = _loopController.CurrentTrackId ?? _currentPlay?.TrackId;
+
+            if (!string.IsNullOrEmpty(activeId) &&
+                !string.Equals(trackId, activeId, StringComparison.Ordinal))
+                return;
+
+            RefreshRingVisualization(trackId);
+
+            if (!_jukeboxSuppressedForCapture)
+                ApplyLoopSettings();
+        }
+
         private void RefreshRingVisualization(string trackId)
         {
             RingPlannedFromBeat = -1;
             RingPlannedToBeat = -1;
+
+            // Invalidate in-flight async builds (delete / re-analyze / tracker switch).
+            var buildGeneration = ++_ringGraphBuildGeneration;
 
             if (string.IsNullOrEmpty(trackId))
             {
@@ -2743,14 +2767,18 @@ namespace SpotifyWPF.ViewModel.Page
 
             if (analysis == null)
             {
+                _loopController.InvalidateGraphCache();
                 RingGraph = null;
                 RingSectionStartsSec = Array.Empty<double>();
                 RingStackedFeatures = null;
                 RingBeatFeatures = null;
                 RingSegmentCountText = "No beat map — analyze track to build the ring";
                 _visualEnergy.Clear();
+                RefreshTrackStatusHud();
                 return;
             }
+
+            var fingerprint = AnalysisCache.ComputeFingerprint(trackId) ?? string.Empty;
 
             _visualEnergy.LoadAnalysis(analysis);
 
@@ -2760,17 +2788,30 @@ namespace SpotifyWPF.ViewModel.Page
                 : (IReadOnlyList<double>)Array.Empty<double>();
             RingStackedFeatures = analysis.HasClassicFeatures ? analysis.StackedFeatures : null;
             RingBeatFeatures = analysis.HasClassicFeatures ? analysis.BeatFeatures : null;
+            // Clear immediately so BeatThis→DP doesn't keep showing the old ring while building.
+            RingGraph = null;
             RingSegmentCountText = "Building beat graph…";
+            RefreshTrackStatusHud();
+
+            // Clear cache without sync Rearm — ApplyLoopSettings / async completion will rearm.
+            // Avoids an O(beats²) UI-thread rebuild before Task.Run finishes.
+            _loopController.InvalidateGraphCache(rearmIfActive: false);
 
             // The graph is O(beats²) to build; keep the UI thread free.
             Task.Run(() => _loopController.GetGraphForTrack(trackId)).ContinueWith(task =>
                 RunOnUiThread(() =>
                 {
-                    // Ignore stale builds after a track change; allow when CurrentTrackId
-                    // has not been stamped yet (local play / first state).
+                    // Drop superseded builds (delete, re-analyze, tracker switch, track change).
+                    if (buildGeneration != _ringGraphBuildGeneration)
+                        return;
+
                     var activeId = _loopController.CurrentTrackId ?? _currentPlay?.TrackId;
                     if (!string.IsNullOrEmpty(activeId) &&
                         !string.Equals(trackId, activeId, StringComparison.Ordinal))
+                        return;
+
+                    var currentFingerprint = AnalysisCache.ComputeFingerprint(trackId) ?? string.Empty;
+                    if (!string.Equals(fingerprint, currentFingerprint, StringComparison.Ordinal))
                         return;
 
                     if (task.IsFaulted)
@@ -3186,8 +3227,12 @@ namespace SpotifyWPF.ViewModel.Page
 
             AnalysisCache.Delete(track.TrackId);
             UpdateSessionTrackAnalysisStatus(track.TrackId, SessionAnalysisStatus.Pending);
+            _loopController.InvalidateGraphCache();
+            _ringGraphBuildGeneration++;
 
-            if (track.TrackId == _loopController.CurrentTrackId)
+            var activeId = _loopController.CurrentTrackId ?? _currentPlay?.TrackId;
+
+            if (string.Equals(track.TrackId, activeId, StringComparison.Ordinal))
                 RefreshRingVisualization(track.TrackId);
 
             Log($"Deleted saved analysis for {track.DisplayName}.");

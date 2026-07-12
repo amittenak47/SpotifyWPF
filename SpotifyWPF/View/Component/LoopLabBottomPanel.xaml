@@ -463,7 +463,7 @@
                                                                Foreground="{DynamicResource AppForegroundBrush}"/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                                               Text="Hover any beat to preview its hops. Click an arrow to select it (does not force a chain from that landing). Hover other beats and pick more hops from them. Confirm with checkmark to lock all selected hops. Double-click a locked (gold) branch to remove it. Drag coverage bars / outer rim to scrub."/>
+                                                               Text="Hover a beat to preview hops. Press and hold that beat, then drag onto a hop arrow and release to queue it — the origin stays pinned so crossing other beats will not swap the fan. Press+drag another beat to add more. Confirm with the checkmark to lock all queued hops. Double-click a locked (gold) branch to remove it. Drag empty coverage / outer rim to scrub."/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
                                                                Text="Save tune + branches from Session (Tune preset) so a settings snapshot + locks stay tied to the analysis fingerprint."/>
@@ -614,7 +614,7 @@
                                                    Margin="0,8,0,0"
                                                    TextWrapping="Wrap"
                                                    Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                                        <TextBlock Text="click a beat to pick hops — hover each arrow for analysis — click arrows to chain — ✓ bottom-right confirms locks · SSM = full similarity map (draggable)"
+                                        <TextBlock Text="press a beat + drag to a hop — release to queue — ✓ confirms locks · SSM = full similarity map (draggable)"
                                                    FontSize="11"
                                                    Margin="0,4,0,0"
                                                    TextWrapping="Wrap"

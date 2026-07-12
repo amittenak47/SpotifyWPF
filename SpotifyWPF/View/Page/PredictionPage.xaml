@@ -103,10 +103,10 @@
                                                        VerticalAlignment="Stretch"
                                                        DataContext="{Binding}"/>
 
-                            <!-- Playback wheel in the ring hole; content fades in on hover (no haze plate) -->
+                            <!-- Play/pause only — keep small so the gray disc can receive hold-to-scan. -->
                             <Border x:Name="WheelHoverZone"
-                                    Width="120"
-                                    Height="120"
+                                    Width="44"
+                                    Height="44"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     Background="Transparent"
@@ -115,8 +115,8 @@
                                     MouseEnter="HoverZone_MouseEnter"
                                     MouseLeave="HoverZone_MouseLeave">
                                 <component:TransportWheelControl x:Name="TransportWheel"
-                                                                 Width="80"
-                                                                 Height="80"
+                                                                 Width="40"
+                                                                 Height="40"
                                                                  Opacity="0.28"
                                                                  HorizontalAlignment="Center"
                                                                  VerticalAlignment="Center"
