@@ -135,8 +135,9 @@
                                                   VerticalAlignment="Center"/>
                                         <Button Content="Load" MinWidth="56" Margin="4,0,0,0"
                                                 Command="{Binding LoadBranchPresetCommand}"/>
-                                        <Button Content="Save locks" MinWidth="72" Margin="4,0,0,0"
-                                                Command="{Binding SaveBranchPresetCommand}"/>
+                                        <Button Content="Save tune+branches" MinWidth="120" Margin="4,0,0,0"
+                                                Command="{Binding SaveBranchPresetCommand}"
+                                                ToolTip="Save current tune settings, locks, and analysis fingerprint"/>
                                     </StackPanel>
 
                                     <ListBox Grid.Row="1"
@@ -216,15 +217,21 @@
                                         <CheckBox Content="Allow only long branches (16+ beats apart)"
                                                   Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding JukeboxAllowOnlyLongBranches}"
-                                                  Margin="0,0,0,8"/>
+                                                  Margin="0,0,0,4"
+                                                  ToolTip="Long-branch filter does not block the end-loop guard jump"/>
+                                        <CheckBox Content="Enable end loop"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
+                                                  IsChecked="{Binding JukeboxEnableEndLoop}"
+                                                  Margin="0,0,0,4"
+                                                  ToolTip="When on, a backward jump is forced near the end so the song never finishes. Off = play out linearly."/>
+                                        <CheckBox Content="Random branches"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
+                                                  IsChecked="{Binding JukeboxRandomBranches}"
+                                                  Margin="0,0,0,8"
+                                                  ToolTip="On: random walk + locked branches at their probability. Off: only locked branches (+ end loop if enabled)."/>
 
                                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                            <CheckBox Content="Locks only"
-                                                      VerticalAlignment="Center"
-                                                      Foreground="{DynamicResource AppForegroundBrush}"
-                                                      IsChecked="{Binding JukeboxLocksOnly}"
-                                                      ToolTip="Jukebox jumps travel only the branches locked on the ring"/>
-                                            <Button Content="Clear locks" MinWidth="88" Margin="16,0,0,0"
+                                            <Button Content="Clear locks" MinWidth="88"
                                                     Command="{Binding ClearRingLocksCommand}"/>
                                             <Button Content="Reset plays" MinWidth="88" Margin="8,0,0,0"
                                                     Command="{Binding ResetRingPlaysCommand}"

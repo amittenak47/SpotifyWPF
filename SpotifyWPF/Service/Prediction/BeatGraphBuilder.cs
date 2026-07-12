@@ -157,9 +157,15 @@ namespace SpotifyWPF.Service.Prediction
 
             graph.BranchDistanceThreshold = Math.Min(threshold, maxDistance);
 
-            EnsureLastEdge(graph, distances);
-
-            graph.LastBranchPointIndex = FindLastBranchPoint(graph);
+            if (settings.EnableEndLoop)
+            {
+                EnsureLastEdge(graph, distances);
+                graph.LastBranchPointIndex = FindLastBranchPoint(graph);
+            }
+            else
+            {
+                graph.LastBranchPointIndex = -1;
+            }
 
             return graph;
         }

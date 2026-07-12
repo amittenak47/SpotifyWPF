@@ -14,19 +14,47 @@ namespace SpotifyWPF.Model.Prediction
 
         [JsonPropertyName("toBeatIndex")]
         public int ToBeatIndex { get; set; }
+
+        /// <summary>
+        /// Chance this locked branch is taken when its from-beat is reached (0–1, default 1 = always).
+        /// </summary>
+        [JsonPropertyName("probability")]
+        public double Probability { get; set; } = 1.0;
     }
 
-    /// <summary>Named snapshot of ring branch locks for a track (multiple per track).</summary>
+    /// <summary>Named snapshot of tune settings + ring branch locks for a track.</summary>
     public class BranchLockPreset
     {
         [JsonPropertyName("name")]
         public string Name { get; set; }
 
+        /// <summary>When true, random walk runs alongside locks. When false, only locked branches fire.</summary>
+        [JsonPropertyName("randomBranches")]
+        public bool RandomBranches { get; set; } = true;
+
+        /// <summary>Legacy: inverted of <see cref="RandomBranches"/>. Read on load; not written.</summary>
         [JsonPropertyName("locksOnly")]
-        public bool LocksOnly { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool LocksOnly
+        {
+            get => false;
+            set
+            {
+                if (value)
+                    RandomBranches = false;
+            }
+        }
 
         [JsonPropertyName("lockedBranches")]
         public List<BranchLock> LockedBranches { get; set; } = new List<BranchLock>();
+
+        /// <summary>Optional snapshot of jukebox tune settings at save time.</summary>
+        [JsonPropertyName("settings")]
+        public JukeboxSettings SettingsSnapshot { get; set; }
+
+        /// <summary>SHA-256 hex of the analysis JSON this preset was authored against.</summary>
+        [JsonPropertyName("analysisFingerprint")]
+        public string AnalysisFingerprint { get; set; }
     }
 
     /// <summary>Beat-to-beat target passed from the ring canvas when locking a specific branch chord.</summary>
@@ -63,11 +91,27 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("lockedBranches")]
         public List<BranchLock> LockedBranches { get; set; } = new List<BranchLock>();
 
-        /// <summary>When true, jukebox jumps happen only via <see cref="LockedBranches"/>.</summary>
-        [JsonPropertyName("locksOnly")]
-        public bool LocksOnly { get; set; }
+        /// <summary>
+        /// When true (default), random walk + locks at their probability.
+        /// When false, only locked branches fire (+ end-loop guard if enabled).
+        /// </summary>
+        [JsonPropertyName("randomBranches")]
+        public bool RandomBranches { get; set; } = true;
 
-        /// <summary>Saved branch-lock layouts for this track (load from session dropdown).</summary>
+        /// <summary>Legacy: inverted of <see cref="RandomBranches"/>. Read on load; not written.</summary>
+        [JsonPropertyName("locksOnly")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool LocksOnly
+        {
+            get => false;
+            set
+            {
+                if (value)
+                    RandomBranches = false;
+            }
+        }
+
+        /// <summary>Saved tune + branch-lock layouts for this track (load from session dropdown).</summary>
         [JsonPropertyName("lockPresets")]
         public List<BranchLockPreset> LockPresets { get; set; } = new List<BranchLockPreset>();
 

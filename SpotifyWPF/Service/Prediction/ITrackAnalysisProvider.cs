@@ -85,6 +85,36 @@ namespace SpotifyWPF.Service.Prediction
                 Console.WriteLine($"Failed to delete cached analysis for {trackId}: {ex.Message}");
             }
         }
+
+        /// <summary>
+        /// SHA-256 hex of the analysis JSON file. Same file bytes ⇒ same fingerprint ⇒
+        /// deterministic graph rebuild when paired with the same jukebox settings.
+        /// </summary>
+        public static string ComputeFingerprint(string trackId)
+        {
+            if (string.IsNullOrEmpty(trackId))
+                return null;
+
+            var path = PredictionPaths.GetAnalysisCachePath(trackId);
+
+            if (!File.Exists(path))
+                return null;
+
+            try
+            {
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                using (var stream = File.OpenRead(path))
+                {
+                    var hash = sha.ComputeHash(stream);
+                    return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to fingerprint analysis for {trackId}: {ex.Message}");
+                return null;
+            }
+        }
     }
 
     /// <summary>

@@ -168,10 +168,8 @@ namespace SpotifyWPF.ViewModel.Page
             ClearRingLocksCommand = new RelayCommand(ClearRingLocks);
             ResetRingPlaysCommand = new RelayCommand(() => RingResetPlaysToken++);
             StopPlaybackCommand = new RelayCommand(async () => await StopPlaybackAsync(), CanStopPlayback);
-            LoadBranchPresetCommand = new RelayCommand(LoadSelectedBranchPreset,
-                () => SelectedBranchPreset != null && SelectedSessionTrack != null);
-            SaveBranchPresetCommand = new RelayCommand(SaveBranchPreset,
-                () => (SelectedSessionTrack != null || _loopController.CurrentTrackId != null));
+            LoadBranchPresetCommand = new RelayCommand(LoadSelectedBranchPreset, CanLoadBranchPreset);
+            SaveBranchPresetCommand = new RelayCommand(SaveBranchPreset, CanSaveBranchPreset);
 
             MessengerInstance.Register<string>(this, MessageType.OpenInLoopLab,
                 async contextUri => await HandleOpenInLoopLabAsync(contextUri));
@@ -396,6 +394,7 @@ namespace SpotifyWPF.ViewModel.Page
                     PreviousSessionTrackCommand.RaiseCanExecuteChanged();
                     NextSessionTrackCommand.RaiseCanExecuteChanged();
                     LoadBranchPresetCommand.RaiseCanExecuteChanged();
+                    SaveBranchPresetCommand.RaiseCanExecuteChanged();
                     DeleteSessionCacheCommand?.RaiseCanExecuteChanged();
                     RefreshSessionCommand?.RaiseCanExecuteChanged();
                 }
@@ -548,7 +547,7 @@ namespace SpotifyWPF.ViewModel.Page
                 _jukeboxSettingsModel.BranchSimilarityThresholdMax = value;
                 RaisePropertyChanged();
                 RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMaxText));
-                PersistJukeboxSettings();
+                PersistJukeboxSettings(invalidateGraph: true);
             }
         }
 
@@ -747,16 +746,33 @@ namespace SpotifyWPF.ViewModel.Page
             set => Set(ref _ringPreviewHopDepth, Math.Max(1, Math.Min(3, value)));
         }
 
-        private bool _jukeboxLocksOnly;
+        private bool _jukeboxRandomBranches = true;
 
-        /// <summary>When true, jukebox jumps only travel the branches locked on the ring.</summary>
-        public bool JukeboxLocksOnly
+        /// <summary>
+        /// When true (default), random walk + locks at their probability.
+        /// When false, only locked branches fire (+ end-loop guard if enabled).
+        /// </summary>
+        public bool JukeboxRandomBranches
         {
-            get => _jukeboxLocksOnly;
+            get => _jukeboxRandomBranches;
             set
             {
-                if (Set(ref _jukeboxLocksOnly, value))
+                if (Set(ref _jukeboxRandomBranches, value))
                     ApplyLoopSettings();
+            }
+        }
+
+        public bool JukeboxEnableEndLoop
+        {
+            get => _jukeboxSettingsModel.EnableEndLoop;
+            set
+            {
+                if (_jukeboxSettingsModel.EnableEndLoop == value)
+                    return;
+
+                _jukeboxSettingsModel.EnableEndLoop = value;
+                RaisePropertyChanged();
+                PersistJukeboxSettings(invalidateGraph: true);
             }
         }
 
@@ -1089,7 +1105,8 @@ namespace SpotifyWPF.ViewModel.Page
             if (_jukeboxSettingsDirty)
             {
                 _jukeboxSettingsDirty = false;
-                PersistJukeboxSettingsNow();
+                // Threshold slider is deferred with other tune sliders; always rebuild to be safe.
+                PersistJukeboxSettingsNow(invalidateGraph: true);
             }
 
             if (_weightsDirty)
@@ -1369,12 +1386,15 @@ namespace SpotifyWPF.ViewModel.Page
             RefreshLoopSettingsFromStore(state.TrackId);
 
             AnalyzeTrackCommand.RaiseCanExecuteChanged();
+            SaveBranchPresetCommand.RaiseCanExecuteChanged();
+            LoadBranchPresetCommand.RaiseCanExecuteChanged();
 
             Log(AnalysisCache.Exists(state.TrackId)
                 ? "Analysis cached for this track."
                 : "No analysis for this track yet.", verbose: true);
 
             UpsertSessionTrack(state.TrackId, state.TrackName, state.ArtistNames);
+            RefreshBranchPresetsForSelection();
             RefreshRingVisualization(state.TrackId);
             ApplyLoopSettings();
         }
@@ -1394,7 +1414,7 @@ namespace SpotifyWPF.ViewModel.Page
             try
             {
                 // Infinite Jukebox is always the default; profile is applied in ApplyLoopSettings.
-                JukeboxLocksOnly = profile != null && profile.LocksOnly;
+                JukeboxRandomBranches = profile == null || profile.RandomBranches;
             }
             finally
             {
@@ -1417,7 +1437,7 @@ namespace SpotifyWPF.ViewModel.Page
             var profile = _loopController.GetProfileForTrack(trackId);
             profile.Enabled = !_jukeboxSuppressedForCapture;
             profile.Mode = LoopModes.Jukebox;
-            profile.LocksOnly = JukeboxLocksOnly;
+            profile.RandomBranches = JukeboxRandomBranches;
 
             _loopController.ApplyProfile(profile);
         }
@@ -1474,7 +1494,8 @@ namespace SpotifyWPF.ViewModel.Page
                 profile.LockedBranches.Add(new BranchLock
                 {
                     FromBeatIndex = fromBeat,
-                    ToBeatIndex = toBeat
+                    ToBeatIndex = toBeat,
+                    Probability = 1.0
                 });
 
                 Log($"Ring: locked branch beat {fromBeat} → {toBeat}.");
@@ -1518,47 +1539,122 @@ namespace SpotifyWPF.ViewModel.Page
             BranchPresets.Clear();
             SelectedBranchPreset = null;
 
-            var track = SelectedSessionTrack;
+            var trackId = SelectedSessionTrack?.TrackId ?? _loopController.CurrentTrackId;
 
-            if (track == null)
+            if (string.IsNullOrEmpty(trackId))
+            {
+                LoadBranchPresetCommand.RaiseCanExecuteChanged();
+                SaveBranchPresetCommand.RaiseCanExecuteChanged();
                 return;
+            }
 
-            var profile = _loopController.GetProfileForTrack(track.TrackId);
+            var profile = _loopController.GetProfileForTrack(trackId);
 
             if (profile?.LockPresets == null)
+            {
+                LoadBranchPresetCommand.RaiseCanExecuteChanged();
+                SaveBranchPresetCommand.RaiseCanExecuteChanged();
                 return;
+            }
 
             foreach (var preset in profile.LockPresets.OrderBy(p => p.Name))
                 BranchPresets.Add(preset);
+
+            LoadBranchPresetCommand.RaiseCanExecuteChanged();
+            SaveBranchPresetCommand.RaiseCanExecuteChanged();
+        }
+
+        private bool CanSaveBranchPreset()
+        {
+            return SelectedSessionTrack != null ||
+                   !string.IsNullOrEmpty(_loopController.CurrentTrackId);
+        }
+
+        private bool CanLoadBranchPreset()
+        {
+            if (SelectedBranchPreset == null)
+                return false;
+
+            return SelectedSessionTrack != null ||
+                   !string.IsNullOrEmpty(_loopController.CurrentTrackId);
         }
 
         private void LoadSelectedBranchPreset()
         {
             var preset = SelectedBranchPreset;
-            var track = SelectedSessionTrack;
+            var trackId = SelectedSessionTrack?.TrackId ?? _loopController.CurrentTrackId;
 
-            if (preset == null || track == null)
+            if (preset == null || string.IsNullOrEmpty(trackId))
                 return;
 
-            var profile = _loopController.GetProfileForTrack(track.TrackId);
+            var track = SelectedSessionTrack ??
+                        SessionTracks.FirstOrDefault(t => t.TrackId == trackId);
+            var displayName = track?.DisplayName ?? trackId;
+
+            var profile = _loopController.GetProfileForTrack(trackId);
             profile.LockedBranches = preset.LockedBranches?
-                .Select(l => new BranchLock
-                {
-                    FromBeatIndex = l.FromBeatIndex,
-                    ToBeatIndex = l.ToBeatIndex
-                }).ToList() ?? new List<BranchLock>();
-            profile.LocksOnly = preset.LocksOnly;
+                .Select(CloneBranchLock).ToList() ?? new List<BranchLock>();
+
+            profile.RandomBranches = preset.RandomBranches;
+
+            var currentFingerprint = AnalysisCache.ComputeFingerprint(trackId);
+
+            if (!string.IsNullOrEmpty(preset.AnalysisFingerprint) &&
+                !string.IsNullOrEmpty(currentFingerprint) &&
+                !string.Equals(preset.AnalysisFingerprint, currentFingerprint, StringComparison.OrdinalIgnoreCase))
+            {
+                Log(
+                    $"Warning: branch preset \"{preset.Name}\" was saved against a different analysis " +
+                    $"(fingerprint mismatch). Locked beat indices may be wrong — re-lock after re-analyze.");
+            }
+
+            if (preset.SettingsSnapshot != null)
+            {
+                ApplySettingsSnapshot(preset.SettingsSnapshot);
+            }
 
             _loopRegionStore.Save(profile);
 
-            if (track.TrackId == _loopController.CurrentTrackId)
+            if (trackId == _loopController.CurrentTrackId)
             {
                 _loopController.ApplyProfile(profile);
-                JukeboxLocksOnly = preset.LocksOnly;
+                JukeboxRandomBranches = preset.RandomBranches;
             }
 
             RefreshRingLocks(profile);
-            Log($"Loaded branch preset \"{preset.Name}\" for {track.DisplayName}.");
+            Log($"Loaded branch preset \"{preset.Name}\" for {displayName}.");
+        }
+
+        private void ApplySettingsSnapshot(JukeboxSettings snapshot)
+        {
+            if (snapshot == null)
+                return;
+
+            _jukeboxSettingsModel.BranchSimilarityThresholdMax = snapshot.BranchSimilarityThresholdMax;
+            _jukeboxSettingsModel.BranchProbabilityMin = snapshot.BranchProbabilityMin;
+            _jukeboxSettingsModel.BranchProbabilityMax = snapshot.BranchProbabilityMax;
+            _jukeboxSettingsModel.BranchProbabilityRampPerBeat = snapshot.BranchProbabilityRampPerBeat;
+            _jukeboxSettingsModel.SeekLeadMs = snapshot.SeekLeadMs;
+            _jukeboxSettingsModel.AllowOnlyReverseBranches = snapshot.AllowOnlyReverseBranches;
+            _jukeboxSettingsModel.AllowOnlyLongBranches = snapshot.AllowOnlyLongBranches;
+            _jukeboxSettingsModel.LongBranchMinBeats = snapshot.LongBranchMinBeats;
+            _jukeboxSettingsModel.EnableEndLoop = snapshot.EnableEndLoop;
+
+            RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMax));
+            RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMaxText));
+            RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinPercent));
+            RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinText));
+            RaisePropertyChanged(nameof(JukeboxBranchProbabilityMaxPercent));
+            RaisePropertyChanged(nameof(JukeboxBranchProbabilityMaxText));
+            RaisePropertyChanged(nameof(JukeboxBranchRampPerBeatPercent));
+            RaisePropertyChanged(nameof(JukeboxBranchRampText));
+            RaisePropertyChanged(nameof(JukeboxSeekLeadMs));
+            RaisePropertyChanged(nameof(JukeboxSeekLeadMsText));
+            RaisePropertyChanged(nameof(JukeboxAllowOnlyReverseBranches));
+            RaisePropertyChanged(nameof(JukeboxAllowOnlyLongBranches));
+            RaisePropertyChanged(nameof(JukeboxEnableEndLoop));
+
+            PersistJukeboxSettings(invalidateGraph: true);
         }
 
         private void SaveBranchPreset()
@@ -1574,23 +1670,60 @@ namespace SpotifyWPF.ViewModel.Page
                 profile.LockPresets = new List<BranchLockPreset>();
 
             var name = $"Setup {profile.LockPresets.Count + 1}";
+            var fingerprint = AnalysisCache.ComputeFingerprint(trackId);
             var preset = new BranchLockPreset
             {
                 Name = name,
-                LocksOnly = JukeboxLocksOnly,
+                RandomBranches = JukeboxRandomBranches,
+                AnalysisFingerprint = fingerprint,
+                SettingsSnapshot = CloneJukeboxSettings(_jukeboxSettingsModel),
                 LockedBranches = profile.LockedBranches?
-                    .Select(l => new BranchLock
-                    {
-                        FromBeatIndex = l.FromBeatIndex,
-                        ToBeatIndex = l.ToBeatIndex
-                    }).ToList() ?? new List<BranchLock>()
+                    .Select(CloneBranchLock).ToList() ?? new List<BranchLock>()
             };
 
             profile.LockPresets.Add(preset);
             _loopRegionStore.Save(profile);
             RefreshBranchPresetsForSelection();
             SelectedBranchPreset = preset;
-            Log($"Saved branch preset \"{name}\" ({preset.LockedBranches.Count} locks).");
+            SaveBranchPresetCommand.RaiseCanExecuteChanged();
+            LoadBranchPresetCommand.RaiseCanExecuteChanged();
+            Log($"Saved tune + branches \"{name}\" ({preset.LockedBranches.Count} locks" +
+                (fingerprint != null ? ", fingerprint ok" : ", no analysis yet") + ").");
+        }
+
+        private static BranchLock CloneBranchLock(BranchLock source)
+        {
+            if (source == null)
+                return null;
+
+            // Clamp; missing JSON field deserializes via property initializer as 1.0.
+            var probability = Math.Max(0, Math.Min(1, source.Probability));
+
+            return new BranchLock
+            {
+                FromBeatIndex = source.FromBeatIndex,
+                ToBeatIndex = source.ToBeatIndex,
+                Probability = probability
+            };
+        }
+
+        private static JukeboxSettings CloneJukeboxSettings(JukeboxSettings source)
+        {
+            if (source == null)
+                return JukeboxSettings.CreateDefaults();
+
+            return new JukeboxSettings
+            {
+                BranchSimilarityThresholdMax = source.BranchSimilarityThresholdMax,
+                BranchProbabilityMin = source.BranchProbabilityMin,
+                BranchProbabilityMax = source.BranchProbabilityMax,
+                BranchProbabilityRampPerBeat = source.BranchProbabilityRampPerBeat,
+                SeekLeadMs = source.SeekLeadMs,
+                AllowOnlyReverseBranches = source.AllowOnlyReverseBranches,
+                AllowOnlyLongBranches = source.AllowOnlyLongBranches,
+                LongBranchMinBeats = source.LongBranchMinBeats,
+                EnableEndLoop = source.EnableEndLoop
+            };
         }
 
         private void SetJukeboxProbabilityMin(double value)
@@ -1615,7 +1748,7 @@ namespace SpotifyWPF.ViewModel.Page
             PersistJukeboxSettings();
         }
 
-        private void PersistJukeboxSettings()
+        private void PersistJukeboxSettings(bool invalidateGraph = false)
         {
             if (_sliderDragDepth > 0)
             {
@@ -1623,15 +1756,18 @@ namespace SpotifyWPF.ViewModel.Page
                 return;
             }
 
-            PersistJukeboxSettingsNow();
+            PersistJukeboxSettingsNow(invalidateGraph);
         }
 
-        private void PersistJukeboxSettingsNow()
+        private void PersistJukeboxSettingsNow(bool invalidateGraph = false)
         {
-            // Save raises SettingsChanged → LoopController.InvalidateGraphCache (rearms jukebox).
+            // Save raises SettingsChanged → LoopController rearms navigator.
             _jukeboxSettings.Save(_jukeboxSettingsModel);
 
             var trackId = _loopController.CurrentTrackId;
+
+            if (invalidateGraph)
+                _loopController.InvalidateGraphCache();
 
             if (!_jukeboxSuppressedForCapture && trackId != null)
                 RebuildBeatGraphForTrack(trackId, invalidateCache: false);
@@ -1813,10 +1949,22 @@ namespace SpotifyWPF.ViewModel.Page
                 if (restored != null && !ReferenceEquals(SelectedSessionTrack, restored))
                     SelectedSessionTrack = restored;
             }
+            else
+            {
+                var currentId = _loopController.CurrentTrackId ?? _currentPlay?.TrackId;
+                var playing = !string.IsNullOrEmpty(currentId)
+                    ? SessionTracks.FirstOrDefault(t => t.TrackId == currentId)
+                    : null;
+
+                if (playing != null)
+                    SelectedSessionTrack = playing;
+            }
 
             ClearSessionCommand?.RaiseCanExecuteChanged();
             PreviousSessionTrackCommand?.RaiseCanExecuteChanged();
             NextSessionTrackCommand?.RaiseCanExecuteChanged();
+            SaveBranchPresetCommand?.RaiseCanExecuteChanged();
+            LoadBranchPresetCommand?.RaiseCanExecuteChanged();
         }
 
         private bool CanAnalyzeInput()

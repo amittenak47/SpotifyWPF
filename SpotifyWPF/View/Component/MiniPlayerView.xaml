@@ -240,8 +240,8 @@
                                           Style="{StaticResource MiniPlayerLockToggleStyle}"
                                           HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
-                                          ToolTip="Tap: locks only · Drag: wheel"
-                                          IsChecked="{Binding JukeboxLocksOnly}"
+                                          ToolTip="Tap: random branches on/off · Drag: wheel"
+                                          IsChecked="{Binding JukeboxRandomBranches}"
                                           PreviewMouseLeftButtonDown="LockToggle_PreviewMouseLeftButtonDown"
                                           PreviewMouseMove="LockToggle_PreviewMouseMove"
                                           PreviewMouseLeftButtonUp="LockToggle_PreviewMouseLeftButtonUp">

@@ -86,11 +86,19 @@ namespace SpotifyWPF.Service.Prediction
             _store = store;
             _jukeboxSettings = jukeboxSettings;
 
-            _jukeboxSettings.SettingsChanged += (_, __) => InvalidateGraphCache();
+            _jukeboxSettings.SettingsChanged += OnJukeboxSettingsChanged;
 
             _playbackHost.StateChanged += OnStateChanged;
             _playbackHost.ActionFired += OnActionFired;
             _playbackHost.PositionUpdated += OnPositionUpdated;
+        }
+
+        private void OnJukeboxSettingsChanged(object sender, EventArgs e)
+        {
+            // Navigator-only settings (branch chance, reverse/long filters, seek lead) just re-arm.
+            // Topology changes (threshold, end-loop) clear the graph cache.
+            if (IsLoopActive && ActiveProfile?.Mode == LoopModes.Jukebox)
+                Rearm();
         }
 
         public bool IsLoopActive =>
@@ -190,6 +198,23 @@ namespace SpotifyWPF.Service.Prediction
 
             // Recreate on every rearm so branch-lock edits on the profile take effect immediately.
             _navigator = new BeatNavigator(graph, _jukeboxSettings.Get(), ActiveProfile);
+
+            if (_navigator.IsIdleWithoutLocks)
+            {
+                _playbackHost.DisarmAction();
+                LoopEvent?.Invoke(this,
+                    "Jukebox: random branches off and no locks — playing linearly" +
+                    (_jukeboxSettings.Get().EnableEndLoop ? " (end loop still active if a guard edge exists)." : "."));
+
+                // End-loop alone can still arm a late jump; plan it if possible.
+                if (_jukeboxSettings.Get().EnableEndLoop && graph.LastBranchPointIndex >= 0)
+                {
+                    PlanAndArmJump(_navigator.FindBeatIndexAtMs(_lastPositionMs));
+                    return;
+                }
+
+                return;
+            }
 
             if (!_navigator.CanJump)
             {

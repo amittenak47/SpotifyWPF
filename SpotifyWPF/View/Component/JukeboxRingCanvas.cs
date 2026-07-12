@@ -1018,6 +1018,26 @@ namespace SpotifyWPF.View.Component
             }
         }
 
+        private static bool TryGetLockProbability(IReadOnlyList<BranchLock> locks, int from, int to,
+            out double probability)
+        {
+            probability = 1.0;
+
+            if (locks == null)
+                return false;
+
+            foreach (var branchLock in locks)
+            {
+                if (branchLock.FromBeatIndex == from && branchLock.ToBeatIndex == to)
+                {
+                    probability = branchLock.Probability <= 0 ? 1.0 : branchLock.Probability;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static string FormatChainPreviewText(int inspect, int edgeCount, List<string> hopText)
         {
             var path = hopText.Count > 0 ? " · " + string.Join(" · ", hopText) : string.Empty;
@@ -1054,7 +1074,12 @@ namespace SpotifyWPF.View.Component
                 var highlight = chain[hop];
 
                 if (highlight >= 0)
-                    hopText.Add($"hop{hop}: {parent}→{highlight}");
+                {
+                    if (TryGetLockProbability(LockedBranches, parent, highlight, out var lockProb))
+                        hopText.Add($"hop{hop}: {parent}→{highlight} lock {lockProb * 100:0}%");
+                    else
+                        hopText.Add($"hop{hop}: {parent}→{highlight}");
+                }
 
                 if (highlight < 0)
                     break;
@@ -1121,7 +1146,12 @@ namespace SpotifyWPF.View.Component
                 }
 
                 if (highlight >= 0)
-                    hopText.Add($"hop{hop}: {parent}→{highlight}");
+                {
+                    if (TryGetLockProbability(locks, parent, highlight, out var lockProb))
+                        hopText.Add($"hop{hop}: {parent}→{highlight} lock {lockProb * 100:0}%");
+                    else
+                        hopText.Add($"hop{hop}: {parent}→{highlight}");
+                }
 
                 if (highlight < 0)
                     break;

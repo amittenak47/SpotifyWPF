@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json.Serialization;
 
 namespace SpotifyWPF.Model.Prediction
@@ -37,6 +38,24 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("longBranchMinBeats")]
         public int LongBranchMinBeats { get; set; } = 16;
 
+        /// <summary>
+        /// When true (default), the graph gets a guaranteed end-loop edge and the navigator forces
+        /// a backward jump at the last branch point so playback never runs off the end.
+        /// When false, the song can play out linearly.
+        /// </summary>
+        [JsonPropertyName("enableEndLoop")]
+        public bool EnableEndLoop { get; set; } = true;
+
         public static JukeboxSettings CreateDefaults() => new JukeboxSettings();
+
+        /// <summary>True when a settings change requires rebuilding the beat graph (not just re-arming).</summary>
+        public static bool AffectsGraphTopology(JukeboxSettings before, JukeboxSettings after)
+        {
+            if (before == null || after == null)
+                return true;
+
+            return Math.Abs(before.BranchSimilarityThresholdMax - after.BranchSimilarityThresholdMax) > 0.01 ||
+                   before.EnableEndLoop != after.EnableEndLoop;
+        }
     }
 }
