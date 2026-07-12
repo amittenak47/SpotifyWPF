@@ -67,6 +67,7 @@
     <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="MinHeight" Value="28"/>
+    <Setter Property="ToolTipService.IsEnabled" Value="False"/>
     <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItemStyle}"/>
     <Setter Property="Template">
       <Setter.Value>

@@ -64,15 +64,18 @@ namespace SpotifyWPF.View.Component
 
             if (!AlwaysScroll && textWidth <= hostWidth + 4)
             {
-                ScrollTransform.X = Math.Max(0, (hostWidth - textWidth) / 2);
+                // Fit: left-align like a window readout (not centered).
+                ScrollTransform.X = 0;
                 return;
             }
 
+            // Window-display scroll: enter from the right, exit to the left.
+            var gap = Math.Max(24, hostWidth * 0.25);
             var animation = new DoubleAnimation
             {
                 From = hostWidth,
-                To = -textWidth,
-                Duration = TimeSpan.FromSeconds(Math.Max(6, (hostWidth + textWidth) / 48)),
+                To = -textWidth - gap,
+                Duration = TimeSpan.FromSeconds(Math.Max(8, (hostWidth + textWidth) / 40)),
                 RepeatBehavior = RepeatBehavior.Forever
             };
 

@@ -112,8 +112,18 @@ namespace SpotifyWPF.View.Component
             if (!(DataContext is ViewModel.Page.PredictionPageViewModel vm))
                 return;
 
+            // Prefer the track under the cursor (not only the previously selected row).
+            var source = e.OriginalSource as DependencyObject;
+            while (source != null && !(source is ListBoxItem))
+                source = System.Windows.Media.VisualTreeHelper.GetParent(source);
+
+            if (source is ListBoxItem item && item.DataContext is Model.Prediction.LoopLabSessionTrack track)
+                vm.SelectedSessionTrack = track;
+
             if (vm.PlaySessionTrackCommand?.CanExecute(null) == true)
                 vm.PlaySessionTrackCommand.Execute(null);
+
+            e.Handled = true;
         }
 
         /// <summary>

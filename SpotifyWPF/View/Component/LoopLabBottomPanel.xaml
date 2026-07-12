@@ -239,12 +239,7 @@
                                              VerticalAlignment="Stretch"
                                              MinHeight="72"
                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                             MouseDoubleClick="SessionTracks_MouseDoubleClick"
-                                             ToolTip="Double-click a track to play">
-                                        <ListBox.InputBindings>
-                                            <MouseBinding MouseAction="LeftDoubleClick"
-                                                          Command="{Binding PlaySessionTrackCommand}"/>
-                                        </ListBox.InputBindings>
+                                             MouseDoubleClick="SessionTracks_MouseDoubleClick">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Grid Margin="2,4">
@@ -253,7 +248,7 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-                                                <StackPanel Grid.Column="0">
+                                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
                                                     <TextBlock Text="{Binding DisplayName}"
                                                                FontWeight="SemiBold"
                                                                TextTrimming="CharacterEllipsis"
@@ -264,20 +259,64 @@
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                                 </StackPanel>
                                                 <ToggleButton Grid.Column="1"
-                                                              Content="Local WAV"
-                                                              FontSize="10"
-                                                              Padding="8,2"
-                                                              MinHeight="22"
-                                                              Margin="8,0,0,0"
+                                                              Margin="0,0,8,0"
                                                               VerticalAlignment="Center"
+                                                              MinHeight="22"
+                                                              Padding="8,2"
+                                                              FontSize="10"
                                                               IsChecked="{Binding DataContext.UseLocalPlayback, RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                               IsEnabled="{Binding HasCapture}"
                                                               PreviewMouseLeftButtonDown="SessionLocalWav_PreviewMouseLeftButtonDown"
-                                                              ToolTip="Use this track's cached WAV for playback (no Spotify seek jitter). Toggle resets transport — press Play to start."/>
+                                                              ToolTipService.IsEnabled="False">
+                                                    <ToggleButton.Style>
+                                                        <Style TargetType="ToggleButton">
+                                                            <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+                                                            <Setter Property="BorderThickness" Value="1"/>
+                                                            <Setter Property="Cursor" Value="Hand"/>
+                                                            <Setter Property="ToolTipService.IsEnabled" Value="False"/>
+                                                            <Setter Property="Template">
+                                                                <Setter.Value>
+                                                                    <ControlTemplate TargetType="ToggleButton">
+                                                                        <Border x:Name="Bd"
+                                                                                Background="{TemplateBinding Background}"
+                                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                Padding="{TemplateBinding Padding}"
+                                                                                SnapsToDevicePixels="True">
+                                                                            <ContentPresenter HorizontalAlignment="Center"
+                                                                                              VerticalAlignment="Center"
+                                                                                              RecognizesAccessKey="True"/>
+                                                                        </Border>
+                                                                        <ControlTemplate.Triggers>
+                                                                            <Trigger Property="IsChecked" Value="True">
+                                                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppSelectedBrush}"/>
+                                                                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
+                                                                                <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+                                                                            </Trigger>
+                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
+                                                                            </Trigger>
+                                                                            <Trigger Property="IsEnabled" Value="False">
+                                                                                <Setter Property="Opacity" Value="0.4"/>
+                                                                            </Trigger>
+                                                                        </ControlTemplate.Triggers>
+                                                                    </ControlTemplate>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                            <Setter Property="Content" Value="Spotify"/>
+                                                            <Style.Triggers>
+                                                                <Trigger Property="IsChecked" Value="True">
+                                                                    <Setter Property="Content" Value="Local WAV"/>
+                                                                </Trigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </ToggleButton.Style>
+                                                </ToggleButton>
                                                 <TextBlock Grid.Column="2"
                                                            Text="{Binding StatusText}"
                                                            VerticalAlignment="Center"
-                                                           Margin="10,0,0,0"
                                                            FontSize="11"
                                                            Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                             </Grid>
@@ -294,6 +333,102 @@
                                               VerticalAlignment="Stretch"
                                               HorizontalScrollBarVisibility="Disabled">
                                     <StackPanel>
+                                        <Expander Header="Tuning tutorial — how these controls shape hops"
+                                                  IsExpanded="False"
+                                                  Margin="0,0,0,12"
+                                                  Foreground="{DynamicResource AppForegroundBrush}">
+                                            <Border Margin="0,8,0,0"
+                                                    Padding="10,8"
+                                                    Background="#33000000"
+                                                    BorderBrush="{DynamicResource AppBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4">
+                                                <StackPanel>
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                                               Text="What you are tuning"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="The ring is a beat graph: similar moments in the song become possible jump targets. Tuning changes which edges exist, how often random jumps fire, and whether landings stay on the same musical phase. Sliders rebuild from cached analysis (no re-capture). Use Session → Analyze for a new track; Delete analysis + Analyze to redo features."/>
+
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                                               Text="Quick start (smooth Infinite Jukebox)"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="1) Branch quality ~35–50 (lower = only the closest matches). 2) Dwell 12–16 so each hop plays out before another. 3) Bar phase = Soft or Hard. 4) For long drum phrases (Clubbed to Death, Furious Angels) set Phrase align to 8 or 16 and Hard phase. 5) Keep End loop + Allow random jumps on unless you are authoring locks only."/>
+
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                                               Text="Who jumps, and how often"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Branch quality percentile — distance cap for Classic edges. Lower = stricter / smoother; higher = more adventurous (and riskier) hops. Rebuilds the graph."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Branch probability min / max — chance range for taking a random hop when a beat has candidates. Min is the floor after a jump; max is the ceiling as chance ramps."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Ramp-up per beat — how fast chance climbs toward max while playing linearly. Higher = more restless."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Dwell after hop — forced linear beats after a jump before another random hop is considered (locks and end-loop still fire). Use ~16 for one phrase of stability."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Allow random jumps — off = only your locked branches (+ end loop if on). On = random walk plus locks at their probabilities."/>
+
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                                               Text="Bar / phrase alignment (drums that feel “mid-bar”)"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="BeatThis places beats and usually 4-beat downbeats. Classic similarity can still match a drum hit that is on the grid but not at the same place in an 8- or 16-beat groove — it sounds right on the beat and wrong musically."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Bar phase penalty — Off ignores bar position; Soft prefers same beat-in-bar; Hard only keeps same beat-in-bar edges (rebuilds graph)."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Phrase align — 0 = off. Set 8 or 16 so hops only land on the same phase within that hypermeasure. Pair with Hard phase + dwell 16 for Matrix-style long drum phrases."/>
+
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                                               Text="Which edge is chosen"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Softmax temperature τ — lower = greedier nearest match; higher = more random among candidates."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Visit novelty λ — penalizes recently visited beat pockets so the walk explores more of the song."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Preference weight — Slice 6; reranks candidates from scrub/choice history (0 = off)."/>
+
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                                               Text="Graph topology toggles"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Mutual kNN — keep only reciprocal neighbors (safer components; can orphan unique passages). Bridge components — add cheapest rescue edges so orphans stay reachable (drawn cooler on the ring). Essentia region gate — when embeddings exist, Classic hops stay in nearby regions."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Only jump backward / 16+ beats away — navigator filters (long-branch filter does not block the end-loop escape). End loop — guaranteed jump before the track finishes."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Seek lead — fire seeks slightly early to hide Spotify SDK latency (less critical on Local WAV)."/>
+
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                                               Text="Authoring on the ring"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Click a beat → hover arrows for analysis → click arrows to chain hops → ✓ confirms locks (bottom-right). Clear locks / Reset plays manage locks and coverage bars. Branch preview hops = how many steps glow ahead. SSM = full beats×beats map (bright = similar / repeating sections)."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Save tune + branches from Session (Tune preset) so a settings snapshot + locks stay tied to the analysis fingerprint."/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Expander>
+
                                         <local:TuningSliderRow Label="Branch quality percentile (lower = stricter / smoother)"
                                                                ValueText="{Binding JukeboxSimilarityThresholdMaxText}"
                                                                Minimum="15"

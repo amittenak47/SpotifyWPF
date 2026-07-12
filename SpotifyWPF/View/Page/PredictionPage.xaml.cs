@@ -20,7 +20,7 @@ namespace SpotifyWPF.View.Page
     /// </summary>
     public partial class PredictionPage
     {
-        private const double HoverDimOpacity = 0.18;
+        private const double HoverDimOpacity = 0.35;
         private const double HoverFullOpacity = 1.0;
         private const double HoverFadeMs = 180;
         private const double MinStageZoom = 0.75;

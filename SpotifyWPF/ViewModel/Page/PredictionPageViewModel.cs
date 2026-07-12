@@ -896,9 +896,9 @@ namespace SpotifyWPF.ViewModel.Page
             set => Set(ref _jukeboxBranchChanceText, value);
         }
 
-        private string _jukeboxBranchChanceText = "Branch chance: —";
+        private string _jukeboxBranchChanceText = "—";
 
-        private string _currentTrackCacheStatusText = "Capture · Analysis —";
+        private string _currentTrackCacheStatusText = "—";
 
         /// <summary>Session-style capture/analysis badge for the active track (HUD).</summary>
         public string CurrentTrackCacheStatusText
@@ -907,7 +907,7 @@ namespace SpotifyWPF.ViewModel.Page
             private set => Set(ref _currentTrackCacheStatusText, value);
         }
 
-        private string _currentTrackAnalysisDetailText = "Analysis: not probed yet";
+        private string _currentTrackAnalysisDetailText = "—";
 
         /// <summary>Per-track analysis path / tracker / metric for the HUD.</summary>
         public string CurrentTrackAnalysisDetailText
@@ -1253,17 +1253,21 @@ namespace SpotifyWPF.ViewModel.Page
             RaisePropertyChanged(nameof(UseLocalPlayback));
             RaisePropertyChanged(nameof(PlaybackSourceLabel));
             DeviceText = desired == JukeboxPlaybackSource.Local
-                ? "Device: Local WAV"
+                ? "Local WAV"
                 : (_playbackHost.IsReady
-                    ? $"Device: SpotifyWPF Loop Lab ({_playbackHost.DeviceId})"
-                    : "Device: —");
+                    ? $"Spotify ({_playbackHost.DeviceId})"
+                    : "Spotify");
 
-            // Clear stale "still playing" ring state until the new transport posts its own.
+            // Clear stale "still playing" state so Play starts fresh on the new source
+            // (Resume after a source switch is not valid).
+            FinalizeCurrentPlay(userSkipped: true);
             IsPaused = true;
             PositionMs = 0;
             RaisePropertyChanged(nameof(ShowPauseIcon));
+            RaisePropertyChanged(nameof(SessionPlayButtonText));
             RaisePropertyChanged(nameof(ScrubberPositionMs));
             RaisePropertyChanged(nameof(PositionText));
+            NotifyNowPlayingDisplayChanged();
             TogglePlayPauseCommand.RaiseCanExecuteChanged();
             PlaySessionTrackCommand.RaiseCanExecuteChanged();
             RingScrubToCommand.RaiseCanExecuteChanged();
@@ -1328,8 +1332,8 @@ namespace SpotifyWPF.ViewModel.Page
 
             if (string.IsNullOrEmpty(trackId))
             {
-                CurrentTrackCacheStatusText = "No track selected";
-                CurrentTrackAnalysisDetailText = AnalysisSourceText ?? "Analysis: not probed yet";
+                CurrentTrackCacheStatusText = "—";
+                CurrentTrackAnalysisDetailText = "—";
                 UpdateLiveBranchChanceText();
                 return;
             }
@@ -1344,9 +1348,9 @@ namespace SpotifyWPF.ViewModel.Page
                 CurrentTrackCacheStatusText = "Capturing / analyzing…";
             else
             {
-                var capture = hasCapture ? "Capture" : "No capture";
-                var analysisLabel = hasAnalysis ? "Analysis" : "No analysis";
-                CurrentTrackCacheStatusText = $"{capture} · {analysisLabel}";
+                var capture = hasCapture ? "Ready" : "Missing";
+                var analysisLabel = hasAnalysis ? "Ready" : "Missing";
+                CurrentTrackCacheStatusText = $"capture {capture} · analysis {analysisLabel}";
             }
 
             if (hasAnalysis)
@@ -1360,11 +1364,11 @@ namespace SpotifyWPF.ViewModel.Page
                     ? "cached"
                     : analysis.SourceType;
                 CurrentTrackAnalysisDetailText =
-                    $"Analysis: {source} · {tracker} · {metric} · {analysis.Beats.Count} beats";
+                    $"{source} · {tracker} · {metric} · {analysis.Beats.Count} beats";
             }
             else
             {
-                CurrentTrackAnalysisDetailText = AnalysisSourceText ?? "Analysis: none for this track";
+                CurrentTrackAnalysisDetailText = "none for this track";
             }
 
             UpdateLiveBranchChanceText();
@@ -1383,11 +1387,9 @@ namespace SpotifyWPF.ViewModel.Page
             }
 
             if (chance.HasValue)
-                JukeboxBranchChanceText = $"Branch chance: {chance.Value:P0}{phase}";
+                JukeboxBranchChanceText = $"{chance.Value:P0}{phase}";
             else
-                JukeboxBranchChanceText = string.IsNullOrEmpty(phase)
-                    ? "Branch chance: —"
-                    : $"Branch chance: —{phase}";
+                JukeboxBranchChanceText = string.IsNullOrEmpty(phase) ? "—" : $"—{phase}";
         }
 
         public ObservableCollection<ScoredTrack> Predictions { get; } =
@@ -1871,7 +1873,7 @@ namespace SpotifyWPF.ViewModel.Page
                     }
 
                     _pendingPlaySource = source;
-                    DeviceText = "Device: Local WAV";
+                    DeviceText = "Local WAV";
                     Status = "Playing locally (cached WAV).";
                     Log($"Local WAV playback started for {trackId}.");
                 }
@@ -1944,7 +1946,7 @@ namespace SpotifyWPF.ViewModel.Page
         {
             RunOnUiThread(() =>
             {
-                DeviceText = $"Device: SpotifyWPF Loop Lab ({_playbackHost.DeviceId})";
+                DeviceText = $"Spotify ({_playbackHost.DeviceId})";
                 Status = "Player ready.";
                 Log("Web Playback SDK device is ready.");
                 TogglePlayPauseCommand.RaiseCanExecuteChanged();
@@ -2189,8 +2191,8 @@ namespace SpotifyWPF.ViewModel.Page
                 var chance = _loopController.NavigatorBranchChance;
                 var suffix = chance.HasValue ? $" · now {chance.Value:P0}" : "";
                 JukeboxBranchChanceText = e.IsPlanned
-                    ? $"Branch chance: planning (dist {e.BranchDistance:0}){suffix}"
-                    : $"Branch chance: jumped (dist {e.BranchDistance:0}){suffix}";
+                    ? $"planning (dist {e.BranchDistance:0}){suffix}"
+                    : $"jumped (dist {e.BranchDistance:0}){suffix}";
             });
         }
 
@@ -2969,15 +2971,13 @@ namespace SpotifyWPF.ViewModel.Page
             if (track == null || !CanPlayTransport())
                 return;
 
-            if (string.Equals(track.TrackId, ActivePlaybackTrackId, StringComparison.Ordinal) && !IsPaused)
+            // Pause only when this track is actively playing on the current transport.
+            // After a Local WAV / Spotify switch we clear play state and must PlayTrackAsync,
+            // not Resume (stale transport).
+            var isCurrent = string.Equals(track.TrackId, ActivePlaybackTrackId, StringComparison.Ordinal);
+            if (isCurrent && !IsPaused && _currentPlay != null)
             {
                 _transport.Pause();
-                return;
-            }
-
-            if (string.Equals(track.TrackId, ActivePlaybackTrackId, StringComparison.Ordinal) && IsPaused)
-            {
-                _transport.Resume();
                 return;
             }
 

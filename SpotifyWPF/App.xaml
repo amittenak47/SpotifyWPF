@@ -8,6 +8,7 @@
       <vm:ViewModelLocator x:Key="Locator" d:IsDataSource="True" xmlns:vm="clr-namespace:SpotifyWPF.ViewModel" />
       <converter:StatusActionConverter x:Key="StatusActionConverter"/>
 
+      <!-- Suppress OS ToolTip popups (white boxes). Custom hover (opacity zones, ring HUD) is unaffected. -->
       <Style TargetType="{x:Type FrameworkElement}">
         <Setter Property="ToolTipService.IsEnabled" Value="False"/>
       </Style>
@@ -16,23 +17,28 @@
         <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
         <Setter Property="TextElement.Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
       </Style>
       <Style TargetType="{x:Type UserControl}">
         <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
         <Setter Property="TextElement.Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
       </Style>
       <Style TargetType="{x:Type TextBlock}">
         <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
       </Style>
       <Style TargetType="{x:Type Label}">
         <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
       </Style>
       <Style TargetType="{x:Type Button}">
         <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
         <Setter Property="Padding" Value="12,4"/>
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="{x:Type Button}">
@@ -61,20 +67,26 @@
           </Setter.Value>
         </Setter>
       </Style>
+      <Style TargetType="{x:Type ToggleButton}">
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
+      </Style>
       <Style TargetType="{x:Type CheckBox}">
         <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
       </Style>
       <Style TargetType="{x:Type TabControl}">
         <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
         <Setter Property="Padding" Value="0"/>
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
       </Style>
       <Style TargetType="{x:Type TabItem}">
         <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource AppMutedForegroundBrush}"/>
         <Setter Property="Padding" Value="14,6"/>
         <Setter Property="Margin" Value="0,0,4,0"/>
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="{x:Type TabItem}">
@@ -113,13 +125,16 @@
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
         <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
       </Style>
       <Style TargetType="{x:Type TreeViewItem}">
         <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
         <Setter Property="Padding" Value="2"/>
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
       </Style>
       <Style TargetType="{x:Type StatusBarItem}">
         <Setter Property="Foreground" Value="{DynamicResource AppMutedForegroundBrush}"/>
+        <Setter Property="ToolTipService.IsEnabled" Value="False"/>
       </Style>
     </ResourceDictionary>
   </Application.Resources>
