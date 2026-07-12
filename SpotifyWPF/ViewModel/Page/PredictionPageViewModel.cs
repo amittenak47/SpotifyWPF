@@ -137,7 +137,18 @@ namespace SpotifyWPF.ViewModel.Page
                 System.Console.WriteLine($"Failed to load Loop Lab session tracks: {ex.Message}");
             }
 
-            _loopController.LoopEvent += (_, message) => Log(message);
+            _loopController.LoopEvent += (_, message) =>
+            {
+                Log(message);
+
+                if (message != null &&
+                    (message.IndexOf("preference", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     message.IndexOf("jumped beat", StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    RaisePropertyChanged(nameof(BranchPreferenceStatusText));
+                    ClearBranchPreferencesCommand?.RaiseCanExecuteChanged();
+                }
+            };
             _loopController.JukeboxJump += OnJukeboxJump;
 
             _playbackHost.PlayerReady += OnPlayerReady;
@@ -187,6 +198,8 @@ namespace SpotifyWPF.ViewModel.Page
             RingScrubToCommand = new RelayCommand<long>(ScrubToPositionMs, ms => DurationMs > 0 && CanPlayTransport());
             EndRingScrubCommand = new RelayCommand(EndScrub);
             ClearRingLocksCommand = new RelayCommand(ClearRingLocks);
+            ClearBranchPreferencesCommand = new RelayCommand(ClearBranchPreferences,
+                () => _loopController.PreferenceEdgeCount > 0);
             ResetRingPlaysCommand = new RelayCommand(() => RingResetPlaysToken++);
             StopPlaybackCommand = new RelayCommand(async () => await StopPlaybackAsync(), CanStopPlayback);
             LoadBranchPresetCommand = new RelayCommand(LoadSelectedBranchPreset, CanLoadBranchPreset);
@@ -864,6 +877,31 @@ namespace SpotifyWPF.ViewModel.Page
 
         public string JukeboxPreferenceWeightText =>
             $"w_pref {_jukeboxSettingsModel.PreferenceWeight * 100:0.#}%";
+
+        public double JukeboxPreferenceSkipWindowSeconds
+        {
+            get => Math.Max(0.5, _jukeboxSettingsModel.PreferenceSkipWindowMs / 1000.0);
+            set
+            {
+                var next = (int)Math.Round(Math.Max(0.5, Math.Min(30, value)) * 1000);
+
+                if (_jukeboxSettingsModel.PreferenceSkipWindowMs == next)
+                    return;
+
+                _jukeboxSettingsModel.PreferenceSkipWindowMs = next;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(JukeboxPreferenceSkipWindowText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string JukeboxPreferenceSkipWindowText =>
+            $"skip window {_jukeboxSettingsModel.PreferenceSkipWindowMs / 1000.0:0.#}s";
+
+        public string BranchPreferenceStatusText =>
+            _loopController.PreferenceEdgeCount <= 0
+                ? "No preference labels yet"
+                : $"{_loopController.PreferenceEdgeCount} labeled branch edge(s)";
 
         public bool JukeboxEssentiaRegionGate
         {
@@ -1559,6 +1597,8 @@ namespace SpotifyWPF.ViewModel.Page
 
         public RelayCommand ClearRingLocksCommand { get; }
 
+        public RelayCommand ClearBranchPreferencesCommand { get; }
+
         public RelayCommand ResetRingPlaysCommand { get; }
 
         public RelayCommand StopPlaybackCommand { get; }
@@ -1769,6 +1809,8 @@ namespace SpotifyWPF.ViewModel.Page
             _loopController.NotifyPlaybackSeek(_scrubPositionMs);
             RaisePropertyChanged(nameof(ScrubberPositionMs));
             RaisePropertyChanged(nameof(PositionText));
+            RaisePropertyChanged(nameof(BranchPreferenceStatusText));
+            ClearBranchPreferencesCommand?.RaiseCanExecuteChanged();
             Log($"Scrubbed to {FormatMs(_scrubPositionMs)} — replanned jukebox from here.", verbose: true);
         }
 
@@ -2257,6 +2299,14 @@ namespace SpotifyWPF.ViewModel.Page
             Log("Ring: cleared all locked branches.");
         }
 
+        private void ClearBranchPreferences()
+        {
+            _loopController.ClearBranchPreferences();
+            RaisePropertyChanged(nameof(BranchPreferenceStatusText));
+            ClearBranchPreferencesCommand?.RaiseCanExecuteChanged();
+            Log("Jukebox: cleared preference labels (w_pref has nothing to steer until new hops/scrubs).");
+        }
+
         private void RefreshRingLocks(LoopProfile profile)
         {
             RingLockedBranches = profile?.LockedBranches?.ToList()
@@ -2408,6 +2458,9 @@ namespace SpotifyWPF.ViewModel.Page
             _jukeboxSettingsModel.UseMutualKnn = snapshot.UseMutualKnn;
             _jukeboxSettingsModel.EnableSccBridges = snapshot.EnableSccBridges;
             _jukeboxSettingsModel.PreferenceWeight = snapshot.PreferenceWeight;
+            _jukeboxSettingsModel.PreferenceSkipWindowMs = snapshot.PreferenceSkipWindowMs > 0
+                ? snapshot.PreferenceSkipWindowMs
+                : 8000;
             _jukeboxSettingsModel.EssentiaRegionGate = snapshot.EssentiaRegionGate;
             _jukeboxSettingsModel.GateRegionNeighborCount = snapshot.GateRegionNeighborCount;
 
@@ -2426,6 +2479,9 @@ namespace SpotifyWPF.ViewModel.Page
             RaisePropertyChanged(nameof(JukeboxEnableSccBridges));
             RaisePropertyChanged(nameof(JukeboxPreferenceWeightPercent));
             RaisePropertyChanged(nameof(JukeboxPreferenceWeightText));
+            RaisePropertyChanged(nameof(JukeboxPreferenceSkipWindowSeconds));
+            RaisePropertyChanged(nameof(JukeboxPreferenceSkipWindowText));
+            RaisePropertyChanged(nameof(BranchPreferenceStatusText));
             RaisePropertyChanged(nameof(JukeboxEssentiaRegionGate));
             RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinPercent));
             RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinText));
@@ -2550,6 +2606,7 @@ namespace SpotifyWPF.ViewModel.Page
                 UseMutualKnn = source.UseMutualKnn,
                 EnableSccBridges = source.EnableSccBridges,
                 PreferenceWeight = source.PreferenceWeight,
+                PreferenceSkipWindowMs = source.PreferenceSkipWindowMs,
                 EssentiaRegionGate = source.EssentiaRegionGate,
                 GateRegionNeighborCount = source.GateRegionNeighborCount
             };

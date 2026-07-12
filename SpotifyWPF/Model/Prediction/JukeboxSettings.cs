@@ -118,9 +118,16 @@ namespace SpotifyWPF.Model.Prediction
 
         /// <summary>
         /// Slice 6: weight for preference scores when re-ranking candidates (0 = off). Does not add edges.
+        /// Small default so scrub/choice history gently steers Softmax once labels exist.
         /// </summary>
         [JsonPropertyName("preferenceWeight")]
-        public double PreferenceWeight { get; set; } = 0;
+        public double PreferenceWeight { get; set; } = 0.2;
+
+        /// <summary>
+        /// Slice 6: user scrub within this many ms after a hop lands counts as a skip negative.
+        /// </summary>
+        [JsonPropertyName("preferenceSkipWindowMs")]
+        public int PreferenceSkipWindowMs { get; set; } = 8000;
 
         /// <summary>
         /// Slice 5: when region embeddings exist, only allow Classic hops whose region distance

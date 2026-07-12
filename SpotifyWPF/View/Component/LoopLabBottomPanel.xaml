@@ -401,7 +401,7 @@
                                                                Text="Visit novelty λ — penalizes recently visited beat pockets so the walk explores more of the song."/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                                               Text="Preference weight — Slice 6; reranks candidates from scrub/choice history (0 = off)."/>
+                                                               Text="Preference weight — Slice 6; Softmax adds w_pref·score from pairwise labels (chosen ≻ alternatives; scrub within the skip window after a hop = negative). Does not create new edges. 0 = off."/>
 
                                                     <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
                                                                Text="Graph topology toggles"
@@ -491,6 +491,20 @@
                                                                Minimum="0"
                                                                Maximum="50"
                                                                Value="{Binding JukeboxPreferenceWeightPercent}"/>
+                                        <local:TuningSliderRow Label="Preference skip window (scrub after hop = negative)"
+                                                               ValueText="{Binding JukeboxPreferenceSkipWindowText}"
+                                                               Minimum="1"
+                                                               Maximum="20"
+                                                               Value="{Binding JukeboxPreferenceSkipWindowSeconds}"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                            <Button Content="Clear preferences" MinWidth="120"
+                                                    Command="{Binding ClearBranchPreferencesCommand}"
+                                                    ToolTip="Wipe pairwise branch preference labels (branch-preferences.json)."/>
+                                            <TextBlock Text="{Binding BranchPreferenceStatusText}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="12,0,0,0"
+                                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                        </StackPanel>
 
                                         <CheckBox Content="Only jump backward (earlier in the song)"
                                                   Foreground="{DynamicResource AppForegroundBrush}"

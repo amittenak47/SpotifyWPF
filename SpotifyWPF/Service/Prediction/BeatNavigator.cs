@@ -68,6 +68,16 @@ namespace SpotifyWPF.Service.Prediction
 
         public int LastJumpToBeat { get; private set; } = -1;
 
+        /// <summary>UTC when the last hop actually fired (not when it was planned).</summary>
+        private DateTime _lastJumpFiredUtc = DateTime.MinValue;
+
+        /// <summary>Pending pairwise label recorded only when the hop fires.</summary>
+        private int _pendingChoiceFrom = -1;
+
+        private int _pendingChoiceTo = -1;
+
+        private int[] _pendingAlternatives;
+
         public BeatGraph Graph { get; }
 
         public double CurrentBranchChance => _currentBranchChance;
@@ -452,18 +462,14 @@ namespace SpotifyWPF.Service.Prediction
         private JukeboxJump MakeJump(int fromIndex, BeatEdge edge, IReadOnlyList<BeatEdge> candidates)
         {
             RememberDestination(edge.DestinationIndex);
-            LastJumpFromBeat = fromIndex;
-            LastJumpToBeat = edge.DestinationIndex;
             _beatsSinceJump = 0;
 
-            if (_preferences != null && candidates != null)
-            {
-                _preferences.RecordChoice(
-                    _trackId,
-                    fromIndex,
-                    edge.DestinationIndex,
-                    candidates.Select(c => c.DestinationIndex));
-            }
+            // Defer pairwise labels until the hop actually fires (replan before fire must not label).
+            _pendingChoiceFrom = fromIndex;
+            _pendingChoiceTo = edge.DestinationIndex;
+            _pendingAlternatives = candidates == null
+                ? Array.Empty<int>()
+                : candidates.Select(c => c.DestinationIndex).ToArray();
 
             var target = Graph.Beats[edge.DestinationIndex];
             var triggerMs = Graph.Beats[fromIndex].EndMs - _settings.SeekLeadMs;
@@ -479,6 +485,33 @@ namespace SpotifyWPF.Service.Prediction
                 SeekToMs = target.StartMs,
                 BranchDistance = edge.Distance
             };
+        }
+
+        /// <summary>
+        /// Call when a planned hop actually seeks. Commits the pairwise preference label and
+        /// starts the skip-negative window.
+        /// </summary>
+        public void NotifyJumpFired(int fromBeatIndex, int toBeatIndex)
+        {
+            LastJumpFromBeat = fromBeatIndex;
+            LastJumpToBeat = toBeatIndex;
+            _lastJumpFiredUtc = DateTime.UtcNow;
+
+            if (_preferences == null)
+                return;
+
+            if (_pendingChoiceFrom == fromBeatIndex && _pendingChoiceTo == toBeatIndex)
+            {
+                _preferences.RecordChoice(
+                    _trackId,
+                    fromBeatIndex,
+                    toBeatIndex,
+                    _pendingAlternatives);
+            }
+
+            _pendingChoiceFrom = -1;
+            _pendingChoiceTo = -1;
+            _pendingAlternatives = null;
         }
 
         private void RememberDestination(int destinationIndex, bool countVisit = true)
@@ -539,13 +572,38 @@ namespace SpotifyWPF.Service.Prediction
         public void ImportBeatsSinceJump(int value) =>
             _beatsSinceJump = Math.Max(0, value);
 
-        /// <summary>Record a scrub/skip shortly after the last hop as a preference negative.</summary>
-        public void NotifySkipAfterLastJump()
+        /// <summary>
+        /// Record a scrub/skip shortly after the last hop as a preference negative.
+        /// Only counts inside PreferenceSkipWindowMs after the hop fired.
+        /// </summary>
+        public bool NotifySkipAfterLastJump()
         {
             if (_preferences == null || LastJumpFromBeat < 0 || LastJumpToBeat < 0)
-                return;
+                return false;
+
+            if (_lastJumpFiredUtc == DateTime.MinValue)
+                return false;
+
+            var windowMs = Math.Max(500, _settings.PreferenceSkipWindowMs > 0
+                ? _settings.PreferenceSkipWindowMs
+                : 8000);
+
+            if ((DateTime.UtcNow - _lastJumpFiredUtc).TotalMilliseconds > windowMs)
+            {
+                ClearLastJumpPreferenceWindow();
+                return false;
+            }
 
             _preferences.RecordSkipAfterJump(_trackId, LastJumpFromBeat, LastJumpToBeat);
+            ClearLastJumpPreferenceWindow();
+            return true;
+        }
+
+        private void ClearLastJumpPreferenceWindow()
+        {
+            LastJumpFromBeat = -1;
+            LastJumpToBeat = -1;
+            _lastJumpFiredUtc = DateTime.MinValue;
         }
     }
 }

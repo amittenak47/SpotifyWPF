@@ -25,6 +25,17 @@ namespace SpotifyWPF.Service.Prediction
             Load();
         }
 
+        public string StorePath => _path;
+
+        public int EdgeCount
+        {
+            get
+            {
+                lock (_gate)
+                    return _edges.Count;
+            }
+        }
+
         public static string PackKey(string trackId, int from, int to) =>
             $"{trackId ?? ""}|{from}->{to}";
 
@@ -78,6 +89,33 @@ namespace SpotifyWPF.Service.Prediction
 
                 var total = stats.Chosen + stats.Rejected;
                 return (stats.Chosen - stats.Rejected) / (total + 1.0);
+            }
+        }
+
+        public void ClearAll()
+        {
+            lock (_gate)
+            {
+                _edges.Clear();
+                SaveUnlocked();
+            }
+        }
+
+        public void ClearTrack(string trackId)
+        {
+            if (string.IsNullOrEmpty(trackId))
+                return;
+
+            var prefix = trackId + "|";
+
+            lock (_gate)
+            {
+                var keys = _edges.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+
+                foreach (var key in keys)
+                    _edges.Remove(key);
+
+                SaveUnlocked();
             }
         }
 

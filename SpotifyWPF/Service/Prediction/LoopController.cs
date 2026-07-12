@@ -44,6 +44,12 @@ namespace SpotifyWPF.Service.Prediction
         /// </summary>
         void NotifyPlaybackSeek(long positionMs);
 
+        /// <summary>Slice 6: how many labeled branch edges are stored.</summary>
+        int PreferenceEdgeCount { get; }
+
+        /// <summary>Slice 6: wipe pairwise preference memory.</summary>
+        void ClearBranchPreferences();
+
         /// <summary>
         /// Returns the (cached) beat graph for a track, building it from the cached analysis when
         /// needed. Null when no analysis exists yet. Used by the ring UI — the graph itself stays
@@ -315,6 +321,8 @@ namespace SpotifyWPF.Service.Prediction
                 _playbackHost.Seek(jump.SeekToMs);
                 _lastPositionMs = jump.SeekToMs;
 
+                _navigator?.NotifyJumpFired(jump.FromBeatIndex, jump.TargetBeatIndex);
+
                 LoopEvent?.Invoke(this,
                     $"Jukebox: jumped beat {jump.FromBeatIndex} → {jump.TargetBeatIndex}.");
                 RaiseJukeboxJump(jump, planned: false);
@@ -362,7 +370,12 @@ namespace SpotifyWPF.Service.Prediction
             _playbackHost.DisarmAction();
 
             // Scrub shortly after a hop = preference negative (Slice 6).
-            _navigator?.NotifySkipAfterLastJump();
+            if (_navigator != null && _navigator.NotifySkipAfterLastJump())
+            {
+                LoopEvent?.Invoke(this,
+                    "Jukebox: scrub after hop → preference negative " +
+                    $"(window {_jukeboxSettings.Get().PreferenceSkipWindowMs}ms).");
+            }
 
             if (!IsLoopActive)
                 return;
@@ -380,6 +393,14 @@ namespace SpotifyWPF.Service.Prediction
             Rearm();
         }
 
+        public int PreferenceEdgeCount => _preferences.EdgeCount;
+
+        public void ClearBranchPreferences()
+        {
+            _preferences.ClearAll();
+            LoopEvent?.Invoke(this, "Jukebox: cleared branch preference memory.");
+        }
+
         private void OnJukeboxActionFired(ArmedActionFiredEventArgs e)
         {
             if (e.ActionId != JukeboxActionId || _navigator == null)
@@ -389,6 +410,8 @@ namespace SpotifyWPF.Service.Prediction
 
             if (jump != null)
             {
+                _navigator.NotifyJumpFired(jump.FromBeatIndex, jump.TargetBeatIndex);
+
                 var endLoopNote = ActiveProfile?.Mode == LoopModes.Jukebox &&
                                   _jukeboxSettings.Get().EnableEndLoop &&
                                   _navigator?.Graph != null &&
