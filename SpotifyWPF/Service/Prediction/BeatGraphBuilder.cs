@@ -92,6 +92,22 @@ namespace SpotifyWPF.Service.Prediction
             if (analysis.Beats == null || analysis.Beats.Count == 0)
                 throw new InvalidOperationException("Analysis has no beats.");
 
+            var metricMode = (settings.GraphMetricMode ?? "auto").Trim().ToLowerInvariant();
+
+            if (metricMode == "legacy")
+                return BuildLegacy(analysis, settings);
+
+            if (metricMode == "classic")
+            {
+                if (!analysis.HasClassicFeatures)
+                    throw new InvalidOperationException(
+                        "Graph metric is Classic but this analysis has no stackedFeatures. " +
+                        "Re-analyze the track (Delete cache → Analyze).");
+
+                return BuildClassic(analysis, settings);
+            }
+
+            // auto
             if (analysis.HasClassicFeatures)
                 return BuildClassic(analysis, settings);
 

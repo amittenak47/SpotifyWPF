@@ -842,6 +842,94 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
+        public ObservableCollection<string> BeatTrackerModeOptions { get; } =
+            new ObservableCollection<string> { "Auto", "BeatThis", "DP (librosa)" };
+
+        public ObservableCollection<string> GraphMetricModeOptions { get; } =
+            new ObservableCollection<string> { "Auto", "Classic", "Legacy" };
+
+        public string SelectedBeatTrackerMode
+        {
+            get => BeatTrackerModeToLabel(_jukeboxSettingsModel.BeatTrackerMode);
+            set
+            {
+                var mode = LabelToBeatTrackerMode(value);
+
+                if (string.Equals(_jukeboxSettingsModel.BeatTrackerMode, mode, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                _jukeboxSettingsModel.BeatTrackerMode = mode;
+                RaisePropertyChanged();
+                PersistJukeboxSettings();
+                Log($"Beat tracker preference: {value}. Takes effect on next Analyze (delete cache to re-run).");
+            }
+        }
+
+        public string SelectedGraphMetricMode
+        {
+            get => GraphMetricModeToLabel(_jukeboxSettingsModel.GraphMetricMode);
+            set
+            {
+                var mode = LabelToGraphMetricMode(value);
+
+                if (string.Equals(_jukeboxSettingsModel.GraphMetricMode, mode, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                _jukeboxSettingsModel.GraphMetricMode = mode;
+                RaisePropertyChanged();
+                PersistJukeboxSettings(invalidateGraph: true);
+                Log($"Graph metric: {value}.");
+            }
+        }
+
+        private static string BeatTrackerModeToLabel(string mode)
+        {
+            switch ((mode ?? "auto").Trim().ToLowerInvariant())
+            {
+                case "beatthis":
+                case "beat_this":
+                case "beat-this":
+                    return "BeatThis";
+                case "dp":
+                case "librosa-dp":
+                case "librosa":
+                    return "DP (librosa)";
+                default:
+                    return "Auto";
+            }
+        }
+
+        private static string LabelToBeatTrackerMode(string label)
+        {
+            if (string.Equals(label, "BeatThis", StringComparison.OrdinalIgnoreCase))
+                return "beatthis";
+            if (string.Equals(label, "DP (librosa)", StringComparison.OrdinalIgnoreCase))
+                return "dp";
+            return "auto";
+        }
+
+        private static string GraphMetricModeToLabel(string mode)
+        {
+            switch ((mode ?? "auto").Trim().ToLowerInvariant())
+            {
+                case "classic":
+                    return "Classic";
+                case "legacy":
+                    return "Legacy";
+                default:
+                    return "Auto";
+            }
+        }
+
+        private static string LabelToGraphMetricMode(string label)
+        {
+            if (string.Equals(label, "Classic", StringComparison.OrdinalIgnoreCase))
+                return "classic";
+            if (string.Equals(label, "Legacy", StringComparison.OrdinalIgnoreCase))
+                return "legacy";
+            return "auto";
+        }
+
         private async Task SwitchPlaybackSourceAsync(JukeboxPlaybackSource desired)
         {
             var trackId = SelectedSessionTrack?.TrackId
@@ -1866,6 +1954,10 @@ namespace SpotifyWPF.ViewModel.Page
             _jukeboxSettingsModel.ClassicMaxNeighbors = snapshot.ClassicMaxNeighbors;
             if (!string.IsNullOrEmpty(snapshot.PhasePenaltyMode))
                 _jukeboxSettingsModel.PhasePenaltyMode = snapshot.PhasePenaltyMode;
+            if (!string.IsNullOrEmpty(snapshot.BeatTrackerMode))
+                _jukeboxSettingsModel.BeatTrackerMode = snapshot.BeatTrackerMode;
+            if (!string.IsNullOrEmpty(snapshot.GraphMetricMode))
+                _jukeboxSettingsModel.GraphMetricMode = snapshot.GraphMetricMode;
 
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMax));
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMaxText));
@@ -1880,6 +1972,8 @@ namespace SpotifyWPF.ViewModel.Page
             RaisePropertyChanged(nameof(JukeboxAllowOnlyReverseBranches));
             RaisePropertyChanged(nameof(JukeboxAllowOnlyLongBranches));
             RaisePropertyChanged(nameof(JukeboxEnableEndLoop));
+            RaisePropertyChanged(nameof(SelectedBeatTrackerMode));
+            RaisePropertyChanged(nameof(SelectedGraphMetricMode));
             ApplyPlaybackSourceFromSettings();
             RaisePropertyChanged(nameof(UseLocalPlayback));
             RaisePropertyChanged(nameof(PlaybackSourceLabel));
@@ -1979,7 +2073,9 @@ namespace SpotifyWPF.ViewModel.Page
                 PlaybackSource = source.PlaybackSource,
                 MinimumJumpBeats = source.MinimumJumpBeats,
                 ClassicMaxNeighbors = source.ClassicMaxNeighbors,
-                PhasePenaltyMode = source.PhasePenaltyMode
+                PhasePenaltyMode = source.PhasePenaltyMode,
+                BeatTrackerMode = source.BeatTrackerMode,
+                GraphMetricMode = source.GraphMetricMode
             };
         }
 

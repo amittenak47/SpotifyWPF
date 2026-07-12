@@ -416,6 +416,29 @@
                                             Command="{Binding ReprobeAnalysisCommand}"
                                             ToolTip="Check whether Spotify API or local Python analysis is available"/>
 
+                                    <TextBlock Text="Jukebox analysis"
+                                               FontSize="16" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppForegroundBrush}"
+                                               Margin="0,16,0,8"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
+                                               Foreground="{DynamicResource AppMutedForegroundBrush}">
+                                        Beat tracker applies on the next Analyze (delete cache first to re-run). Graph metric rebuilds immediately from the current analysis JSON.
+                                    </TextBlock>
+
+                                    <TextBlock Text="Beat tracker" Margin="0,0,0,4"
+                                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                    <ComboBox Margin="0,0,0,12" MinWidth="220" HorizontalAlignment="Left"
+                                              ItemsSource="{Binding BeatTrackerModeOptions}"
+                                              SelectedItem="{Binding SelectedBeatTrackerMode}"
+                                              ToolTip="Auto: BeatThis if installed, else DP. BeatThis: require package/ONNX. DP: force librosa."/>
+
+                                    <TextBlock Text="Graph metric" Margin="0,0,0,4"
+                                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                    <ComboBox Margin="0,0,0,12" MinWidth="220" HorizontalAlignment="Left"
+                                              ItemsSource="{Binding GraphMetricModeOptions}"
+                                              SelectedItem="{Binding SelectedGraphMetricMode}"
+                                              ToolTip="Auto: Classic when stackedFeatures exist. Classic/Legacy force that path."/>
+
                                     <TextBlock Text="Window"
                                                FontSize="16" FontWeight="SemiBold"
                                                Foreground="{DynamicResource AppForegroundBrush}"

@@ -298,46 +298,67 @@ def _tempo_from_beats(beats):
     return float(60.0 / np.median(gaps))
 
 
-def resolve_beats(wav_path, y, sr, model_path=None):
-    """BeatThis first; DP fallback. Never merges the two beat lists."""
-    dp_times, dp_tempo, _ = track_beats_dp(y, sr)
-    tracker = "librosa-dp"
-    beat_times = dp_times
-    tempo = dp_tempo
-    down_mask = np.zeros(len(beat_times), dtype=bool)
-    down_mask[::4] = True
-    confidence = 0.55
-
-    # 1) Official package
+def try_beatthis(wav_path, y, sr, model_path=None):
+    """Try package then ONNX. Returns (times, tempo, down_mask, tracker, confidence) or None."""
     try:
         beat_times, tempo, down_mask, tracker = track_beats_beatthis_package(wav_path, y, sr)
-        confidence = 0.95
         sys.stderr.write("Beat tracker: beat_this package\n")
+        return beat_times, tempo, down_mask, tracker, 0.95
     except Exception as package_exc:
         sys.stderr.write("beat_this package unavailable (%s); trying ONNX…\n" % package_exc)
-        # 2) ONNX model
-        candidates = []
-        if model_path:
-            candidates.append(model_path)
-        here = os.path.dirname(os.path.abspath(__file__))
-        candidates.extend([
-            os.path.join(here, "models", "beat_this_small0.onnx"),
-            os.path.join(here, "models", "beat_this_final0.onnx"),
-            os.path.join(here, "beat_this_small0.onnx"),
-        ])
-        onnx_ok = False
-        for path in candidates:
-            if path and os.path.isfile(path):
-                try:
-                    beat_times, tempo, down_mask, tracker = track_beats_onnx(y, sr, path)
-                    confidence = 0.90
-                    onnx_ok = True
-                    sys.stderr.write("Beat tracker: ONNX (%s)\n" % path)
-                    break
-                except Exception as onnx_exc:
-                    sys.stderr.write("ONNX beat tracking failed (%s): %s\n" % (path, onnx_exc))
-        if not onnx_ok:
-            beat_times, tempo, down_mask = dp_times, dp_tempo, down_mask
+
+    candidates = []
+    if model_path:
+        candidates.append(model_path)
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates.extend([
+        os.path.join(here, "models", "beat_this_small0.onnx"),
+        os.path.join(here, "models", "beat_this_final0.onnx"),
+        os.path.join(here, "beat_this_small0.onnx"),
+    ])
+    for path in candidates:
+        if path and os.path.isfile(path):
+            try:
+                beat_times, tempo, down_mask, tracker = track_beats_onnx(y, sr, path)
+                sys.stderr.write("Beat tracker: ONNX (%s)\n" % path)
+                return beat_times, tempo, down_mask, tracker, 0.90
+            except Exception as onnx_exc:
+                sys.stderr.write("ONNX beat tracking failed (%s): %s\n" % (path, onnx_exc))
+    return None
+
+
+def resolve_beats(wav_path, y, sr, model_path=None, mode="auto"):
+    """Resolve beats. mode: auto | beatthis | dp. Never merges BeatThis + DP lists."""
+    mode = (mode or "auto").strip().lower()
+    if mode in ("librosa-dp", "ellis", "fallback"):
+        mode = "dp"
+    if mode in ("beat_this", "beat-this", "onnx"):
+        mode = "beatthis"
+
+    dp_times, dp_tempo, _ = track_beats_dp(y, sr)
+
+    if mode == "dp":
+        beat_times = dp_times
+        tempo = dp_tempo
+        down_mask = np.zeros(len(beat_times), dtype=bool)
+        down_mask[::4] = True
+        tracker = "librosa-dp"
+        confidence = 0.55
+        sys.stderr.write("Beat tracker: librosa DP (forced)\n")
+    else:
+        result = try_beatthis(wav_path, y, sr, model_path=model_path)
+        if result is not None:
+            beat_times, tempo, down_mask, tracker, confidence = result
+        elif mode == "beatthis":
+            sys.stderr.write(
+                "ERROR: --beat-tracker beatthis requested but beat_this package / ONNX model "
+                "unavailable. Install beat-this or place tools/models/beat_this_small0.onnx.\n")
+            sys.exit(5)
+        else:
+            beat_times = dp_times
+            tempo = dp_tempo
+            down_mask = np.zeros(len(beat_times), dtype=bool)
+            down_mask[::4] = True
             tracker = "librosa-dp"
             confidence = 0.55
             sys.stderr.write("Beat tracker: librosa DP fallback\n")
@@ -458,6 +479,12 @@ def main():
     parser.add_argument("output_json")
     parser.add_argument("--track-id", default="")
     parser.add_argument("--model", default="", help="Path to BeatThis ONNX model (optional)")
+    parser.add_argument(
+        "--beat-tracker",
+        default="auto",
+        choices=["auto", "beatthis", "dp"],
+        help="auto: BeatThis then DP; beatthis: require BeatThis/ONNX; dp: force librosa DP",
+    )
     args = parser.parse_args()
 
     try:
@@ -480,7 +507,7 @@ def main():
     duration = float(len(y)) / sr
 
     beat_times, tempo, down_mask, beat_conf, tracker, agreement, gap_inserts = resolve_beats(
-        args.input_wav, y, sr, model_path=args.model or None)
+        args.input_wav, y, sr, model_path=args.model or None, mode=args.beat_tracker)
 
     if len(beat_times) < 8:
         sys.stderr.write("Too few beats detected (%d).\n" % len(beat_times))

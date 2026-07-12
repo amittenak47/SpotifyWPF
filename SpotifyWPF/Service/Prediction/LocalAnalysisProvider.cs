@@ -29,14 +29,17 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly IAudioCaptureService _captureService;
 
+        private readonly IJukeboxSettingsStore _jukeboxSettings;
+
         private readonly SemaphoreSlim _analysisSemaphore = new SemaphoreSlim(1, 1);
 
         public LocalAnalysisProvider(IWebPlaybackHost playbackHost, ISpotifyPlaybackService playbackService,
-            IAudioCaptureService captureService)
+            IAudioCaptureService captureService, IJukeboxSettingsStore jukeboxSettings)
         {
             _playbackHost = playbackHost;
             _playbackService = playbackService;
             _captureService = captureService;
+            _jukeboxSettings = jukeboxSettings;
         }
 
         public AnalysisSource Source => AnalysisSource.Local;
@@ -313,7 +316,7 @@ namespace SpotifyWPF.Service.Prediction
             }
         }
 
-        private static async Task RunSidecarAsync(string wavPath, string outputPath, string trackId,
+        private async Task RunSidecarAsync(string wavPath, string outputPath, string trackId,
             CancellationToken cancellationToken)
         {
             var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Tools", "analyze_track.py");
@@ -321,8 +324,10 @@ namespace SpotifyWPF.Service.Prediction
             if (!File.Exists(scriptPath))
                 throw new FileNotFoundException($"Analysis sidecar not found at {scriptPath}.");
 
+            var beatMode = NormalizeBeatTrackerMode(_jukeboxSettings?.Get()?.BeatTrackerMode);
             var arguments =
-                $"\"{scriptPath}\" \"{wavPath}\" \"{outputPath}\" --track-id \"{trackId}\"";
+                $"\"{scriptPath}\" \"{wavPath}\" \"{outputPath}\" --track-id \"{trackId}\" " +
+                $"--beat-tracker {beatMode}";
 
             var startInfo = PythonLauncher.CreateSidecarStartInfo(arguments);
 
@@ -423,6 +428,28 @@ namespace SpotifyWPF.Service.Prediction
             catch (IOException ex)
             {
                 Console.WriteLine($"Could not delete partial analysis output: {ex.Message}");
+            }
+        }
+
+        private static string NormalizeBeatTrackerMode(string mode)
+        {
+            if (string.IsNullOrWhiteSpace(mode))
+                return "auto";
+
+            switch (mode.Trim().ToLowerInvariant())
+            {
+                case "beatthis":
+                case "beat_this":
+                case "beat-this":
+                case "onnx":
+                    return "beatthis";
+                case "dp":
+                case "librosa-dp":
+                case "librosa":
+                case "ellis":
+                    return "dp";
+                default:
+                    return "auto";
             }
         }
     }

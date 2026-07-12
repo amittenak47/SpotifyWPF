@@ -66,6 +66,18 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("phasePenaltyMode")]
         public string PhasePenaltyMode { get; set; } = "soft";
 
+        /// <summary>
+        /// Beat tracker for Path B analyze: "auto" | "beatthis" | "dp".
+        /// </summary>
+        [JsonPropertyName("beatTrackerMode")]
+        public string BeatTrackerMode { get; set; } = "auto";
+
+        /// <summary>
+        /// Graph metric: "auto" (Classic if features exist) | "classic" | "legacy".
+        /// </summary>
+        [JsonPropertyName("graphMetricMode")]
+        public string GraphMetricMode { get; set; } = "auto";
+
         public static JukeboxSettings CreateDefaults() => new JukeboxSettings();
 
         /// <summary>True when a settings change requires rebuilding the beat graph (not just re-arming).</summary>
@@ -79,6 +91,8 @@ namespace SpotifyWPF.Model.Prediction
                    before.MinimumJumpBeats != after.MinimumJumpBeats ||
                    before.ClassicMaxNeighbors != after.ClassicMaxNeighbors ||
                    !string.Equals(before.PhasePenaltyMode ?? "", after.PhasePenaltyMode ?? "",
+                       StringComparison.OrdinalIgnoreCase) ||
+                   !string.Equals(before.GraphMetricMode ?? "", after.GraphMetricMode ?? "",
                        StringComparison.OrdinalIgnoreCase);
         }
     }
