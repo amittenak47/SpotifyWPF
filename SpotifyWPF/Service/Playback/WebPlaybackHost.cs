@@ -50,7 +50,7 @@ namespace SpotifyWPF.Service.Playback
         public string Message { get; set; }
     }
 
-    public interface IWebPlaybackHost
+    public interface IWebPlaybackHost : IJukeboxTransport
     {
         bool IsReady { get; }
 
@@ -67,28 +67,7 @@ namespace SpotifyWPF.Service.Playback
 
         Task EnsureInitializedAsync();
 
-        /// <summary>Arms the JS-side action: when position >= whenMs, seek to seekToMs. One action at a time.</summary>
-        void ArmAction(string actionId, long whenMs, long seekToMs);
-
-        void DisarmAction();
-
-        void Pause();
-
-        void Resume();
-
-        void Seek(long positionMs);
-
-        void SetVolume(double volume);
-
         event EventHandler PlayerReady;
-
-        event EventHandler<PlayerStateSnapshot> StateChanged;
-
-        event EventHandler<PositionSnapshot> PositionUpdated;
-
-        event EventHandler<string> TrackEnded;
-
-        event EventHandler<ArmedActionFiredEventArgs> ActionFired;
 
         event EventHandler<PlayerErrorEventArgs> PlayerError;
 

@@ -52,7 +52,7 @@ namespace SpotifyWPF.Service.Prediction
 
         private const string JukeboxActionId = "loop:jukebox";
 
-        private readonly IWebPlaybackHost _playbackHost;
+        private readonly IJukeboxTransport _playbackHost;
 
         private readonly ILoopRegionStore _store;
 
@@ -79,7 +79,7 @@ namespace SpotifyWPF.Service.Prediction
 
         public event EventHandler ActiveLoopChanged;
 
-        public LoopController(IWebPlaybackHost playbackHost, ILoopRegionStore store,
+        public LoopController(IJukeboxTransport playbackHost, ILoopRegionStore store,
             IJukeboxSettingsStore jukeboxSettings)
         {
             _playbackHost = playbackHost;

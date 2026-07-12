@@ -36,6 +36,8 @@ namespace SpotifyWPF.ViewModel
             SimpleIoc.Default.Register<IPlaylistDeletionService, PlaylistDeletionService>();
             SimpleIoc.Default.Register<IPlaylistActionQueueService, PlaylistActionQueueService>();
             SimpleIoc.Default.Register<IWebPlaybackHost, WebPlaybackHost>();
+            SimpleIoc.Default.Register<LocalWavPlaybackHost>();
+            SimpleIoc.Default.Register<IJukeboxTransport, JukeboxTransportRouter>();
             SimpleIoc.Default.Register<ISpotifyPlaybackService, SpotifyPlaybackService>();
             SimpleIoc.Default.Register<IAnalysisGate, AnalysisGate>();
             SimpleIoc.Default.Register<IListeningLogService, ListeningLogService>();

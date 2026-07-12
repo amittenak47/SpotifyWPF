@@ -46,6 +46,10 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("enableEndLoop")]
         public bool EnableEndLoop { get; set; } = true;
 
+        /// <summary>Spotify Web Playback SDK vs local cached WAV (Slice 1B). Values: "Spotify" | "Local".</summary>
+        [JsonPropertyName("playbackSource")]
+        public string PlaybackSource { get; set; } = "Spotify";
+
         public static JukeboxSettings CreateDefaults() => new JukeboxSettings();
 
         /// <summary>True when a settings change requires rebuilding the beat graph (not just re-arming).</summary>

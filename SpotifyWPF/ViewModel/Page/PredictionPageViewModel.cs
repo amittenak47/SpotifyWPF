@@ -36,6 +36,10 @@ namespace SpotifyWPF.ViewModel.Page
 
         private readonly IWebPlaybackHost _playbackHost;
 
+        private readonly IJukeboxTransport _transport;
+
+        private readonly JukeboxTransportRouter _transportRouter;
+
         private readonly ISpotifyPlaybackService _playbackService;
 
         private readonly IAnalysisGate _analysisGate;
@@ -82,6 +86,7 @@ namespace SpotifyWPF.ViewModel.Page
         public PredictionPageViewModel(
             ISpotify spotify,
             IWebPlaybackHost playbackHost,
+            IJukeboxTransport transport,
             ISpotifyPlaybackService playbackService,
             IAnalysisGate analysisGate,
             IListeningLogService listeningLog,
@@ -106,6 +111,9 @@ namespace SpotifyWPF.ViewModel.Page
             _jukeboxSettingsModel = _jukeboxSettings.Get();
             _spotify = spotify;
             _playbackHost = playbackHost;
+            _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+            _transportRouter = transport as JukeboxTransportRouter
+                ?? throw new ArgumentException("Expected JukeboxTransportRouter.", nameof(transport));
             _playbackService = playbackService;
             _analysisGate = analysisGate;
             _listeningLog = listeningLog;
@@ -130,11 +138,14 @@ namespace SpotifyWPF.ViewModel.Page
             _loopController.JukeboxJump += OnJukeboxJump;
 
             _playbackHost.PlayerReady += OnPlayerReady;
-            _playbackHost.StateChanged += OnStateChanged;
-            _playbackHost.PositionUpdated += OnPositionUpdated;
-            _playbackHost.TrackEnded += OnTrackEnded;
             _playbackHost.PlayerError += OnPlayerError;
             _playbackHost.InitializationFailed += OnInitializationFailed;
+            // Position/state/end come from the active transport (Spotify or local WAV).
+            _transport.StateChanged += OnStateChanged;
+            _transport.PositionUpdated += OnPositionUpdated;
+            _transport.TrackEnded += OnTrackEnded;
+
+            ApplyPlaybackSourceFromSettings();
 
             TogglePlayPauseCommand = new RelayCommand(async () => await TogglePlayPauseAsync(), CanPlayTransport);
             ReprobeAnalysisCommand = new RelayCommand(async () => await ProbeAnalysisSourceAsync(true));
@@ -397,6 +408,7 @@ namespace SpotifyWPF.ViewModel.Page
                     SaveBranchPresetCommand.RaiseCanExecuteChanged();
                     DeleteSessionCacheCommand?.RaiseCanExecuteChanged();
                     RefreshSessionCommand?.RaiseCanExecuteChanged();
+                    RefreshLocalPlaybackAvailability();
                 }
             }
         }
@@ -776,6 +788,81 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
+        /// <summary>True when playback uses the cached analysis WAV instead of the Spotify SDK.</summary>
+        public bool UseLocalPlayback
+        {
+            get => _transportRouter.Source == JukeboxPlaybackSource.Local;
+            set
+            {
+                var desired = value ? JukeboxPlaybackSource.Local : JukeboxPlaybackSource.Spotify;
+
+                if (desired == JukeboxPlaybackSource.Local && !IsLocalPlaybackAvailable)
+                {
+                    Log("Local playback needs a complete WAV cache — Analyze the track first.");
+                    RaisePropertyChanged();
+                    return;
+                }
+
+                if (_transportRouter.Source == desired)
+                    return;
+
+                _transportRouter.Source = desired;
+                _jukeboxSettingsModel.PlaybackSource = desired == JukeboxPlaybackSource.Local ? "Local" : "Spotify";
+                PersistJukeboxSettings();
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(PlaybackSourceLabel));
+                DeviceText = desired == JukeboxPlaybackSource.Local
+                    ? "Device: Local WAV"
+                    : (_playbackHost.IsReady
+                        ? $"Device: SpotifyWPF Loop Lab ({_playbackHost.DeviceId})"
+                        : "Device: —");
+                TogglePlayPauseCommand.RaiseCanExecuteChanged();
+                PlaySessionTrackCommand.RaiseCanExecuteChanged();
+                RingScrubToCommand.RaiseCanExecuteChanged();
+            }
+        }
+
+        public string PlaybackSourceLabel => UseLocalPlayback ? "Local WAV" : "Spotify";
+
+        /// <summary>Local source is only available when a complete capture WAV exists for the active track.</summary>
+        public bool IsLocalPlaybackAvailable
+        {
+            get
+            {
+                var trackId = SelectedSessionTrack?.TrackId
+                              ?? _loopController.CurrentTrackId
+                              ?? _currentPlay?.TrackId;
+                return LocalWavPlaybackHost.CanPlayTrack(trackId, DurationMs);
+            }
+        }
+
+        private void ApplyPlaybackSourceFromSettings()
+        {
+            var wantLocal = string.Equals(_jukeboxSettingsModel.PlaybackSource, "Local",
+                StringComparison.OrdinalIgnoreCase);
+
+            if (wantLocal && IsLocalPlaybackAvailable)
+                _transportRouter.Source = JukeboxPlaybackSource.Local;
+            else
+            {
+                _transportRouter.Source = JukeboxPlaybackSource.Spotify;
+
+                if (wantLocal)
+                    _jukeboxSettingsModel.PlaybackSource = "Spotify";
+            }
+        }
+
+        private void RefreshLocalPlaybackAvailability()
+        {
+            RaisePropertyChanged(nameof(IsLocalPlaybackAvailable));
+
+            if (UseLocalPlayback && !IsLocalPlaybackAvailable)
+            {
+                UseLocalPlayback = false;
+                Log("Local playback unavailable for this track — switched back to Spotify.");
+            }
+        }
+
         public ObservableCollection<ScoredTrack> Predictions { get; } =
             new ObservableCollection<ScoredTrack>();
 
@@ -929,11 +1016,20 @@ namespace SpotifyWPF.ViewModel.Page
 
         private bool CanPlayTransport()
         {
-            return _playbackHost.IsReady && !HasPlayerInitializationError && !IsAnalyzing;
+            if (IsAnalyzing)
+                return false;
+
+            if (UseLocalPlayback)
+                return IsLocalPlaybackAvailable;
+
+            return _playbackHost.IsReady && !HasPlayerInitializationError;
         }
 
         private bool CanStopPlayback()
         {
+            if (UseLocalPlayback)
+                return _transportRouter.Local.IsPlayingTrack || HasCurrentTrack();
+
             return _playbackHost.IsReady && !HasPlayerInitializationError;
         }
 
@@ -1042,9 +1138,9 @@ namespace SpotifyWPF.ViewModel.Page
             }
 
             if (IsPaused)
-                _playbackHost.Resume();
+                _transport.Resume();
             else
-                _playbackHost.Pause();
+                _transport.Pause();
         }
 
         public void BeginScrub()
@@ -1083,7 +1179,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             _isUserScrubbing = false;
             PositionMs = _scrubPositionMs;
-            _playbackHost.Seek(_scrubPositionMs);
+            _transport.Seek(_scrubPositionMs);
             RaisePropertyChanged(nameof(ScrubberPositionMs));
             RaisePropertyChanged(nameof(PositionText));
         }
@@ -1133,15 +1229,21 @@ namespace SpotifyWPF.ViewModel.Page
 
         private async Task StopPlaybackInternalAsync()
         {
-            if (!_playbackHost.IsReady)
-                return;
-
             try
             {
-                _playbackHost.DisarmAction();
-                _playbackHost.Pause();
-                _playbackHost.Seek(0);
-                await _playbackService.PauseAsync(_playbackHost.DeviceId);
+                _transport.DisarmAction();
+                _transport.Pause();
+
+                if (UseLocalPlayback)
+                {
+                    _transportRouter.Local.Stop();
+                }
+                else if (_playbackHost.IsReady)
+                {
+                    _playbackHost.Seek(0);
+                    await _playbackService.PauseAsync(_playbackHost.DeviceId);
+                }
+
                 Log("Playback stopped.");
             }
             catch (Exception ex)
@@ -1150,12 +1252,49 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
-        /// <summary>Plays a track on the in-app SDK device. Source tags the listening-log entry.</summary>
+        /// <summary>Plays a track via Spotify SDK or local WAV. Source tags the listening-log entry.</summary>
         public async Task PlayTrackAsync(string trackId, string source)
         {
             if (IsAnalyzing)
             {
                 Status = $"Cannot play while analyzing {AnalyzingDisplayName}.";
+                return;
+            }
+
+            if (UseLocalPlayback)
+            {
+                if (!LocalWavPlaybackHost.CanPlayTrack(trackId, DurationMs))
+                {
+                    Status = "Local playback needs a complete WAV — Analyze first, or switch to Spotify.";
+                    Log(Status);
+                    return;
+                }
+
+                try
+                {
+                    var session = SessionTracks.FirstOrDefault(t => t.TrackId == trackId);
+                    Status = $"Starting local playback of {trackId}…";
+                    _playbackHost.Pause();
+                    _playbackHost.DisarmAction();
+
+                    if (!_transportRouter.Local.PlayTrack(trackId, session?.Title, session?.Artist))
+                    {
+                        Status = "Local WAV playback failed.";
+                        Log(Status);
+                        return;
+                    }
+
+                    _pendingPlaySource = source;
+                    DeviceText = "Device: Local WAV";
+                    Status = "Playing locally (cached WAV).";
+                    Log($"Local WAV playback started for {trackId}.");
+                }
+                catch (Exception ex)
+                {
+                    Status = $"Local playback failed: {ex.Message}";
+                    Log(Status);
+                }
+
                 return;
             }
 
@@ -1167,6 +1306,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             try
             {
+                _transportRouter.Local.Stop();
                 Status = $"Starting playback of {trackId}…";
                 await _playbackService.PlayTrackAsync(trackId, _playbackHost.DeviceId);
                 _pendingPlaySource = source;
@@ -1395,6 +1535,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             UpsertSessionTrack(state.TrackId, state.TrackName, state.ArtistNames);
             RefreshBranchPresetsForSelection();
+            RefreshLocalPlaybackAvailability();
             RefreshRingVisualization(state.TrackId);
             ApplyLoopSettings();
         }
@@ -1639,6 +1780,8 @@ namespace SpotifyWPF.ViewModel.Page
             _jukeboxSettingsModel.AllowOnlyLongBranches = snapshot.AllowOnlyLongBranches;
             _jukeboxSettingsModel.LongBranchMinBeats = snapshot.LongBranchMinBeats;
             _jukeboxSettingsModel.EnableEndLoop = snapshot.EnableEndLoop;
+            if (!string.IsNullOrEmpty(snapshot.PlaybackSource))
+                _jukeboxSettingsModel.PlaybackSource = snapshot.PlaybackSource;
 
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMax));
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMaxText));
@@ -1653,6 +1796,9 @@ namespace SpotifyWPF.ViewModel.Page
             RaisePropertyChanged(nameof(JukeboxAllowOnlyReverseBranches));
             RaisePropertyChanged(nameof(JukeboxAllowOnlyLongBranches));
             RaisePropertyChanged(nameof(JukeboxEnableEndLoop));
+            ApplyPlaybackSourceFromSettings();
+            RaisePropertyChanged(nameof(UseLocalPlayback));
+            RaisePropertyChanged(nameof(PlaybackSourceLabel));
 
             PersistJukeboxSettings(invalidateGraph: true);
         }
@@ -1722,7 +1868,8 @@ namespace SpotifyWPF.ViewModel.Page
                 AllowOnlyReverseBranches = source.AllowOnlyReverseBranches,
                 AllowOnlyLongBranches = source.AllowOnlyLongBranches,
                 LongBranchMinBeats = source.LongBranchMinBeats,
-                EnableEndLoop = source.EnableEndLoop
+                EnableEndLoop = source.EnableEndLoop,
+                PlaybackSource = source.PlaybackSource
             };
         }
 
@@ -2218,6 +2365,7 @@ namespace SpotifyWPF.ViewModel.Page
 
                 if (needsCapture)
                 {
+                    _transportRouter.Local.Stop();
                     _captureInProgress = true;
                     NotifyTransportStateChanged();
                     _jukeboxSuppressedForCapture = true;
@@ -2353,6 +2501,7 @@ namespace SpotifyWPF.ViewModel.Page
         private void OnAnalysisCompleted(string trackId, Model.Prediction.TrackAnalysis analysis)
         {
             RebuildBeatGraphForTrack(trackId);
+            RefreshLocalPlaybackAvailability();
 
             if (trackId == _loopController.CurrentTrackId && NowPlayingTitle != "Nothing playing")
                 UpsertSessionTrack(trackId, NowPlayingTitle, NowPlayingArtist);

@@ -111,6 +111,13 @@
                                                 Style="{StaticResource ControlPanelToolbarStyle}">
                                         <Button Content="Play" MinWidth="56"
                                                 Command="{Binding PlaySessionTrackCommand}"/>
+                                        <CheckBox Content="Local WAV"
+                                                  Margin="8,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
+                                                  IsChecked="{Binding UseLocalPlayback}"
+                                                  IsEnabled="{Binding IsLocalPlaybackAvailable}"
+                                                  ToolTip="Play the cached analysis WAV in-process (no Spotify seek jitter). Requires Analyze capture."/>
                                         <Button Content="Analyze" MinWidth="72" Margin="8,0,0,0"
                                                 Command="{Binding AnalyzeSessionTrackCommand}"
                                                 ToolTip="New track: capture audio and run analysis. Cached track: rebuild beat graph from tuning only."/>
