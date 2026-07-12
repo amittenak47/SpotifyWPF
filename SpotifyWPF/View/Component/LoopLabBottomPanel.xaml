@@ -227,25 +227,26 @@
                                                                Maximum="300"
                                                                Value="{Binding JukeboxSeekLeadMs}"/>
 
-                                        <CheckBox Content="Allow only reverse branches"
+                                        <CheckBox Content="Only jump backward (earlier in the song)"
                                                   Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding JukeboxAllowOnlyReverseBranches}"
-                                                  Margin="0,0,0,4"/>
-                                        <CheckBox Content="Allow only long branches (16+ beats apart)"
+                                                  Margin="0,0,0,4"
+                                                  ToolTip="Blocks forward jumps. Extends earlier sections, but hurts novelty — you keep revisiting the same earlier material."/>
+                                        <CheckBox Content="Only jump 16+ beats away"
                                                   Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding JukeboxAllowOnlyLongBranches}"
                                                   Margin="0,0,0,4"
-                                                  ToolTip="Long-branch filter does not block the end-loop guard jump"/>
-                                        <CheckBox Content="Enable end loop"
+                                                  ToolTip="Skips short local echoes. Does not block the end-loop escape jump."/>
+                                        <CheckBox Content="Never let the song finish (end loop)"
                                                   Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding JukeboxEnableEndLoop}"
                                                   Margin="0,0,0,4"
-                                                  ToolTip="When on, a backward jump is forced near the end so the song never finishes. Off = play out linearly."/>
-                                        <CheckBox Content="Random branches"
+                                                  ToolTip="Forces a jump back before the track ends. Also recovers if a hop lands past the last escape beat."/>
+                                        <CheckBox Content="Allow random jumps"
                                                   Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding JukeboxRandomBranches}"
                                                   Margin="0,0,0,8"
-                                                  ToolTip="On: random walk + locked branches at their probability. Off: only locked branches (+ end loop if enabled)."/>
+                                                  ToolTip="On: random walk plus your locked branches. Off: only locked branches (and end loop if enabled)."/>
 
                                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                             <Button Content="Clear locks" MinWidth="88"
@@ -266,12 +267,18 @@
                                                                Value="{Binding RingPreviewHopDepth}"
                                                                Margin="0,8,0,0"/>
 
+                                        <CheckBox Content="Show similarity map (SSM)"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
+                                                  IsChecked="{Binding ShowSsmHeatmap}"
+                                                  Margin="0,0,0,8"
+                                                  ToolTip="Beats×beats self-similarity overlay on the ring. Bright stripes = repeats; click a row to inspect that beat."/>
+
                                         <TextBlock Text="Sliders rebuild the beat graph from cached analysis (no re-capture). Use Session Analyze for a new track; Delete cache + Analyze to re-capture audio."
                                                    FontSize="11"
                                                    Margin="0,8,0,0"
                                                    TextWrapping="Wrap"
                                                    Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                                        <TextBlock Text="hover a beat to see branches (hot = closer match) - aim along a chord to chain hops - click a chord to lock"
+                                        <TextBlock Text="click a beat to pick hops — hover each arrow for analysis — click arrows to chain — ✓ bottom-right confirms locks · SSM = full similarity map (draggable)"
                                                    FontSize="11"
                                                    Margin="0,4,0,0"
                                                    TextWrapping="Wrap"
@@ -374,6 +381,13 @@
                                                            Value="{Binding WeightPinned}"/>
                                 </StackPanel>
                                 </Grid>
+                            </Border>
+                        </TabItem>
+
+                        <TabItem Header="Log">
+                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                                <local:ActivityLogView DataContext="{Binding ActivityLog, ElementName=Root}"
+                                                       VerticalAlignment="Stretch"/>
                             </Border>
                         </TabItem>
 

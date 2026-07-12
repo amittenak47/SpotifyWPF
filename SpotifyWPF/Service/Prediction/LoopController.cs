@@ -33,6 +33,12 @@ namespace SpotifyWPF.Service.Prediction
         void InvalidateGraphCache();
 
         /// <summary>
+        /// After a user scrub/seek, drop the armed jump and replan from the new playhead so an
+        /// old planned hop cannot override the scrub.
+        /// </summary>
+        void NotifyPlaybackSeek(long positionMs);
+
+        /// <summary>
         /// Returns the (cached) beat graph for a track, building it from the cached analysis when
         /// needed. Null when no analysis exists yet. Used by the ring UI — the graph itself stays
         /// service-side.
@@ -147,12 +153,6 @@ namespace SpotifyWPF.Service.Prediction
             ActiveLoopChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        private void OnPositionUpdated(object sender, PositionSnapshot position)
-        {
-            if (position.TrackId == CurrentTrackId)
-                _lastPositionMs = position.PositionMs;
-        }
-
         private void OnActionFired(object sender, ArmedActionFiredEventArgs e)
         {
             if (e.ActionId == SimpleLoopActionId)
@@ -197,7 +197,10 @@ namespace SpotifyWPF.Service.Prediction
             }
 
             // Recreate on every rearm so branch-lock edits on the profile take effect immediately.
+            // Preserve visit memory so lock/settings edits don't reset anti-local-minima state.
+            var priorVisits = _navigator?.ExportVisitMemory();
             _navigator = new BeatNavigator(graph, _jukeboxSettings.Get(), ActiveProfile);
+            _navigator.ImportVisitMemory(priorVisits);
 
             if (_navigator.IsIdleWithoutLocks)
             {
@@ -237,12 +240,57 @@ namespace SpotifyWPF.Service.Prediction
                 return;
             }
 
-            _playbackHost.ArmAction(JukeboxActionId, _plannedJump.TriggerMs, _plannedJump.SeekToMs);
+            // If the trigger is already behind the playhead (common for end-loop escape after
+            // overshooting the last branch point), fire on the next transport tick.
+            var triggerMs = _plannedJump.TriggerMs;
+
+            if (triggerMs <= _lastPositionMs)
+                triggerMs = Math.Max(0, _lastPositionMs);
+
+            _playbackHost.ArmAction(JukeboxActionId, triggerMs, _plannedJump.SeekToMs);
             LoopEvent?.Invoke(this,
-                $"Jukebox: next jump at {FormatMs(_plannedJump.TriggerMs)} " +
+                $"Jukebox: next jump at {FormatMs(triggerMs)} " +
                 $"→ beat {_plannedJump.TargetBeatIndex} ({FormatMs(_plannedJump.SeekToMs)}).");
 
             RaiseJukeboxJump(_plannedJump, planned: true);
+        }
+
+        private void OnPositionUpdated(object sender, PositionSnapshot position)
+        {
+            if (position.TrackId != CurrentTrackId)
+                return;
+
+            _lastPositionMs = position.PositionMs;
+
+            // Watchdog: planned jump trigger is behind us but transport never fired (disarm race,
+            // seek-lead past EOF, etc.) — force the seek so the white end-branch actually runs.
+            if (!IsLoopActive || ActiveProfile?.Mode != LoopModes.Jukebox || _plannedJump == null)
+                return;
+
+            if (position.Paused)
+                return;
+
+            if (position.PositionMs + 40 < _plannedJump.TriggerMs)
+                return;
+
+            // More than ~120ms past the trigger with no ActionFired → poke the seek ourselves.
+            if (position.PositionMs < _plannedJump.TriggerMs + 120)
+                return;
+
+            var jump = _plannedJump;
+            LoopEvent?.Invoke(this,
+                $"Jukebox: watchdog — forcing overdue jump {jump.FromBeatIndex} → {jump.TargetBeatIndex}.");
+            _playbackHost.DisarmAction();
+            _playbackHost.Seek(jump.SeekToMs);
+            _lastPositionMs = jump.SeekToMs;
+
+            // Synthesize the normal fire path so replan + UI flash still run.
+            OnJukeboxActionFired(new ArmedActionFiredEventArgs
+            {
+                ActionId = JukeboxActionId,
+                FiredAtMs = position.PositionMs,
+                SeekToMs = jump.SeekToMs
+            });
         }
 
         private void RaiseJukeboxJump(JukeboxJump jump, bool planned)
@@ -272,6 +320,28 @@ namespace SpotifyWPF.Service.Prediction
                 Rearm();
         }
 
+        public void NotifyPlaybackSeek(long positionMs)
+        {
+            _lastPositionMs = Math.Max(0, positionMs);
+            _plannedJump = null;
+            _playbackHost.DisarmAction();
+
+            if (!IsLoopActive)
+                return;
+
+            if (ActiveProfile.Mode == LoopModes.Jukebox)
+            {
+                // Preserve navigator state (branch chance / visit memory) but replan from scrub point.
+                if (_navigator == null)
+                    RearmJukebox();
+                else
+                    PlanAndArmJump(_navigator.FindBeatIndexAtMs(_lastPositionMs));
+                return;
+            }
+
+            Rearm();
+        }
+
         private void OnJukeboxActionFired(ArmedActionFiredEventArgs e)
         {
             if (e.ActionId != JukeboxActionId || _navigator == null)
@@ -281,8 +351,16 @@ namespace SpotifyWPF.Service.Prediction
 
             if (jump != null)
             {
+                var endLoopNote = ActiveProfile?.Mode == LoopModes.Jukebox &&
+                                  _jukeboxSettings.Get().EnableEndLoop &&
+                                  _navigator?.Graph != null &&
+                                  jump.FromBeatIndex >= _navigator.Graph.LastBranchPointIndex &&
+                                  jump.TargetBeatIndex < jump.FromBeatIndex
+                    ? " (end-loop escape)"
+                    : string.Empty;
+
                 LoopEvent?.Invoke(this,
-                    $"Jukebox: jumped beat {jump.FromBeatIndex} → {jump.TargetBeatIndex}.");
+                    $"Jukebox: jumped beat {jump.FromBeatIndex} → {jump.TargetBeatIndex}.{endLoopNote}");
                 RaiseJukeboxJump(jump, planned: false);
             }
 
@@ -313,7 +391,11 @@ namespace SpotifyWPF.Service.Prediction
                 LoopEvent?.Invoke(this,
                     $"Jukebox: built beat graph — {graph.Beats.Count} beats, {graph.TotalBranchCount} branches " +
                     $"({graph.BranchableBeatCount} branchable, {graph.MetricMode}, " +
-                    $"threshold {graph.BranchDistanceThreshold:0.###}).");
+                    $"threshold {graph.BranchDistanceThreshold:0.###}" +
+                    (graph.LastBranchPointIndex >= 0
+                        ? $", end-loop escape @ beat {graph.LastBranchPointIndex}"
+                        : ", end-loop off") +
+                    ").");
 
                 return graph;
             }

@@ -638,6 +638,9 @@ namespace SpotifyWPF.ViewModel.Page
                 _jukeboxSettingsModel.AllowOnlyReverseBranches = value;
                 RaisePropertyChanged();
                 PersistJukeboxSettings();
+                Log(value
+                    ? "Jukebox: only-backward jumps ON — forward hops blocked (hurts novelty)."
+                    : "Jukebox: only-backward jumps OFF.");
             }
         }
 
@@ -652,6 +655,9 @@ namespace SpotifyWPF.ViewModel.Page
                 _jukeboxSettingsModel.AllowOnlyLongBranches = value;
                 RaisePropertyChanged();
                 PersistJukeboxSettings();
+                Log(value
+                    ? "Jukebox: only long jumps ON (16+ beats; end-loop still exempt)."
+                    : "Jukebox: only long jumps OFF.");
             }
         }
 
@@ -696,6 +702,33 @@ namespace SpotifyWPF.ViewModel.Page
         }
 
         private IReadOnlyList<double> _ringSectionStartsSec = Array.Empty<double>();
+
+        /// <summary>Classic stacked features for the Slice 3 SSM heatmap (null if analysis lacks them).</summary>
+        public System.Collections.IList RingStackedFeatures
+        {
+            get => _ringStackedFeatures;
+            set => Set(ref _ringStackedFeatures, value);
+        }
+
+        private System.Collections.IList _ringStackedFeatures;
+
+        /// <summary>Beat under inspect on the ring / SSM (shared selection).</summary>
+        public int RingInspectBeat
+        {
+            get => _ringInspectBeat;
+            set => Set(ref _ringInspectBeat, value);
+        }
+
+        private int _ringInspectBeat = -1;
+
+        /// <summary>Show the self-similarity heatmap overlay (Slice 3 Observe).</summary>
+        public bool ShowSsmHeatmap
+        {
+            get => _showSsmHeatmap;
+            set => Set(ref _showSsmHeatmap, value);
+        }
+
+        private bool _showSsmHeatmap;
 
         public int RingPlannedFromBeat
         {
@@ -775,7 +808,13 @@ namespace SpotifyWPF.ViewModel.Page
             set
             {
                 if (Set(ref _jukeboxRandomBranches, value))
+                {
                     ApplyLoopSettings();
+                    Log(value
+                        ? "Jukebox: random jumps ON (plus any locked branches)."
+                        : "Jukebox: random jumps OFF — locked branches only" +
+                          (JukeboxEnableEndLoop ? " (+ end loop)." : "."));
+                }
             }
         }
 
@@ -790,6 +829,9 @@ namespace SpotifyWPF.ViewModel.Page
                 _jukeboxSettingsModel.EnableEndLoop = value;
                 RaisePropertyChanged();
                 PersistJukeboxSettings(invalidateGraph: true);
+                Log(value
+                    ? "Jukebox: end loop ON — track should not finish; graph rebuilt."
+                    : "Jukebox: end loop OFF — song can play out linearly; graph rebuilt.");
             }
         }
 
@@ -1331,8 +1373,10 @@ namespace SpotifyWPF.ViewModel.Page
             _isUserScrubbing = false;
             PositionMs = _scrubPositionMs;
             _transport.Seek(_scrubPositionMs);
+            _loopController.NotifyPlaybackSeek(_scrubPositionMs);
             RaisePropertyChanged(nameof(ScrubberPositionMs));
             RaisePropertyChanged(nameof(PositionText));
+            Log($"Scrubbed to {FormatMs(_scrubPositionMs)} — replanned jukebox from here.", verbose: true);
         }
 
         /// <summary>Defer disk writes while a tuning slider is being dragged.</summary>
@@ -2171,6 +2215,8 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 RingGraph = null;
                 RingSectionStartsSec = Array.Empty<double>();
+                RingStackedFeatures = null;
+                RingInspectBeat = -1;
                 RingSegmentCountText = "No track playing";
                 _visualEnergy.Clear();
                 return;
@@ -2182,6 +2228,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 RingGraph = null;
                 RingSectionStartsSec = Array.Empty<double>();
+                RingStackedFeatures = null;
                 RingSegmentCountText = "No beat map — analyze track to build the ring";
                 _visualEnergy.Clear();
                 return;
@@ -2193,6 +2240,7 @@ namespace SpotifyWPF.ViewModel.Page
             RingSectionStartsSec = analysis.Sections != null && analysis.Sections.Count > 0
                 ? analysis.Sections.Select(s => s.Start).ToList()
                 : (IReadOnlyList<double>)Array.Empty<double>();
+            RingStackedFeatures = analysis.HasClassicFeatures ? analysis.StackedFeatures : null;
             RingSegmentCountText = "Building beat graph…";
 
             // The graph is O(beats²) to build; keep the UI thread free.

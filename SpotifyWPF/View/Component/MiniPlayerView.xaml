@@ -127,46 +127,53 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0"
-              Height="14"
-              Margin="40,16,40,0"
-              HorizontalAlignment="Stretch"
-              ClipToBounds="True"
-              IsHitTestVisible="False">
-            <TextBlock Text="Nothing playing"
+        <StackPanel Grid.Row="0"
+                    Margin="40,12,40,0"
+                    HorizontalAlignment="Stretch"
+                    IsHitTestVisible="False">
+            <Grid Height="14"
+                  ClipToBounds="True">
+                <TextBlock Text="Nothing playing"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           FontSize="9"
+                           Foreground="{DynamicResource AppMutedForegroundBrush}">
+                    <TextBlock.Style>
+                        <Style TargetType="{x:Type TextBlock}">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <component:MarqueeTextBlock Text="{Binding NowPlayingMarqueeText}"
+                                            Height="14"
+                                            FontSize="9"
+                                            AlwaysScroll="False"
+                                            HorizontalAlignment="Stretch"
+                                            Foreground="{DynamicResource AppForegroundBrush}">
+                    <component:MarqueeTextBlock.Style>
+                        <Style TargetType="{x:Type component:MarqueeTextBlock}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </component:MarqueeTextBlock.Style>
+                </component:MarqueeTextBlock>
+            </Grid>
+            <TextBlock Text="{Binding PositionText}"
                        HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       FontSize="9"
-                       Foreground="{DynamicResource AppMutedForegroundBrush}">
-                <TextBlock.Style>
-                    <Style TargetType="{x:Type TextBlock}">
-                        <Setter Property="Visibility" Value="Visible"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
-            <component:MarqueeTextBlock Text="{Binding NowPlayingMarqueeText}"
-                                        Height="14"
-                                        FontSize="9"
-                                        AlwaysScroll="False"
-                                        HorizontalAlignment="Stretch"
-                                        Foreground="{DynamicResource AppForegroundBrush}">
-                <component:MarqueeTextBlock.Style>
-                    <Style TargetType="{x:Type component:MarqueeTextBlock}">
-                        <Setter Property="Visibility" Value="Collapsed"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
-                                <Setter Property="Visibility" Value="Visible"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </component:MarqueeTextBlock.Style>
-            </component:MarqueeTextBlock>
-        </Grid>
+                       FontSize="8"
+                       Margin="0,2,0,0"
+                       Opacity="0.7"
+                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+        </StackPanel>
 
         <Border Grid.Row="1"
                 HorizontalAlignment="Stretch"
@@ -240,7 +247,7 @@
                                           Style="{StaticResource MiniPlayerLockToggleStyle}"
                                           HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
-                                          ToolTip="Tap: random branches on/off · Drag: wheel"
+                                          ToolTip="Tap: allow random jumps on/off · Drag: volume wheel"
                                           IsChecked="{Binding JukeboxRandomBranches}"
                                           PreviewMouseLeftButtonDown="LockToggle_PreviewMouseLeftButtonDown"
                                           PreviewMouseMove="LockToggle_PreviewMouseMove"

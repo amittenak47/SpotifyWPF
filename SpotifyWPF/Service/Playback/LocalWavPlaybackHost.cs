@@ -224,6 +224,7 @@ namespace SpotifyWPF.Service.Playback
                     return;
 
                 var positionMs = CurrentPositionMsUnlocked();
+                var firedSeekThisTick = false;
 
                 if (_hasArmed && !_paused && positionMs >= _armedWhenMs)
                 {
@@ -232,6 +233,8 @@ namespace SpotifyWPF.Service.Playback
                     seekTo = _armedSeekToMs;
                     _hasArmed = false;
                     SeekInternal(seekTo);
+                    firedSeekThisTick = true;
+                    positionMs = CurrentPositionMsUnlocked();
                 }
 
                 _positionTickCounter++;
@@ -243,7 +246,11 @@ namespace SpotifyWPF.Service.Playback
                     shouldRaisePosition = true;
                 }
 
-                if (!_paused && _durationMs > 0 && positionMs >= _durationMs - 25)
+                // Never raise TrackEnded on the same tick as a jukebox seek (old position was near EOF
+                // and would stop playback right after escaping). Also suppress while an armed jump
+                // is still waiting — end-loop must win over natural finish.
+                if (!firedSeekThisTick && !_hasArmed && !_paused && _durationMs > 0 &&
+                    positionMs >= _durationMs - 25)
                     shouldRaiseEnded = true;
             }
 

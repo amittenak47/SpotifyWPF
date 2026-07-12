@@ -122,9 +122,58 @@
                                                                  VerticalAlignment="Center"
                                                                  DataContext="{Binding}"/>
                             </Border>
+
+                            <!-- Slice 3 Observe: draggable SSM heatmap -->
+                            <Border x:Name="SsmPanel"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Margin="8,8,0,0"
+                                    Padding="6"
+                                    Width="220"
+                                    Height="240"
+                                    Panel.ZIndex="25"
+                                    Background="#EE0A0A0C"
+                                    BorderBrush="#88FFD166"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Cursor="SizeAll"
+                                    Visibility="{Binding ShowSsmHeatmap, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    MouseLeftButtonDown="SsmPanel_MouseLeftButtonDown"
+                                    MouseMove="SsmPanel_MouseMove"
+                                    MouseLeftButtonUp="SsmPanel_MouseLeftButtonUp">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Top"
+                                               Text="Self-similarity (drag me)"
+                                               FontSize="10"
+                                               FontWeight="SemiBold"
+                                               Margin="0,0,0,4"
+                                               Foreground="#FFD166"/>
+                                    <TextBlock DockPanel.Dock="Bottom"
+                                               Text="Bright = similar · stripes = repeats · click row to inspect"
+                                               FontSize="9"
+                                               Margin="0,4,0,0"
+                                               TextWrapping="Wrap"
+                                               Foreground="#AAAAAA"/>
+                                    <component:SelfSimilarityHeatmapControl
+                                        StackedFeatures="{Binding RingStackedFeatures}"
+                                        HighlightBeatIndex="{Binding RingInspectBeat, Mode=OneWay}"
+                                        SelectedBeatIndex="{Binding RingInspectBeat, Mode=TwoWay}"/>
+                                </DockPanel>
+                            </Border>
                         </Grid>
                     </Grid>
                 </Viewbox>
+
+                <!-- Scrubber clock footnote -->
+                <TextBlock HorizontalAlignment="Right"
+                           VerticalAlignment="Bottom"
+                           Margin="0,0,14,10"
+                           Panel.ZIndex="30"
+                           FontSize="11"
+                           Opacity="0.7"
+                           Foreground="{DynamicResource AppMutedForegroundBrush}"
+                           Text="{Binding PositionText}"
+                           Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
                 <!-- Title overlays the stage background (no dedicated bar) -->
                 <StackPanel HorizontalAlignment="Left"
@@ -230,6 +279,12 @@
                                        FontSize="10"
                                        Margin="0,2,0,0"
                                        Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                            <CheckBox Content="Show similarity map (SSM)"
+                                      FontSize="10"
+                                      Margin="0,6,0,0"
+                                      IsChecked="{Binding ShowSsmHeatmap}"
+                                      Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                      ToolTip="Slice 3 Observe: beats×beats self-similarity. Bright stripes = repeating sections."/>
                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                 <StackPanel.Style>
                                     <Style TargetType="StackPanel">

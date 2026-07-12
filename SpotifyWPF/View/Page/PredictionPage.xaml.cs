@@ -8,6 +8,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Navigation;
 using CommonServiceLocator;
 using SpotifyWPF.Service.Playback;
+using SpotifyWPF.View.Component;
 using SpotifyWPF.ViewModel.Page;
 
 namespace SpotifyWPF.View.Page
@@ -98,6 +99,55 @@ namespace SpotifyWPF.View.Page
                 return;
 
             StageRoot.RenderTransform = new ScaleTransform(_stageZoom, _stageZoom);
+        }
+
+        private Point _ssmDragOffset;
+        private bool _ssmDragging;
+
+        private void SsmPanel_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var panel = sender as Border;
+
+            if (panel == null)
+                return;
+
+            // Don't start a drag when interacting with the heatmap image itself for click-select —
+            // only drag from the title bar area (top ~22px) or empty chrome.
+            var pos = e.GetPosition(panel);
+
+            if (pos.Y > 28 && e.OriginalSource is SelfSimilarityHeatmapControl)
+                return;
+
+            _ssmDragging = true;
+            _ssmDragOffset = e.GetPosition(panel);
+            panel.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void SsmPanel_MouseMove(object sender, MouseEventArgs e)
+        {
+            var panel = sender as Border;
+
+            if (!_ssmDragging || panel == null || StageRoot == null)
+                return;
+
+            var parentPos = e.GetPosition(StageRoot);
+            var left = Math.Max(0, Math.Min(parentPos.X - _ssmDragOffset.X, StageRoot.Width - panel.Width));
+            var top = Math.Max(0, Math.Min(parentPos.Y - _ssmDragOffset.Y, StageRoot.Height - panel.Height));
+            panel.Margin = new Thickness(left, top, 0, 0);
+            panel.HorizontalAlignment = HorizontalAlignment.Left;
+            panel.VerticalAlignment = VerticalAlignment.Top;
+        }
+
+        private void SsmPanel_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            var panel = sender as Border;
+
+            if (!_ssmDragging || panel == null)
+                return;
+
+            _ssmDragging = false;
+            panel.ReleaseMouseCapture();
         }
 
         private void HoverZone_MouseEnter(object sender, MouseEventArgs e)

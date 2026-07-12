@@ -349,16 +349,17 @@ namespace SpotifyWPF.Service.Prediction
         private void EnsureLastEdge(BeatGraph graph, double[][] distances, JukeboxSettings settings)
         {
             var count = graph.Beats.Count;
-            var lastBranchPoint = FindLastBranchPoint(graph);
-            var minJump = Math.Max(4, settings.MinimumJumpBeats > 0 ? settings.MinimumJumpBeats : 8);
 
-            if (lastBranchPoint >= count * 3 / 4)
+            if (count < 2 || distances == null)
                 return;
 
-            // Prefer best backward splice in the last ~10% of beats.
+            var minJump = Math.Max(4, settings.MinimumJumpBeats > 0 ? settings.MinimumJumpBeats : 8);
+
+            // Always install a quality backward splice in the last ~10% of beats.
+            // (Previously we skipped this when any backward edge existed in the last 25%, which
+            // left the true tail without a reliable escape — and hops could still overshoot it.)
             var searchFrom = Math.Max(0, (int)(count * 0.9));
-            var sourceIndex = count - 1;
-            var bestSource = sourceIndex;
+            var bestSource = count - 1;
             var bestTarget = -1;
             var bestDistance = double.MaxValue;
 

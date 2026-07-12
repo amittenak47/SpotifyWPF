@@ -41,6 +41,20 @@ namespace SpotifyWPF.Service.Prediction
 
         private double _currentBranchChance;
 
+        /// <summary>
+        /// Recent jump destinations. Exact-index memory is useless for chorus twins
+        /// (44→45→46 all look "fresh"); we treat a radius around each as visited and
+        /// refuse jumps into that pocket so the walk can leave the attractor.
+        /// </summary>
+        private readonly Queue<int> _recentDestinations = new Queue<int>();
+
+        private readonly HashSet<int> _recentDestinationSet = new HashSet<int>();
+
+        private const int RecentVisitMemory = 32;
+
+        /// <summary>Beats within this radius of a recent destination count as the same pocket.</summary>
+        private const int VisitRegionRadiusBeats = 16;
+
         public BeatGraph Graph { get; }
 
         public double CurrentBranchChance => _currentBranchChance;
@@ -120,10 +134,32 @@ namespace SpotifyWPF.Service.Prediction
                 return null;
 
             var start = Math.Max(0, Math.Min(fromBeatIndex, beats.Count - 1));
+            var lastBranch = Graph.LastBranchPointIndex;
+            var endLoopActive = _settings.EnableEndLoop && lastBranch >= 0;
+
+            // A prior hop can land AFTER the last escape beat; the old == guard never ran and the
+            // song finished with "end loop" still checked. Escape immediately from wherever we are.
+            if (endLoopActive && start > lastBranch)
+            {
+                var escaped = TryCreateEndLoopJump(start) ?? TryCreateEndLoopJump(lastBranch);
+
+                if (escaped != null)
+                    return escaped;
+            }
 
             for (var i = start; i < beats.Count; i++)
             {
                 var beat = beats[i];
+
+                // Point of no return: at or past the last escape beat, always jump back.
+                // Checked before locks so a locked forward hop cannot run the track out.
+                if (endLoopActive && i >= lastBranch)
+                {
+                    var guard = TryCreateEndLoopJump(i) ?? TryCreateEndLoopJump(lastBranch);
+
+                    if (guard != null)
+                        return guard;
+                }
 
                 // Locked branches at this beat: each fires at its own probability.
                 var lockedJump = TryTakeLockedJump(i, beat.Neighbors);
@@ -131,32 +167,9 @@ namespace SpotifyWPF.Service.Prediction
                 if (lockedJump != null)
                     return lockedJump;
 
-                // Random off: only locks (+ end-loop guard below). Never fall back to full random.
+                // Random off: only locks (+ end-loop guard above). Never fall back to full random.
                 if (!_randomBranches)
-                {
-                    if (_settings.EnableEndLoop && i == Graph.LastBranchPointIndex)
-                    {
-                        var guardEdge = ChooseEdge(i,
-                            beat.Neighbors.Where(e => e.DestinationIndex < i).ToList(),
-                            exemptLongBranchFilter: true);
-
-                        if (guardEdge != null)
-                            return MakeJump(i, guardEdge);
-                    }
-
                     continue;
-                }
-
-                // Point of no return: always branch backwards here rather than running off the end.
-                if (_settings.EnableEndLoop && i == Graph.LastBranchPointIndex)
-                {
-                    var backwardEdge = ChooseEdge(i,
-                        beat.Neighbors.Where(e => e.DestinationIndex < i).ToList(),
-                        exemptLongBranchFilter: true);
-
-                    if (backwardEdge != null)
-                        return MakeJump(i, backwardEdge);
-                }
 
                 if (beat.Neighbors.Count == 0)
                     continue;
@@ -178,7 +191,51 @@ namespace SpotifyWPF.Service.Prediction
                 }
             }
 
+            // Last resort: still somehow past the escape beat with no plan.
+            if (endLoopActive)
+                return TryCreateEndLoopJump(Math.Min(start, lastBranch)) ?? TryCreateEndLoopJump(lastBranch);
+
             return null;
+        }
+
+        /// <summary>
+        /// Force a backward jump for end-loop. Searches the from-beat, then the last branch point,
+        /// then earlier beats until a usable backward edge exists.
+        /// </summary>
+        private JukeboxJump TryCreateEndLoopJump(int fromIndex)
+        {
+            if (Graph.Beats.Count == 0)
+                return null;
+
+            fromIndex = Math.Max(0, Math.Min(fromIndex, Graph.Beats.Count - 1));
+
+            if (TryGetBackwardCandidates(fromIndex, out var source, out var candidates))
+            {
+                var edge = ChooseEdge(source, candidates, exemptLongBranchFilter: true)
+                           ?? candidates[_random.Next(candidates.Count)];
+                return MakeJump(source, edge);
+            }
+
+            for (var i = fromIndex - 1; i >= 0; i--)
+            {
+                if (!TryGetBackwardCandidates(i, out source, out candidates))
+                    continue;
+
+                var edge = ChooseEdge(source, candidates, exemptLongBranchFilter: true)
+                           ?? candidates[_random.Next(candidates.Count)];
+                return MakeJump(source, edge);
+            }
+
+            return null;
+        }
+
+        private bool TryGetBackwardCandidates(int fromIndex, out int source, out List<BeatEdge> candidates)
+        {
+            source = fromIndex;
+            candidates = Graph.Beats[fromIndex].Neighbors
+                .Where(e => e.DestinationIndex < fromIndex)
+                .ToList();
+            return candidates.Count > 0;
         }
 
         /// <summary>
@@ -244,7 +301,60 @@ namespace SpotifyWPF.Service.Prediction
             if (filtered.Count == 0)
                 return null;
 
-            return filtered[_random.Next(filtered.Count)];
+            var fresh = filtered.Where(e => !IsNearRecentDestination(e.DestinationIndex)).ToList();
+
+            if (fresh.Count > 0)
+                return PickAwayFromRecent(fresh);
+
+            // Entire candidate set lands in a recent pocket (classic chorus A↔B).
+            // Refuse the jump so PlanNextJump keeps walking linearly out of the attractor.
+            // End-loop / last-branch guard must still fire (exemptLongBranchFilter).
+            if (exemptLongBranchFilter)
+                return PickAwayFromRecent(filtered);
+
+            return null;
+        }
+
+        private bool IsNearRecentDestination(int destinationIndex)
+        {
+            foreach (var recent in _recentDestinations)
+            {
+                if (Math.Abs(destinationIndex - recent) <= VisitRegionRadiusBeats)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>Weighted pick favoring destinations farthest from recent visit pockets.</summary>
+        private BeatEdge PickAwayFromRecent(List<BeatEdge> edges)
+        {
+            if (edges.Count == 1)
+                return edges[0];
+
+            if (_recentDestinations.Count == 0)
+                return edges[_random.Next(edges.Count)];
+
+            var weighted = new List<(BeatEdge Edge, double Weight)>(edges.Count);
+
+            foreach (var edge in edges)
+            {
+                var minDist = int.MaxValue;
+
+                foreach (var recent in _recentDestinations)
+                {
+                    var dist = Math.Abs(edge.DestinationIndex - recent);
+
+                    if (dist < minDist)
+                        minDist = dist;
+                }
+
+                // Squared distance biases hard away from the pocket; +1 keeps weight > 0.
+                var weight = (minDist + 1.0) * (minDist + 1.0);
+                weighted.Add((edge, weight));
+            }
+
+            return WeightedPick(weighted);
         }
 
         private List<BeatEdge> FilterEdges(int fromBeatIndex, IReadOnlyList<BeatEdge> edges,
@@ -261,11 +371,20 @@ namespace SpotifyWPF.Service.Prediction
                 query = query.Where(e => Math.Abs(e.DestinationIndex - fromBeatIndex) >= minBeats);
             }
 
+            // Don't arm hops that land past the last escape beat — that used to finish the song.
+            if (_settings.EnableEndLoop && Graph.LastBranchPointIndex >= 0 && !exemptLongBranchFilter)
+            {
+                var last = Graph.LastBranchPointIndex;
+                query = query.Where(e => e.DestinationIndex <= last);
+            }
+
             return query.ToList();
         }
 
         private JukeboxJump MakeJump(int fromIndex, BeatEdge edge)
         {
+            RememberDestination(edge.DestinationIndex);
+
             var target = Graph.Beats[edge.DestinationIndex];
             var triggerMs = Graph.Beats[fromIndex].EndMs - _settings.SeekLeadMs;
 
@@ -281,5 +400,31 @@ namespace SpotifyWPF.Service.Prediction
                 BranchDistance = edge.Distance
             };
         }
+
+        private void RememberDestination(int destinationIndex)
+        {
+            if (!_recentDestinationSet.Add(destinationIndex))
+                return;
+
+            _recentDestinations.Enqueue(destinationIndex);
+
+            while (_recentDestinations.Count > RecentVisitMemory)
+            {
+                var old = _recentDestinations.Dequeue();
+                _recentDestinationSet.Remove(old);
+            }
+        }
+
+        /// <summary>Copy visit memory across navigator recreations (rearm / lock edits).</summary>
+        public void ImportVisitMemory(IEnumerable<int> destinations)
+        {
+            if (destinations == null)
+                return;
+
+            foreach (var dest in destinations)
+                RememberDestination(dest);
+        }
+
+        public IReadOnlyList<int> ExportVisitMemory() => _recentDestinations.ToArray();
     }
 }
