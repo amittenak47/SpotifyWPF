@@ -58,7 +58,7 @@ namespace SpotifyWPF.Model.Prediction
 
         /// <summary>Max outgoing Classic kNN neighbors per beat.</summary>
         [JsonPropertyName("classicMaxNeighbors")]
-        public int ClassicMaxNeighbors { get; set; } = 6;
+        public int ClassicMaxNeighbors { get; set; } = 12;
 
         /// <summary>
         /// Phase penalty mode for Classic distance: "off", "soft" (default), or "hard".

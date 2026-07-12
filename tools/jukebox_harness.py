@@ -4,6 +4,8 @@
 Usage:
     python tools/jukebox_harness.py path/to/analysis.json [--k 6] [--percentile 55] [--min-jump 8] [--mutual]
 
+Classic edges are continuation-oriented: i→j scores euclid(stack[i+1], stack[j]).
+
 Reports: dead-beat rate, jump-length dist, continuation error, mutual coverage,
 component count / fragmentation, optional DP↔BeatThis F-measure from analysis.dpAgreement.
 """
@@ -36,15 +38,17 @@ def euclid(a, b):
 
 
 def build_knn(vectors, beats, k=6, percentile=55.0, min_jump=8):
+    """Directed continuation kNN: edge i→j scores euclid(stack[i+1], stack[j])."""
     n = len(vectors)
     pairs = []
     dist = np.full((n, n), np.inf)
-    for i in range(n):
-        for j in range(i + 1, n):
-            if abs(i - j) < min_jump:
+    for i in range(n - 1):
+        nxt = vectors[i + 1]
+        for j in range(n):
+            if j == i or abs(i - j) < min_jump:
                 continue
-            d = euclid(vectors[i], vectors[j])
-            dist[i, j] = dist[j, i] = d
+            d = euclid(nxt, vectors[j])
+            dist[i, j] = d
             pairs.append(d)
 
     if not pairs:

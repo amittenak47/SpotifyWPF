@@ -28,6 +28,7 @@
                                      ToggleLockCommand="{Binding ToggleRingLockCommand}"
                                      ScrubToMsCommand="{Binding RingScrubToCommand}"
                                      EndScrubCommand="{Binding EndRingScrubCommand}"
+                                     HoldSpeedCommand="{Binding HoldRingSpeedCommand}"
                                      ResetPlaysToken="{Binding RingResetPlaysToken, Mode=OneWay}"
                                      PreviewHopDepth="{Binding RingPreviewHopDepth, Mode=OneWay}"
                                      InspectBeatIndex="{Binding RingInspectBeat, Mode=TwoWay}"

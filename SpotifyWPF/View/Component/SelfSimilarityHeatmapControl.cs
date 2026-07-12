@@ -78,7 +78,7 @@ namespace SpotifyWPF.View.Component
 
             if (_bitmap == null || _beatCount <= 0)
             {
-                var tip = new FormattedText("SSM needs Classic stacked features\n(re-Analyze with Classic metric)",
+                var tip = new FormattedText("SSM needs Enhanced stacked features\n(re-Analyze with Enhanced metric)",
                     System.Globalization.CultureInfo.CurrentUICulture,
                     FlowDirection.LeftToRight,
                     new Typeface("Segoe UI"),

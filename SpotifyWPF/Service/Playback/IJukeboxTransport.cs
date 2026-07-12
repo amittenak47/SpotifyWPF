@@ -28,6 +28,9 @@ namespace SpotifyWPF.Service.Playback
 
         void SetVolume(double volume);
 
+        /// <summary>Temporary playback rate (1 = normal). Local WAV supports this; Spotify may no-op.</summary>
+        void SetPlaybackRate(double rate);
+
         event EventHandler<PlayerStateSnapshot> StateChanged;
 
         event EventHandler<PositionSnapshot> PositionUpdated;

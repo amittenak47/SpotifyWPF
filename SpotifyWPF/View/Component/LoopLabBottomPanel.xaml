@@ -349,21 +349,50 @@
                                                                Foreground="{DynamicResource AppForegroundBrush}"/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                                               Text="The ring is a beat graph: similar moments in the song become possible jump targets. Tuning changes which edges exist, how often random jumps fire, and whether landings stay on the same musical phase. Sliders rebuild from cached analysis (no re-capture). Use Session → Analyze for a new track; Delete analysis + Analyze to redo features."/>
+                                                               Text="The ring is a weighted beat graph: similar moments become jump targets with continuous distances (not hard same/different buckets). Tuning changes which edges exist, how often random jumps fire, and whether landings stay on musical phase. Sliders rebuild from cached analysis (no re-capture). Session → Analyze for a new track; Delete analysis + Analyze to redo features."/>
+
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                                               Text="How this differs from Remixatron-style players"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Playback — Remixatron stitches beat buffers sample-accurately in a native engine (zero seek latency). This app is a WPF authoring player: Spotify Web Playback seeks (±~50ms poll jitter) or Local WAV in-process seeks. That is why seek lead, pre-arming, and one-jump-ahead planning exist here."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Similarity — Remixatron clusters beats once (categorical: same cluster or not) then applies boolean jump rules. Enhanced keeps continuous z-scored distances all the way to Softmax: edges have magnitudes, candidates are kNN + a percentile quality cap, and jump choice is Softmax(−dist/τ − λ·visits + w_pref)."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Continuation — Remixatron requires candidates in the next beat's cluster. Enhanced scores edge i→j by how well beat j continues after i (stacked features of i+1 vs j), so landings fit the exit rather than twinning the same attack (which used to double cymbals)."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Phase — Remixatron hard-requires same position in measure. Enhanced uses BeatThis downbeats when available, plus Soft/Hard/Off bar-phase penalty and optional Phrase align (8/16) for long drum grooves."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Authoring — Remixatron is a fully automatic player. Here you get locks, per-branch probabilities, tune presets bound to analysis fingerprints, ring hover analysis, SSM heatmap, and optional preference labels from scrub-after-hop."/>
+
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                                               Text="BeatThis vs legacy DP beats"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="BeatThis is a learned beat/downbeat tracker (robust through quiet gaps that used to create monster beats with librosa's DP tracker). Real downbeats make bar-phase penalties musically honest instead of arbitrary i mod 4. Gap-split remains a safety net if an interval is still much larger than the median."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Settings → Beat tracker: Auto / BeatThis / DP. Graph metric: Auto / Enhanced / Legacy (Legacy = old Echo Nest-style segment distance for old caches)."/>
 
                                                     <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
                                                                Text="Quick start (smooth Infinite Jukebox)"
                                                                Foreground="{DynamicResource AppForegroundBrush}"/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                                               Text="1) Branch quality ~35–50 (lower = only the closest matches). 2) Dwell 12–16 so each hop plays out before another. 3) Bar phase = Soft or Hard. 4) For long drum phrases (Clubbed to Death, Furious Angels) set Phrase align to 8 or 16 and Hard phase. 5) Keep End loop + Allow random jumps on unless you are authoring locks only."/>
+                                                               Text="1) Branch quality ~35–50 (lower = only the closest matches). 2) Dwell 12–16 so each hop plays out before another. 3) Bar phase = Soft or Hard. 4) For long drum phrases (Clubbed to Death, Furious Angels) set Phrase align to 8 or 16 and Hard phase. 5) Prefer Local WAV when a capture exists. 6) Keep End loop + Allow random jumps on unless you are authoring locks only."/>
 
                                                     <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
                                                                Text="Who jumps, and how often"
                                                                Foreground="{DynamicResource AppForegroundBrush}"/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                                               Text="Branch quality percentile — distance cap for Classic edges. Lower = stricter / smoother; higher = more adventurous (and riskier) hops. Rebuilds the graph."/>
+                                                               Text="Branch quality percentile — distance cap for Enhanced edges. Lower = stricter / smoother; higher = more adventurous (and riskier) hops. Rebuilds the graph."/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
                                                                Text="Branch probability min / max — chance range for taking a random hop when a beat has candidates. Min is the floor after a jump; max is the ceiling as chance ramps."/>
@@ -378,11 +407,11 @@
                                                                Text="Allow random jumps — off = only your locked branches (+ end loop if on). On = random walk plus locks at their probabilities."/>
 
                                                     <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
-                                                               Text="Bar / phrase alignment (drums that feel “mid-bar”)"
+                                                               Text="Bar / phrase alignment (drums that feel mid-bar)"
                                                                Foreground="{DynamicResource AppForegroundBrush}"/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                                               Text="BeatThis places beats and usually 4-beat downbeats. Classic similarity can still match a drum hit that is on the grid but not at the same place in an 8- or 16-beat groove — it sounds right on the beat and wrong musically."/>
+                                                               Text="BeatThis places beats and usually 4-beat downbeats. Enhanced similarity can still match a drum hit that is on the grid but not at the same place in an 8- or 16-beat groove — it sounds right on the beat and wrong musically."/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
                                                                Text="Bar phase penalty — Off ignores bar position; Soft prefers same beat-in-bar; Hard only keeps same beat-in-bar edges (rebuilds graph)."/>
@@ -408,20 +437,33 @@
                                                                Foreground="{DynamicResource AppForegroundBrush}"/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                                               Text="Mutual kNN — keep only reciprocal neighbors (safer components; can orphan unique passages). Bridge components — add cheapest rescue edges so orphans stay reachable (drawn cooler on the ring). Essentia region gate — when embeddings exist, Classic hops stay in nearby regions."/>
+                                                               Text="Mutual kNN — keep only reciprocal neighbors (safer components; can orphan unique passages). Bridge components — add cheapest rescue edges so orphans stay reachable (drawn cooler on the ring). Essentia region gate — when embeddings exist, Enhanced hops stay in nearby regions."/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
                                                                Text="Only jump backward / 16+ beats away — navigator filters (long-branch filter does not block the end-loop escape). End loop — guaranteed jump before the track finishes."/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                                               Text="Seek lead — fire seeks slightly early to hide Spotify SDK latency (less critical on Local WAV)."/>
+                                                               Text="Seek lead — fire seeks early to hide Spotify SDK latency. Forced to 0 on Local WAV (in-process seeks need no lead). Enhanced edges are continuation-oriented (land where the next beat would fit), not beat twins."/>
+
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
+                                                               Text="When a hop sounds early / late (piano double)"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="If origin plays the final piano notes and the landing starts just before those same notes, the destination is a near-twin of the exit — you hear the cadence twice, slightly offset. Enhanced already scores continuation (i+1 vs j), but phase can still slip."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="Try in order: (1) Bar phase = Hard. (2) Phrase align = 8 or 16 on groove tracks. (3) Branch quality lower (stricter). (4) Seek lead = 0 on Local WAV (already forced). (5) Dwell 12–16 so you hear the landing before the next hop. Rebuild the graph after phase/quality changes."/>
+                                                    <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               Text="End loop — escapes the last ~10% of the track and prefers landings before the final fifth so the outro cannot trap you by always jumping to the start of the same ending section. Turn End loop off if you want the song to finish."/>
 
                                                     <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"
                                                                Text="Authoring on the ring"
                                                                Foreground="{DynamicResource AppForegroundBrush}"/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                                               Text="Click a beat → hover arrows for analysis → click arrows to chain hops → ✓ confirms locks (bottom-right). Clear locks / Reset plays manage locks and coverage bars. Branch preview hops = how many steps glow ahead. SSM = full beats×beats map (bright = similar / repeating sections)."/>
+                                                               Text="Hover any beat to preview its hops. Click an arrow to select it (does not force a chain from that landing). Hover other beats and pick more hops from them. Confirm with checkmark to lock all selected hops. Double-click a locked (gold) branch to remove it. Drag coverage bars / outer rim to scrub."/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
                                                                Text="Save tune + branches from Session (Tune preset) so a settings snapshot + locks stay tied to the analysis fingerprint."/>
@@ -449,7 +491,7 @@
                                                                Minimum="0.2"
                                                                Maximum="3"
                                                                Value="{Binding JukeboxBranchRampPerBeatPercent}"/>
-                                        <local:TuningSliderRow Label="Seek lead (SDK latency)"
+                                        <local:TuningSliderRow Label="Seek lead (Spotify SDK only; 0 on Local WAV)"
                                                                ValueText="{Binding JukeboxSeekLeadMsText}"
                                                                Minimum="0"
                                                                Maximum="300"
@@ -530,7 +572,7 @@
                                                   Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding JukeboxEssentiaRegionGate}"
                                                   Margin="0,0,0,4"
-                                                  ToolTip="When analysis has regionEmbeddings, Classic hops are gated to nearby regions. Rebuilds graph."/>
+                                                  ToolTip="When analysis has regionEmbeddings, Enhanced hops are gated to nearby regions. Rebuilds graph."/>
                                         <CheckBox Content="Never let the song finish (end loop)"
                                                   Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding JukeboxEnableEndLoop}"
@@ -745,7 +787,7 @@
                                     <ComboBox Margin="0,0,0,12" MinWidth="220" HorizontalAlignment="Left"
                                               ItemsSource="{Binding GraphMetricModeOptions}"
                                               SelectedItem="{Binding SelectedGraphMetricMode}"
-                                              ToolTip="Auto: Classic when stackedFeatures exist. Classic/Legacy force that path."/>
+                                              ToolTip="Auto: Enhanced when stackedFeatures exist. Enhanced = continuation-oriented beat vectors; Legacy = old Echo Nest segment distance."/>
 
                                     <TextBlock Text="Window"
                                                FontSize="16" FontWeight="SemiBold"

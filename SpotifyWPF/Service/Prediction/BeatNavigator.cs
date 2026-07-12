@@ -241,25 +241,95 @@ namespace SpotifyWPF.Service.Prediction
                 return null;
 
             fromIndex = Math.Max(0, Math.Min(fromIndex, Graph.Beats.Count - 1));
+            var count = Graph.Beats.Count;
+            var earlyBefore = Math.Max(1, (int)(count * 0.5));
 
-            if (TryGetBackwardCandidates(fromIndex, out var source, out var candidates))
+            // Prefer any nearby source that can actually land in the first half of the song.
+            for (var i = fromIndex; i >= 0; i--)
             {
-                var edge = ChooseEdge(source, candidates, exemptLongBranchFilter: true)
-                           ?? candidates[_random.Next(candidates.Count)];
+                if (!TryGetBackwardCandidates(i, out var source, out var candidates))
+                    continue;
+
+                var early = candidates.Where(e => e.DestinationIndex < earlyBefore).ToList();
+
+                if (early.Count == 0)
+                    continue;
+
+                var edge = SoftmaxPick(source, early, ignoreVisits: true)
+                           ?? early[_random.Next(early.Count)];
                 return MakeJump(source, edge, candidates);
+            }
+
+            // No early landing available — use tiered ChooseEndLoopEdge from fromIndex backward.
+            if (TryGetBackwardCandidates(fromIndex, out var fallbackSource, out var fallbackCandidates))
+            {
+                var edge = ChooseEndLoopEdge(fallbackSource, fallbackCandidates)
+                           ?? fallbackCandidates[_random.Next(fallbackCandidates.Count)];
+                return MakeJump(fallbackSource, edge, fallbackCandidates);
             }
 
             for (var i = fromIndex - 1; i >= 0; i--)
             {
-                if (!TryGetBackwardCandidates(i, out source, out candidates))
+                if (!TryGetBackwardCandidates(i, out fallbackSource, out fallbackCandidates))
                     continue;
 
-                var edge = ChooseEdge(source, candidates, exemptLongBranchFilter: true)
-                           ?? candidates[_random.Next(candidates.Count)];
-                return MakeJump(source, edge, candidates);
+                var edge = ChooseEndLoopEdge(fallbackSource, fallbackCandidates)
+                           ?? fallbackCandidates[_random.Next(fallbackCandidates.Count)];
+                return MakeJump(fallbackSource, edge, fallbackCandidates);
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// End-loop must leave the closing section when possible — short hops to the start of
+        /// the same outro trap the walk. Prefer landings in the first half of the track;
+        /// never Softmax into the final fifth when earlier options exist.
+        /// </summary>
+        private BeatEdge ChooseEndLoopEdge(int fromBeatIndex, List<BeatEdge> candidates)
+        {
+            if (candidates == null || candidates.Count == 0)
+                return null;
+
+            var filtered = FilterEdges(fromBeatIndex, candidates, exemptLongBranchFilter: true);
+
+            if (filtered.Count == 0)
+                filtered = candidates;
+
+            var count = Graph.Beats.Count;
+            var earlyBefore = Math.Max(1, (int)(count * 0.5));
+            var midBefore = Math.Max(1, (int)(count * 0.7));
+            var lateBefore = Math.Max(1, (int)(count * 0.8));
+            var minEscapeBeats = Math.Max(16, (_settings.MinimumJumpBeats > 0
+                ? _settings.MinimumJumpBeats
+                : 8) * 2);
+
+            // Tiered escape: early song first, then mid, then "long hop / before late".
+            // Ignore visit novelty here — high visit counts on the intro are exactly why Softmax
+            // was refusing to leave the outro after a long session / skip-ahead.
+            var early = filtered.Where(e => e.DestinationIndex < earlyBefore).ToList();
+
+            if (early.Count > 0)
+                return SoftmaxPick(fromBeatIndex, early, ignoreVisits: true)
+                       ?? early[_random.Next(early.Count)];
+
+            var mid = filtered.Where(e => e.DestinationIndex < midBefore).ToList();
+
+            if (mid.Count > 0)
+                return SoftmaxPick(fromBeatIndex, mid, ignoreVisits: true)
+                       ?? mid[_random.Next(mid.Count)];
+
+            var escape = filtered
+                .Where(e => e.DestinationIndex < lateBefore ||
+                            fromBeatIndex - e.DestinationIndex >= minEscapeBeats)
+                .ToList();
+
+            if (escape.Count > 0)
+                return SoftmaxPick(fromBeatIndex, escape, ignoreVisits: true)
+                       ?? escape[_random.Next(escape.Count)];
+
+            // Fall back: farthest backward hop among candidates (still better than looping outro).
+            return filtered.OrderByDescending(e => fromBeatIndex - e.DestinationIndex).First();
         }
 
         private bool TryGetBackwardCandidates(int fromIndex, out int source, out List<BeatEdge> candidates)
@@ -329,15 +399,47 @@ namespace SpotifyWPF.Service.Prediction
             if (filtered.Count == 0)
                 return null;
 
+            // Prefer landings that continue the next beat's bar phase when any exist.
+            var phased = PreferContinuationPhase(fromBeatIndex, filtered);
+
+            if (phased.Count > 0)
+                filtered = phased;
+
             var fresh = filtered.Where(e => !IsNearRecentDestination(e.DestinationIndex)).ToList();
 
             if (fresh.Count > 0)
                 return SoftmaxPick(fromBeatIndex, fresh);
 
-            if (exemptLongBranchFilter)
-                return SoftmaxPick(fromBeatIndex, filtered);
+            // Don't starve the walk into a linear run to the outro: once every pocket looks
+            // "recent", Softmax with visit novelty still picks among the filtered set.
+            return SoftmaxPick(fromBeatIndex, filtered);
+        }
 
-            return null;
+        private List<BeatEdge> PreferContinuationPhase(int fromBeatIndex, List<BeatEdge> edges)
+        {
+            if (edges == null || edges.Count == 0 || fromBeatIndex < 0 ||
+                fromBeatIndex >= Graph.Beats.Count)
+                return edges;
+
+            var expect = fromBeatIndex + 1 < Graph.Beats.Count
+                ? Graph.Beats[fromBeatIndex + 1].IndexInBar
+                : Graph.Beats[fromBeatIndex].IndexInBar;
+
+            var matched = edges
+                .Where(e => e.DestinationIndex >= 0 &&
+                            e.DestinationIndex < Graph.Beats.Count &&
+                            CircularBarPhaseDelta(Graph.Beats[e.DestinationIndex].IndexInBar, expect) == 0)
+                .ToList();
+
+            return matched.Count > 0 ? matched : edges;
+        }
+
+        private static int CircularBarPhaseDelta(int barPosA, int barPosB, int period = 4)
+        {
+            var a = ((barPosA % period) + period) % period;
+            var b = ((barPosB % period) + period) % period;
+            var d = Math.Abs(a - b);
+            return Math.Min(d, period - d);
         }
 
         private bool IsNearRecentDestination(int destinationIndex)
@@ -356,13 +458,13 @@ namespace SpotifyWPF.Service.Prediction
         /// <summary>
         /// Softmax(−dist/τ − λ·visits + w_pref·pref). Lower temperature → greedier nearest pick.
         /// </summary>
-        private BeatEdge SoftmaxPick(int fromBeatIndex, List<BeatEdge> edges)
+        private BeatEdge SoftmaxPick(int fromBeatIndex, List<BeatEdge> edges, bool ignoreVisits = false)
         {
             if (edges.Count == 1)
                 return edges[0];
 
             var tau = Math.Max(0.05, _settings.SoftmaxTemperature > 0 ? _settings.SoftmaxTemperature : 1.0);
-            var lambda = Math.Max(0, _settings.VisitNoveltyLambda);
+            var lambda = ignoreVisits ? 0 : Math.Max(0, _settings.VisitNoveltyLambda);
             var wPref = _settings.PreferenceWeight;
             var scores = new double[edges.Count];
             var maxScore = double.NegativeInfinity;
@@ -370,7 +472,7 @@ namespace SpotifyWPF.Service.Prediction
             for (var i = 0; i < edges.Count; i++)
             {
                 var edge = edges[i];
-                var visits = GetVisitCountNear(edge.DestinationIndex);
+                var visits = ignoreVisits ? 0 : GetVisitCountNear(edge.DestinationIndex);
                 var pref = wPref != 0 && _preferences != null
                     ? _preferences.Score(_trackId, fromBeatIndex, edge.DestinationIndex)
                     : 0;
@@ -472,7 +574,12 @@ namespace SpotifyWPF.Service.Prediction
                 : candidates.Select(c => c.DestinationIndex).ToArray();
 
             var target = Graph.Beats[edge.DestinationIndex];
-            var triggerMs = Graph.Beats[fromIndex].EndMs - _settings.SeekLeadMs;
+            // Seek lead compensates Spotify SDK latency only; local WAV seeks are in-process.
+            var seekLead = string.Equals(_settings.PlaybackSource, "Local",
+                StringComparison.OrdinalIgnoreCase)
+                ? 0
+                : Math.Max(0, _settings.SeekLeadMs);
+            var triggerMs = Graph.Beats[fromIndex].EndMs - seekLead;
 
             if (triggerMs < Graph.Beats[fromIndex].StartMs)
                 triggerMs = Graph.Beats[fromIndex].StartMs;
@@ -571,6 +678,38 @@ namespace SpotifyWPF.Service.Prediction
 
         public void ImportBeatsSinceJump(int value) =>
             _beatsSinceJump = Math.Max(0, value);
+
+        /// <summary>
+        /// Scrub/skip-ahead: drop the "already visited" pocket memory so Softmax can use early
+        /// song branches again instead of starving into the end-loop outro trap.
+        /// Visit counts are decayed (not wiped) so novelty still works after the scrub.
+        /// </summary>
+        public void NotifySeekReplan(int fromBeatIndex)
+        {
+            _recentDestinations.Clear();
+            _recentDestinationSet.Clear();
+            _beatsSinceJump = Math.Max(DwellBeats, _beatsSinceJump);
+            _currentBranchChance = ClampProbability(_settings.BranchProbabilityMin);
+
+            if (_visitCounts.Count == 0)
+                return;
+
+            var keys = _visitCounts.Keys.ToList();
+
+            foreach (var key in keys)
+            {
+                var next = (_visitCounts[key] + 1) / 2;
+
+                if (next <= 0)
+                    _visitCounts.Remove(key);
+                else
+                    _visitCounts[key] = next;
+            }
+
+            // Avoid immediately re-arming a hop into the pocket we just scrubbed into.
+            if (fromBeatIndex >= 0)
+                RememberDestination(fromBeatIndex, countVisit: false);
+        }
 
         /// <summary>
         /// Record a scrub/skip shortly after the last hop as a preference negative.

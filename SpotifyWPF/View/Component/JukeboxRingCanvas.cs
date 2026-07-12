@@ -69,6 +69,8 @@ namespace SpotifyWPF.View.Component
 
         private bool _isRingScrubbing;
 
+        private bool _holdingCenterSpeed;
+
         /// <summary>True while dragging along hop arrows to build a multi-hop chain (not scrubbing).</summary>
         private bool _suppressInspectCallback;
 
@@ -159,6 +161,10 @@ namespace SpotifyWPF.View.Component
 
         public static readonly DependencyProperty EndScrubCommandProperty =
             DependencyProperty.Register(nameof(EndScrubCommand), typeof(ICommand), typeof(JukeboxRingCanvas),
+                new FrameworkPropertyMetadata(null));
+
+        public static readonly DependencyProperty HoldSpeedCommandProperty =
+            DependencyProperty.Register(nameof(HoldSpeedCommand), typeof(ICommand), typeof(JukeboxRingCanvas),
                 new FrameworkPropertyMetadata(null));
 
         public static readonly DependencyProperty ResetPlaysTokenProperty =
@@ -280,6 +286,13 @@ namespace SpotifyWPF.View.Component
         {
             get => (ICommand)GetValue(EndScrubCommandProperty);
             set => SetValue(EndScrubCommandProperty, value);
+        }
+
+        /// <summary>Executed with true on center-hold (speed up) and false on release.</summary>
+        public ICommand HoldSpeedCommand
+        {
+            get => (ICommand)GetValue(HoldSpeedCommandProperty);
+            set => SetValue(HoldSpeedCommandProperty, value);
         }
 
         /// <summary>Increment to clear play-coverage bars (the "Reset plays" action).</summary>
@@ -504,16 +517,33 @@ namespace SpotifyWPF.View.Component
             {
                 return $"beat {from}   {FormatBeatTime(a.StartMs)}\n" +
                        $"bar {a.IndexInBar}   {a.Neighbors.Count} hops\n" +
-                       (_manualSelectActive ? "click an arrow to choose" : "click beat to pick hops");
+                       (_manualSelectActive
+                           ? "click arrows from any beat · ✓ saves locks"
+                           : "hover beat for hops · click arrow to select");
             }
 
             var b = graph.Beats[to];
             var edge = FindEdge(a.Neighbors, to);
             var dist = edge?.Distance ?? double.NaN;
-            var phaseDelta = Math.Abs(a.IndexInBar - b.IndexInBar);
-            var syncNote = phaseDelta == 0 ? "in phase"
-                : phaseDelta == 1 ? "slightly off-sync (Δ1)"
-                : $"off-sync (Δ{phaseDelta})";
+
+            // Enhanced edges are continuation-oriented: landing `to` should match the phase of
+            // `from+1` (what would have played next), not `from`. Comparing from↔to often shows
+            // "Δ1 off-sync" for a correct splice (e.g. leave beat-in-bar 2, land on beat-in-bar 3).
+            // IndexInBar can grow past 0–3 in long undownbeat stretches — compare mod-4 phase.
+            var expectPhaseBeat = from + 1 < graph.Beats.Count ? graph.Beats[from + 1] : a;
+            var phaseDelta = CircularBarPhaseDelta(expectPhaseBeat.IndexInBar, b.IndexInBar);
+            var rawPhaseGap = Math.Abs(expectPhaseBeat.IndexInBar - b.IndexInBar);
+            var syncNote = phaseDelta == 0
+                ? (rawPhaseGap == 0
+                    ? "in phase (continues next)"
+                    : $"in phase (mod-4; raw bar {expectPhaseBeat.IndexInBar}→{b.IndexInBar})")
+                : phaseDelta == 1
+                    ? "slightly off-sync (Δ1 vs next)"
+                    : $"off-sync (Δ{phaseDelta} vs next)";
+
+            var twinDelta = CircularBarPhaseDelta(a.IndexInBar, b.IndexInBar);
+            if (twinDelta == 0 && phaseDelta != 0)
+                syncNote += " · twin of origin";
 
             var quality = "—";
 
@@ -532,8 +562,9 @@ namespace SpotifyWPF.View.Component
             return $"{head}  {from} → {to}  ({dir})\n" +
                    $"{FormatBeatTime(a.StartMs)} → {FormatBeatTime(b.StartMs)}\n" +
                    $"dist {dist:0.###}   {quality}   {syncNote}\n" +
+                   $"bar {a.IndexInBar}→{b.IndexInBar} (expect bar {expectPhaseBeat.IndexInBar})\n" +
                    $"features  chroma {chroma:0.00}  mfcc {mfcc:0.00}  rms {rms:0.00}\n" +
-                   $"(sum {totalFeat:0.00} · classic euclid on z-scored dims)";
+                   $"(sum {totalFeat:0.00} · enhanced euclid on z-scored dims)";
         }
 
         private void TryFeatureDeltas(int from, int to,
@@ -815,17 +846,44 @@ namespace SpotifyWPF.View.Component
                 return;
             }
 
+            if (_holdingCenterSpeed)
+                return;
+
             if (MiniPlayerMode && !MiniPlayerHopMode)
                 return;
 
             var graph = Graph;
+
+            if (graph == null)
+            {
+                ClearChain(_hoverChain);
+                _hoverBeatIndex = -1;
+                _hoverToBeatIndex = -1;
+                InvalidateVisual();
+                return;
+            }
+
+            // Prefer coverage-bar hover so scrubbing the timeline still previews that beat's hops.
             var hit = HitTestBeat(point);
 
-            if (_manualSelectActive && graph != null && _manualTipBeat >= 0)
+            if (hit < 0)
+                hit = HitTestBranchOriginBeat(point);
+
+            _hoverBeatIndex = hit;
+
+            if (_manualSelectActive && _manualTipBeat >= 0)
             {
+                // Hovering another beat switches the active origin (does not clear committed picks).
+                if (hit >= 0)
+                {
+                    var nextTip = NearestBeatWithBranches(graph, hit, 1);
+
+                    if (nextTip >= 0 && nextTip != _manualTipBeat)
+                        _manualTipBeat = nextTip;
+                }
+
                 var dest = HitTestBranchEdge(point, graph, _manualTipBeat);
                 UpdateBranchTooltip(graph, _manualTipBeat, dest, point);
-                _hoverBeatIndex = hit;
                 SyncManualHoverChain(dest);
                 PublishInspectBeat();
                 SyncHudText();
@@ -834,12 +892,40 @@ namespace SpotifyWPF.View.Component
                 return;
             }
 
-            UpdateIdleBeatTooltip(graph, hit, point);
-            ClearChain(_hoverChain);
-            _hoverBeatIndex = hit;
+            // Idle: fan potential branches from whatever beat is under the cursor.
+            if (hit >= 0)
+            {
+                var inspect = NearestBeatWithBranches(graph, hit, 1);
+
+                if (inspect >= 0)
+                {
+                    ClearChain(_hoverChain);
+                    _hoverChain[0] = inspect;
+                    var dest = HitTestBranchEdge(point, graph, inspect);
+                    _hoverToBeatIndex = dest;
+
+                    if (dest >= 0)
+                        UpdateBranchTooltip(graph, inspect, dest, point);
+                    else
+                        UpdateIdleBeatTooltip(graph, hit, point);
+                }
+                else
+                {
+                    ClearChain(_hoverChain);
+                    _hoverToBeatIndex = -1;
+                    UpdateIdleBeatTooltip(graph, hit, point);
+                }
+            }
+            else
+            {
+                ClearChain(_hoverChain);
+                _hoverToBeatIndex = -1;
+                UpdateIdleBeatTooltip(graph, -1, point);
+            }
+
             PublishInspectBeat();
             SyncHudText();
-            Cursor = hit >= 0 ? Cursors.Hand : Cursors.Arrow;
+            Cursor = hit >= 0 || _hoverToBeatIndex >= 0 ? Cursors.Hand : Cursors.Arrow;
             InvalidateVisual();
         }
 
@@ -849,6 +935,8 @@ namespace SpotifyWPF.View.Component
 
             if (_isRingScrubbing)
                 EndRingScrub();
+
+            EndCenterSpeedHold();
 
             _hoverBeatIndex = -1;
             _hoverToBeatIndex = -1;
@@ -866,6 +954,33 @@ namespace SpotifyWPF.View.Component
             var graph = Graph;
             var point = e.GetPosition(this);
 
+            // Double-click a locked branch to unlock/remove it.
+            if (e.ClickCount > 1)
+            {
+                if (graph != null && TryHitLockedBranch(point, graph, out var from, out var to) &&
+                    ToggleLockCommand != null)
+                {
+                    var click = new RingBranchClick { FromBeatIndex = from, ToBeatIndex = to };
+
+                    if (ToggleLockCommand.CanExecute(click))
+                    {
+                        ToggleLockCommand.Execute(click);
+                        InvalidateVisual();
+                    }
+
+                    e.Handled = true;
+                }
+
+                return;
+            }
+
+            // Hold center disc to temporarily speed up Local WAV playback.
+            if (TryBeginCenterSpeedHold(point, graph))
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (graph == null || (MiniPlayerMode && !MiniPlayerHopMode))
             {
                 if (TryBeginRingScrub(point))
@@ -879,8 +994,11 @@ namespace SpotifyWPF.View.Component
 
                 if (dest >= 0)
                 {
-                    _manualChain.Add((_manualTipBeat, dest));
-                    _manualTipBeat = dest;
+                    // Select this hop for locking — do NOT advance tip to dest (allows
+                    // picking hops from many origins before Save/✓).
+                    if (!_manualChain.Any(h => h.From == _manualTipBeat && h.To == dest))
+                        _manualChain.Add((_manualTipBeat, dest));
+
                     SyncManualHoverChain(-1);
                     UpdateBranchTooltip(graph, -1, -1, point);
                     PublishInspectBeat();
@@ -889,9 +1007,70 @@ namespace SpotifyWPF.View.Component
                     e.Handled = true;
                     return;
                 }
+
+                // Click another beat origin to retarget without losing committed picks.
+                var origin = HitTestBranchOriginBeat(point);
+
+                if (origin < 0)
+                    origin = HitTestBeat(point);
+
+                if (origin >= 0)
+                {
+                    var nearest = NearestBeatWithBranches(graph, origin, 1);
+
+                    if (nearest >= 0)
+                    {
+                        _manualTipBeat = nearest;
+                        SyncManualHoverChain(-1);
+                        PublishInspectBeat();
+                        SyncHudText();
+                        InvalidateVisual();
+                        e.Handled = true;
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                // Idle: click a visible branch arrow to start a multi-origin pick session.
+                var hoverBeat = HitTestBeat(point);
+
+                if (hoverBeat < 0)
+                    hoverBeat = HitTestBranchOriginBeat(point);
+
+                if (hoverBeat >= 0)
+                {
+                    var tip = NearestBeatWithBranches(graph, hoverBeat, 1);
+
+                    if (tip >= 0)
+                    {
+                        var dest = HitTestBranchEdge(point, graph, tip);
+
+                        if (dest >= 0)
+                        {
+                            EnterManualSelection(tip);
+                            _manualChain.Add((tip, dest));
+                            SyncManualHoverChain(-1);
+                            PublishInspectBeat();
+                            SyncHudText();
+                            InvalidateVisual();
+                            e.Handled = true;
+                            return;
+                        }
+                    }
+                }
             }
 
-            var beat = HitTestBeat(point);
+            // Scrub takes priority on the coverage-bar ring so dragging the timeline
+            // does not accidentally enter branch authoring.
+            if (TryBeginRingScrub(point))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            // Branch origins live just inside the bar roots (chord vertices), not on the scrub band.
+            var beat = HitTestBranchOriginBeat(point);
 
             if (beat >= 0)
             {
@@ -909,19 +1088,68 @@ namespace SpotifyWPF.View.Component
             {
                 ExitManualSelection();
                 e.Handled = true;
-                return;
             }
-
-            if (TryBeginRingScrub(point))
-                e.Handled = MiniPlayerMode && !MiniPlayerHopMode;
         }
 
         protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
         {
             base.OnMouseLeftButtonUp(e);
 
+            if (_holdingCenterSpeed)
+            {
+                EndCenterSpeedHold();
+                e.Handled = true;
+            }
+
             if (_isRingScrubbing)
                 EndRingScrub();
+        }
+
+        private bool IsInCenterHoldZone(Point point)
+        {
+            GetChordLayout(out var center, out var rim, out _);
+            var rIn = rim * BarBandInnerRatio;
+            return (point - center).Length <= rIn * 0.42;
+        }
+
+        private bool TryBeginCenterSpeedHold(Point point, BeatGraph graph)
+        {
+            if (!IsInCenterHoldZone(point))
+                return false;
+
+            // Don't steal branch clicks in the center when an arrow is under the cursor.
+            if (graph != null && _manualSelectActive && _manualTipBeat >= 0 &&
+                HitTestBranchEdge(point, graph, _manualTipBeat) >= 0)
+                return false;
+
+            if (graph != null && _hoverChain[0] >= 0 &&
+                HitTestBranchEdge(point, graph, _hoverChain[0]) >= 0)
+                return false;
+
+            _holdingCenterSpeed = true;
+            CaptureMouse();
+            Cursor = Cursors.ScrollAll;
+
+            if (HoldSpeedCommand != null && HoldSpeedCommand.CanExecute(true))
+                HoldSpeedCommand.Execute(true);
+
+            return true;
+        }
+
+        private void EndCenterSpeedHold()
+        {
+            if (!_holdingCenterSpeed)
+                return;
+
+            _holdingCenterSpeed = false;
+
+            if (IsMouseCaptured)
+                ReleaseMouseCapture();
+
+            Cursor = Cursors.Arrow;
+
+            if (HoldSpeedCommand != null && HoldSpeedCommand.CanExecute(false))
+                HoldSpeedCommand.Execute(false);
         }
 
         private void EnterManualSelection(int beatIndex)
@@ -981,25 +1209,9 @@ namespace SpotifyWPF.View.Component
         private void SyncManualHoverChain(int hoveredDest)
         {
             ClearChain(_hoverChain);
-            // Committed chain only — do not append the hovered candidate as a next-hop preview.
-            var idx = 0;
-
-            if (_manualChain.Count > 0)
-            {
-                _hoverChain[idx++] = _manualChain[0].From;
-
-                foreach (var hop in _manualChain)
-                {
-                    if (idx >= _hoverChain.Length)
-                        break;
-
-                    _hoverChain[idx++] = hop.To;
-                }
-            }
-            else if (_manualTipBeat >= 0)
-            {
+            // Preview fan from the active tip only; committed multi-origin hops are drawn separately.
+            if (_manualTipBeat >= 0)
                 _hoverChain[0] = _manualTipBeat;
-            }
 
             _pinnedChain = (int[])_hoverChain.Clone();
             _hoverToBeatIndex = hoveredDest;
@@ -1042,18 +1254,42 @@ namespace SpotifyWPF.View.Component
             _tooltipIsPlanned = false;
         }
 
+        /// <summary>
+        /// Radii used for both drawing and hit-testing chords. Must match RenderRing:
+        /// rim = spectrumInner - 2, rChord sits just inside the coverage-bar roots.
+        /// </summary>
+        private void GetChordLayout(out Point center, out double rim, out double rChord)
+        {
+            center = new Point(ActualWidth / 2, ActualHeight / 2);
+            var canvasOuter = Math.Min(ActualWidth, ActualHeight) / 2 - 2;
+            var spectrumInner = canvasOuter * 0.78;
+            rim = spectrumInner - 2;
+            var rIn = rim * BarBandInnerRatio;
+            // Keep branch vertices hugging the bar (was ~4% inset — looked detached).
+            rChord = rIn - Math.Max(1.25, rim * 0.008);
+        }
+
+        /// <summary>Quadratic Bézier point at parameter t ∈ [0,1].</summary>
+        private static Point BezierPoint(Point p0, Point p1, Point p2, double t)
+        {
+            var u = 1 - t;
+            return new Point(
+                u * u * p0.X + 2 * u * t * p1.X + t * t * p2.X,
+                u * u * p0.Y + 2 * u * t * p1.Y + t * t * p2.Y);
+        }
+
         private bool TryPlannedHopTooltip(BeatGraph graph, Point point)
         {
             if (graph == null || PlannedFromBeatIndex < 0 || PlannedToBeatIndex < 0)
                 return false;
 
-            var dist = DistanceToChord(point,
-                new Point(ActualWidth / 2, ActualHeight / 2),
-                Math.Min(ActualWidth, ActualHeight) / 2 * 0.55,
-                BeatAngle(graph.Beats[PlannedFromBeatIndex], TotalMs()),
-                BeatAngle(graph.Beats[PlannedToBeatIndex], TotalMs()));
+            GetChordLayout(out var center, out _, out var rChord);
+            var total = TotalMs();
+            var dist = DistanceToChord(point, center, rChord,
+                BeatAngle(graph.Beats[PlannedFromBeatIndex], total),
+                BeatAngle(graph.Beats[PlannedToBeatIndex], total));
 
-            if (dist > 28)
+            if (dist > 16)
                 return false;
 
             UpdateBranchTooltip(graph, PlannedFromBeatIndex, PlannedToBeatIndex, point, planned: true);
@@ -1124,7 +1360,7 @@ namespace SpotifyWPF.View.Component
             return (long)Math.Round(fraction * total);
         }
 
-        /// <summary>Beat under the cursor on the colored bar band only (not scrubber annulus).</summary>
+        /// <summary>Beat under the cursor on the colored coverage-bar band.</summary>
         private int HitTestBeat(Point point)
         {
             var graph = Graph;
@@ -1133,12 +1369,9 @@ namespace SpotifyWPF.View.Component
             if (graph == null || graph.Beats.Count == 0 || total <= 0)
                 return -1;
 
-            var center = new Point(ActualWidth / 2, ActualHeight / 2);
-            var canvasOuter = Math.Min(ActualWidth, ActualHeight) / 2 - 2;
-            var spectrumInner = canvasOuter * 0.78;
-            var rim = spectrumInner - 2;
+            GetChordLayout(out var center, out var rim, out _);
             var rIn = rim * BarBandInnerRatio;
-            var barOuter = rIn + rim * 0.28; // matches coverage-bar extension
+            var barOuter = rIn + rim * 0.28;
             var dx = point.X - center.X;
             var dy = point.Y - center.Y;
             var radius = Math.Sqrt(dx * dx + dy * dy);
@@ -1152,17 +1385,80 @@ namespace SpotifyWPF.View.Component
             return FindBeatIndex(graph, (long)(fraction * total));
         }
 
-        /// <summary>True when the point sits in the scrubber annulus (between beat bars and section rim).</summary>
+        /// <summary>
+        /// Beat near a chord vertex (just inside / at the bar root). Used to start branch
+        /// authoring without stealing the scrubber band on the coverage bars.
+        /// </summary>
+        private int HitTestBranchOriginBeat(Point point)
+        {
+            var graph = Graph;
+            var total = TotalMs();
+
+            if (graph == null || graph.Beats.Count == 0 || total <= 0)
+                return -1;
+
+            GetChordLayout(out var center, out var rim, out var rChord);
+            var rIn = rim * BarBandInnerRatio;
+            var dist = (point - center).Length;
+
+            // Thin annulus where branch arrows meet the bar.
+            if (dist < rChord - 14 || dist > rIn + 10)
+                return -1;
+
+            var dx = point.X - center.X;
+            var dy = point.Y - center.Y;
+            var fraction = (Math.Atan2(dy, dx) + Math.PI / 2) / (Math.PI * 2);
+            fraction = ((fraction % 1) + 1) % 1;
+
+            return FindBeatIndex(graph, (long)(fraction * total));
+        }
+
+        /// <summary>
+        /// Scrubber = coverage bars + outer section rim. Dragging here seeks the timeline;
+        /// branch authoring starts only at chord vertices (see HitTestBranchOriginBeat).
+        /// </summary>
         private bool IsInScrubberBand(Point point)
         {
-            var center = new Point(ActualWidth / 2, ActualHeight / 2);
-            var canvasOuter = Math.Min(ActualWidth, ActualHeight) / 2 - 2;
-            var spectrumInner = canvasOuter * 0.78;
-            var rim = spectrumInner - 2;
+            GetChordLayout(out var center, out var rim, out _);
             var rIn = rim * BarBandInnerRatio;
-            var barOuter = rIn + rim * 0.28;
             var dist = (point - center).Length;
-            return dist > barOuter && dist <= rim + 2;
+            return dist >= rIn - 1 && dist <= rim + 4;
+        }
+
+        private bool TryHitLockedBranch(Point point, BeatGraph graph, out int fromBeat, out int toBeat)
+        {
+            fromBeat = -1;
+            toBeat = -1;
+            var locks = LockedBranches;
+
+            if (graph == null || locks == null || locks.Count == 0)
+                return false;
+
+            GetChordLayout(out var center, out _, out var rChord);
+            var total = TotalMs();
+            var bestDist = 14.0;
+
+            foreach (var branchLock in locks)
+            {
+                var from = branchLock.FromBeatIndex;
+                var to = branchLock.ToBeatIndex;
+
+                if (from < 0 || to < 0 || from >= graph.Beats.Count || to >= graph.Beats.Count)
+                    continue;
+
+                var dist = DistanceToChord(point, center, rChord,
+                    BeatAngle(graph.Beats[from], total),
+                    BeatAngle(graph.Beats[to], total));
+
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    fromBeat = from;
+                    toBeat = to;
+                }
+            }
+
+            return fromBeat >= 0;
         }
 
         private static int NearestBeatWithBranches(BeatGraph graph, int index, int searchRadius)
@@ -1191,12 +1487,12 @@ namespace SpotifyWPF.View.Component
             if (fromBeatIndex < 0 || fromBeatIndex >= beats.Count)
                 return -1;
 
-            var center = new Point(ActualWidth / 2, ActualHeight / 2);
-            var outer = Math.Min(ActualWidth, ActualHeight) / 2 - 2;
-            var rChord = outer * BarBandInnerRatio - outer * 0.04;
+            GetChordLayout(out var center, out _, out var rChord);
             var total = TotalMs();
             var bestDest = -1;
-            var bestDist = 38.0;
+            // Keep the hit corridor tight so dense fans pick the curve under the cursor,
+            // not a distant sibling that still fell inside a wide threshold.
+            var bestDist = 14.0;
 
             foreach (var edge in beats[fromBeatIndex].Neighbors)
             {
@@ -1226,10 +1522,11 @@ namespace SpotifyWPF.View.Component
             var p2 = Polar(center, radius, angle2);
             var p1 = ChordControlPoint(center, angle1, angle2, p0, p2);
             var best = double.MaxValue;
+            const int samples = 64;
 
-            for (var i = 0; i <= 24; i++)
+            for (var i = 0; i <= samples; i++)
             {
-                var t = i / 24.0;
+                var t = i / (double)samples;
                 var oneMinus = 1 - t;
                 var bx = oneMinus * oneMinus * p0.X + 2 * oneMinus * t * p1.X + t * t * p2.X;
                 var by = oneMinus * oneMinus * p0.Y + 2 * oneMinus * t * p1.Y + t * t * p2.Y;
@@ -1317,9 +1614,9 @@ namespace SpotifyWPF.View.Component
 
         private int EffectivePreviewHopDepth()
         {
-            // Manual select: committed hops + current tip fan (no speculative next-next hop).
+            // Manual select: fan only from the active tip (committed hops drawn separately).
             if (_manualSelectActive)
-                return Math.Max(1, Math.Min(MaxPreviewHopDepth, _manualChain.Count + 1));
+                return 1;
 
             return Math.Max(1, Math.Min(MaxPreviewHopDepth, PreviewHopDepth));
         }
@@ -1566,6 +1863,23 @@ namespace SpotifyWPF.View.Component
             var depth = EffectivePreviewHopDepth();
             var hopText = new List<string>();
 
+            // Multi-origin picks: draw every committed hop (not only a linear chain).
+            if (_manualSelectActive && _manualChain.Count > 0)
+            {
+                foreach (var hop in _manualChain)
+                {
+                    if (hop.From < 0 || hop.To < 0 ||
+                        hop.From >= beats.Count || hop.To >= beats.Count)
+                        continue;
+
+                    var a1 = BeatAngle(beats[hop.From], total);
+                    var a2 = BeatAngle(beats[hop.To], total);
+                    DrawChord(dc, center, rChord, a1, a2,
+                        MakePen(LockColor, 1.35, 0.9), arrowhead: true);
+                    hopText.Add($"pick {hop.From}→{hop.To}");
+                }
+            }
+
             for (var hop = 1; hop <= depth; hop++)
             {
                 if (hop > 1 && chain[hop - 1] < 0)
@@ -1584,12 +1898,12 @@ namespace SpotifyWPF.View.Component
                 GetNeighborDistanceRange(edges, out var minDist, out var maxDist);
                 var layerAlpha = hop == 1 ? 0.40 : hop == 2 ? 0.26 : 0.16;
                 var layerRadius = rChord * (1 - (hop - 1) * 0.06);
-                // Highlight: hovered candidate, or the committed hop at this layer.
-                var committed = hop <= _manualChain.Count ? _manualChain[hop - 1].To : -1;
+                var committedFromParent = _manualSelectActive
+                    ? _manualChain.Where(h => h.From == parent).Select(h => h.To).ToList()
+                    : new List<int>();
                 var highlight = _manualSelectActive
-                    ? (_hoverToBeatIndex >= 0 ? _hoverToBeatIndex : committed)
+                    ? (_hoverToBeatIndex >= 0 ? _hoverToBeatIndex : -1)
                     : chain[hop];
-                var hasSelectionAtLayer = _manualSelectActive && committed >= 0;
 
                 foreach (var edge in edges)
                 {
@@ -1604,25 +1918,35 @@ namespace SpotifyWPF.View.Component
                         ? BridgeColor
                         : DistanceBranchColor(edge.Distance, minDist, maxDist);
                     var locked = IsBranchLocked(locks, parent, dest);
-                    var isHighlighted = dest == highlight;
-                    var isCommitted = dest == committed;
+                    var isCommitted = committedFromParent.Contains(dest);
+                    var isHighlighted = dest == highlight && !isCommitted;
 
-                    // Once a hop is chosen from this origin, do not draw siblings at all.
-                    if (hasSelectionAtLayer && !isCommitted)
+                    // Keep showing remaining candidates from this origin even after one pick
+                    // (multi-select from same beat is allowed; dim committed ones as gold above).
+                    if (isCommitted)
                         continue;
 
-                    var width = isHighlighted || isCommitted ? 1.25 : locked ? 0.95 : 0.75;
-                    var alpha = isCommitted ? 0.85
-                        : isHighlighted ? 0.78
-                        : locked ? 0.62
-                        : layerAlpha;
+                    var width = isHighlighted ? 1.6 : locked ? 0.95 : 0.75;
+                    var alpha = isHighlighted ? 0.95
+                        : locked ? 0.28
+                        : (highlight >= 0 ? layerAlpha * 0.22 : layerAlpha);
 
-                    DrawChord(dc, center, layerRadius, a1, a2,
-                        MakePen(locked ? LockColor : branchColor, width, alpha),
-                        arrowhead: true);
+                    if (isHighlighted)
+                    {
+                        DrawChord(dc, center, layerRadius, a1, a2,
+                            MakePen(branchColor, width, alpha),
+                            arrowhead: true,
+                            haloPen: MakePen(Colors.White, width + 2.6, 0.9));
+                    }
+                    else
+                    {
+                        DrawChord(dc, center, layerRadius, a1, a2,
+                            MakePen(locked ? LockColor : branchColor, width, alpha),
+                            arrowhead: true);
+                    }
                 }
 
-                if (highlight >= 0)
+                if (highlight >= 0 && !committedFromParent.Contains(highlight))
                 {
                     var edge = FindEdge(edges, highlight);
                     var distText = edge != null ? $" d={edge.Distance:0.###}" : string.Empty;
@@ -1633,14 +1957,9 @@ namespace SpotifyWPF.View.Component
                         hopText.Add($"hop{hop}: {parent}→{highlight}{distText}");
                 }
 
-                // Only continue to next layer after a committed selection (never on mere hover).
+                // Idle mode: speculative next-hop preview only.
                 if (_manualSelectActive)
-                {
-                    if (committed < 0)
-                        break;
-
-                    continue;
-                }
+                    break;
 
                 if (highlight < 0)
                     break;
@@ -1787,7 +2106,7 @@ namespace SpotifyWPF.View.Component
             var rIn = outer * BarBandInnerRatio;
             var ext = outer * 0.28;
             var minLen = outer * 0.05;
-            var rChord = rIn - outer * 0.04;
+            var rChord = rIn - Math.Max(1.25, outer * 0.008);
 
             var barWidth = Math.Max(1.0, Math.Min(6.0, 2 * Math.PI * rIn / beats.Count * 0.55));
 
@@ -1858,6 +2177,39 @@ namespace SpotifyWPF.View.Component
                     MakePen(HotColor, barWidth * 3, 0.22));
                 DrawRadialLine(dc, center, rIn - 4, rIn + length, angle,
                     MakePen(HotColor, barWidth + 1.5));
+            }
+
+            // Planned / fired jump endpoints: bold glowing bars on origin and destination.
+            if (plannedFrom >= 0 && plannedFrom < beats.Count)
+                DrawJumpEndpointGlow(dc, center, rIn, minLen, ext, barWidth,
+                    BeatAngle(beats[plannedFrom], total),
+                    _playCounts.Length == beats.Count ? _playCounts[plannedFrom] / (double)maxPlay : 0,
+                    AccentColor);
+
+            if (plannedTo >= 0 && plannedTo < beats.Count)
+                DrawJumpEndpointGlow(dc, center, rIn, minLen, ext, barWidth,
+                    BeatAngle(beats[plannedTo], total),
+                    _playCounts.Length == beats.Count ? _playCounts[plannedTo] / (double)maxPlay : 0,
+                    AccentColor);
+
+            foreach (var (from, to, atMs) in _flashes)
+            {
+                var alpha = 1 - (now - atMs) / FlashFadeMs;
+
+                if (alpha <= 0)
+                    continue;
+
+                if (from >= 0 && from < beats.Count)
+                    DrawJumpEndpointGlow(dc, center, rIn, minLen, ext, barWidth,
+                        BeatAngle(beats[from], total),
+                        _playCounts.Length == beats.Count ? _playCounts[from] / (double)maxPlay : 0,
+                        HotColor, alpha);
+
+                if (to >= 0 && to < beats.Count)
+                    DrawJumpEndpointGlow(dc, center, rIn, minLen, ext, barWidth,
+                        BeatAngle(beats[to], total),
+                        _playCounts.Length == beats.Count ? _playCounts[to] / (double)maxPlay : 0,
+                        HotColor, alpha);
             }
 
             // Chord / hop visuals only when hop mode is enabled in mini player.
@@ -2021,33 +2373,60 @@ namespace SpotifyWPF.View.Component
             return Math.Min(distX, distY);
         }
 
+        private static void DrawJumpEndpointGlow(DrawingContext dc, Point center, double rIn,
+            double minLen, double ext, double barWidth, double angle, double playT, Color color,
+            double alpha = 1.0)
+        {
+            var length = minLen + playT * ext + 10;
+            var a = Math.Max(0, Math.Min(1, alpha));
+            DrawRadialLine(dc, center, rIn - 2, rIn + length + 4, angle,
+                MakePen(color, barWidth * 4.2, 0.18 * a));
+            DrawRadialLine(dc, center, rIn - 1, rIn + length + 2, angle,
+                MakePen(color, barWidth * 2.4, 0.55 * a));
+            DrawRadialLine(dc, center, rIn, rIn + length, angle,
+                MakePen(Colors.White, barWidth * 1.35, 0.92 * a));
+        }
+
         private static void DrawRadialLine(DrawingContext dc, Point center, double inner, double outer,
             double angleRad, Pen pen)
         {
             dc.DrawLine(pen, Polar(center, inner, angleRad), Polar(center, outer, angleRad));
         }
 
-        /// <summary>Quadratic chord pulled toward the center, with a unidirectional arrowhead at the destination.</summary>
+        /// <summary>
+        /// Quadratic chord pulled toward the center. Optional halo stops before the arrowhead
+        /// so the outline does not swallow the tip.
+        /// </summary>
         private static void DrawChord(DrawingContext dc, Point center, double radius,
-            double angle1, double angle2, Pen pen, bool arrowhead = true)
+            double angle1, double angle2, Pen pen, bool arrowhead = true, Pen haloPen = null)
         {
             var p1 = Polar(center, radius, angle1);
             var p2 = Polar(center, radius, angle2);
             var control = ChordControlPoint(center, angle1, angle2, p1, p2);
+            // Leave room for the arrowhead so strokes meet the triangle base, not the tip.
+            var shaftEnd = arrowhead ? BezierPoint(p1, control, p2, 0.86) : p2;
 
+            if (haloPen != null)
+                DrawQuadraticStroke(dc, p1, control, shaftEnd, haloPen);
+
+            DrawQuadraticStroke(dc, p1, control, shaftEnd, pen);
+
+            if (arrowhead)
+                DrawArrowHead(dc, control, p2, pen);
+        }
+
+        private static void DrawQuadraticStroke(DrawingContext dc, Point p0, Point p1, Point p2, Pen pen)
+        {
             var geometry = new StreamGeometry();
 
             using (var context = geometry.Open())
             {
-                context.BeginFigure(p1, false, false);
-                context.QuadraticBezierTo(control, p2, true, false);
+                context.BeginFigure(p0, false, false);
+                context.QuadraticBezierTo(p1, p2, true, false);
             }
 
             geometry.Freeze();
             dc.DrawGeometry(null, pen, geometry);
-
-            if (arrowhead)
-                DrawArrowHead(dc, control, p2, pen);
         }
 
         private static void DrawArrowHead(DrawingContext dc, Point control, Point tip, Pen pen)
@@ -2105,6 +2484,15 @@ namespace SpotifyWPF.View.Component
 
             return new Point(center.X + (midX - center.X) * (1 - pull),
                 center.Y + (midY - center.Y) * (1 - pull));
+        }
+
+        /// <summary>BeatThis IndexInBar can exceed 0–3; compare musical phase mod period.</summary>
+        private static int CircularBarPhaseDelta(int barPosA, int barPosB, int period = 4)
+        {
+            var a = ((barPosA % period) + period) % period;
+            var b = ((barPosB % period) + period) % period;
+            var d = Math.Abs(a - b);
+            return Math.Min(d, period - d);
         }
 
         private static Point ChordMidpoint(Point center, double radius, double angle1, double angle2)

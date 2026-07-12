@@ -65,8 +65,9 @@ namespace SpotifyWPF.Service.Prediction
 
     /// <summary>
     /// Builds the Infinite Jukebox beat graph. Slice 2 Classic path: beat-synchronous stacked
-    /// vectors + z-scored Euclidean + kNN with a track-wide percentile quality cap. Legacy Path A /
-    /// old caches without Classic vectors still use Echo Nest-style segment distance.
+    /// vectors + z-scored Euclidean + continuation-oriented kNN (edge i→j scores stack[i+1] vs
+    /// stack[j]) with a track-wide percentile quality cap. Legacy Path A / old caches without
+    /// Classic vectors still use Echo Nest-style segment distance.
     /// </summary>
     public class BeatGraphBuilder
     {
@@ -134,9 +135,12 @@ namespace SpotifyWPF.Service.Prediction
             AssignDownbeatBarPositions(graph, analysis);
 
             var minJump = Math.Max(4, settings.MinimumJumpBeats > 0 ? settings.MinimumJumpBeats : 8);
-            var k = Math.Max(1, settings.ClassicMaxNeighbors > 0 ? settings.ClassicMaxNeighbors : MaxNeighbors);
-            // Slider: lower = stricter. Map 25–80 UI range onto distance percentile 15–70.
+            // Higher quality percentile (= looser) also unlocks more neighbor slots so Softmax
+            // has in-phase options instead of only a handful of mutual-kNN survivors.
+            var baseK = Math.Max(1, settings.ClassicMaxNeighbors > 0 ? settings.ClassicMaxNeighbors : MaxNeighbors);
             var qualityPercentile = Math.Max(5, Math.Min(95, settings.BranchSimilarityThresholdMax));
+            var k = Math.Max(baseK, baseK + (int)Math.Round((qualityPercentile - 35) / 12.0));
+            k = Math.Max(4, Math.Min(24, k));
 
             var vectors = analysis.StackedFeatures;
             var count = graph.Beats.Count;
@@ -150,20 +154,22 @@ namespace SpotifyWPF.Service.Prediction
                     distances[i][j] = i == j ? 0 : double.MaxValue;
             }
 
-            for (var i = 0; i < count; i++)
+            // Continuation-oriented: edge i→j scores how well j continues after i
+            // (stack[i+1] ≈ stack[j]), not how alike twin beats i and j are.
+            // Splice leaves end of i and lands on start of j — twin matching double-plays attacks.
+            for (var i = 0; i < count - 1; i++)
             {
-                for (var j = i + 1; j < count; j++)
+                for (var j = 0; j < count; j++)
                 {
-                    if (Math.Abs(i - j) < minJump)
+                    if (j == i || Math.Abs(i - j) < minJump)
                         continue;
 
                     var distance = ClassicDistance(
-                        vectors[i], vectors[j],
-                        graph.Beats[i], graph.Beats[j],
+                        vectors[i + 1], vectors[j],
+                        graph.Beats[i + 1], graph.Beats[j],
                         settings.PhasePenaltyMode);
 
                     distances[i][j] = distance;
-                    distances[j][i] = distance;
                     allPairDistances.Add(distance);
                 }
             }
@@ -200,6 +206,9 @@ namespace SpotifyWPF.Service.Prediction
             if (settings.UseMutualKnn)
             {
                 ApplyMutualKnn(graph);
+                // Mutual kNN often collapses degree to ~2–4 even when percentile/k rise.
+                // Top up with the cheapest directed edges so Softmax has real options.
+                EnsureMinimumBranchDegree(graph, distances, minJump, Math.Min(8, Math.Max(4, k / 2)));
                 graph.UsedMutualKnn = true;
                 AssignMutualComponents(graph);
 
@@ -282,6 +291,51 @@ namespace SpotifyWPF.Service.Prediction
             for (var i = 0; i < count; i++)
             {
                 graph.Beats[i].Neighbors.RemoveAll(e => !destSets[e.DestinationIndex].Contains(i));
+            }
+        }
+
+        /// <summary>
+        /// After mutual thinning, restore cheapest directed edges until each beat has enough hops.
+        /// </summary>
+        private static void EnsureMinimumBranchDegree(
+            BeatGraph graph, double[][] distances, int minJump, int minDegree)
+        {
+            if (distances == null || minDegree <= 0)
+                return;
+
+            var count = graph.Beats.Count;
+
+            for (var i = 0; i < count; i++)
+            {
+                var neighbors = graph.Beats[i].Neighbors;
+                var have = new HashSet<int>(neighbors.Select(e => e.DestinationIndex));
+
+                if (have.Count >= minDegree)
+                    continue;
+
+                var extras = new List<BeatEdge>();
+
+                for (var j = 0; j < count; j++)
+                {
+                    if (j == i || Math.Abs(i - j) < minJump || have.Contains(j))
+                        continue;
+
+                    var distance = distances[i][j];
+
+                    if (double.IsInfinity(distance) || double.IsNaN(distance) || distance >= double.MaxValue / 2)
+                        continue;
+
+                    extras.Add(new BeatEdge { DestinationIndex = j, Distance = distance });
+                }
+
+                foreach (var edge in extras.OrderBy(e => e.Distance))
+                {
+                    if (have.Count >= minDegree)
+                        break;
+
+                    neighbors.Add(edge);
+                    have.Add(edge.DestinationIndex);
+                }
             }
         }
 
@@ -570,7 +624,9 @@ namespace SpotifyWPF.Service.Prediction
                 mode.Equals("off", StringComparison.OrdinalIgnoreCase))
                 return 0;
 
-            var delta = Math.Abs(barPosA - barPosB);
+            // BeatThis IndexInBar can grow in long undownbeat stretches — compare mod-4 phase
+            // so "beat 2 of the bar" matches across the song instead of raw Δ13.
+            var delta = CircularBarPhaseDelta(barPosA, barPosB);
 
             if (delta == 0)
                 return 0;
@@ -580,6 +636,14 @@ namespace SpotifyWPF.Service.Prediction
 
             // Soft: graduated — same-bar-slot free; neighboring slots mild; opposite harder.
             return Math.Min(DifferentBarPositionPenalty, delta * 25.0);
+        }
+
+        private static int CircularBarPhaseDelta(int barPosA, int barPosB, int period = 4)
+        {
+            var a = ((barPosA % period) + period) % period;
+            var b = ((barPosB % period) + period) % period;
+            var d = Math.Abs(a - b);
+            return Math.Min(d, period - d);
         }
 
         private static double Percentile(List<double> values, double percentile)
@@ -634,13 +698,17 @@ namespace SpotifyWPF.Service.Prediction
 
             var minJump = Math.Max(4, settings.MinimumJumpBeats > 0 ? settings.MinimumJumpBeats : 8);
 
-            // Always install a quality backward splice in the last ~10% of beats.
-            // (Previously we skipped this when any backward edge existed in the last 25%, which
-            // left the true tail without a reliable escape — and hops could still overshoot it.)
+            // Install a quality backward escape in the last ~10% of beats.
+            // Prefer landings before the final fifth of the track so the outro cannot
+            // trap the walk by always splicing to the start of the same ending section.
             var searchFrom = Math.Max(0, (int)(count * 0.9));
+            var escapeBefore = Math.Max(minJump, (int)(count * 0.8));
             var bestSource = count - 1;
             var bestTarget = -1;
             var bestDistance = double.MaxValue;
+            var bestEscapeSource = count - 1;
+            var bestEscapeTarget = -1;
+            var bestEscapeDistance = double.MaxValue;
 
             for (var source = count - 1; source >= searchFrom; source--)
             {
@@ -648,24 +716,38 @@ namespace SpotifyWPF.Service.Prediction
                 {
                     var distance = distances[source][j];
 
+                    if (distance >= bestDistance && distance >= bestEscapeDistance)
+                        continue;
+
                     if (distance < bestDistance)
                     {
                         bestDistance = distance;
                         bestTarget = j;
                         bestSource = source;
                     }
+
+                    if (j < escapeBefore && distance < bestEscapeDistance)
+                    {
+                        bestEscapeDistance = distance;
+                        bestEscapeTarget = j;
+                        bestEscapeSource = source;
+                    }
                 }
             }
 
-            if (bestTarget < 0)
+            var useSource = bestEscapeTarget >= 0 ? bestEscapeSource : bestSource;
+            var useTarget = bestEscapeTarget >= 0 ? bestEscapeTarget : bestTarget;
+            var useDistance = bestEscapeTarget >= 0 ? bestEscapeDistance : bestDistance;
+
+            if (useTarget < 0)
                 return;
 
-            if (graph.Beats[bestSource].Neighbors.All(e => e.DestinationIndex != bestTarget))
+            if (graph.Beats[useSource].Neighbors.All(e => e.DestinationIndex != useTarget))
             {
-                graph.Beats[bestSource].Neighbors.Add(new BeatEdge
+                graph.Beats[useSource].Neighbors.Add(new BeatEdge
                 {
-                    DestinationIndex = bestTarget,
-                    Distance = bestDistance
+                    DestinationIndex = useTarget,
+                    Distance = useDistance
                 });
             }
         }

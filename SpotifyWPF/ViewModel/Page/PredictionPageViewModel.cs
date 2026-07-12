@@ -197,6 +197,7 @@ namespace SpotifyWPF.ViewModel.Page
             ToggleRingLockCommand = new RelayCommand<RingBranchClick>(ToggleRingLock);
             RingScrubToCommand = new RelayCommand<long>(ScrubToPositionMs, ms => DurationMs > 0 && CanPlayTransport());
             EndRingScrubCommand = new RelayCommand(EndScrub);
+            HoldRingSpeedCommand = new RelayCommand<bool>(SetRingHoldSpeed);
             ClearRingLocksCommand = new RelayCommand(ClearRingLocks);
             ClearBranchPreferencesCommand = new RelayCommand(ClearBranchPreferences,
                 () => _loopController.PreferenceEdgeCount > 0);
@@ -1183,7 +1184,7 @@ namespace SpotifyWPF.ViewModel.Page
             new ObservableCollection<string> { "Auto", "BeatThis", "DP (librosa)" };
 
         public ObservableCollection<string> GraphMetricModeOptions { get; } =
-            new ObservableCollection<string> { "Auto", "Classic", "Legacy" };
+            new ObservableCollection<string> { "Auto", "Enhanced", "Legacy" };
 
         public string SelectedBeatTrackerMode
         {
@@ -1250,7 +1251,7 @@ namespace SpotifyWPF.ViewModel.Page
             switch ((mode ?? "auto").Trim().ToLowerInvariant())
             {
                 case "classic":
-                    return "Classic";
+                    return "Enhanced";
                 case "legacy":
                     return "Legacy";
                 default:
@@ -1260,11 +1261,19 @@ namespace SpotifyWPF.ViewModel.Page
 
         private static string LabelToGraphMetricMode(string label)
         {
-            if (string.Equals(label, "Classic", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(label, "Enhanced", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(label, "Classic", StringComparison.OrdinalIgnoreCase))
                 return "classic";
             if (string.Equals(label, "Legacy", StringComparison.OrdinalIgnoreCase))
                 return "legacy";
             return "auto";
+        }
+
+        private static string FormatMetricModeLabel(string metricMode)
+        {
+            if (string.Equals(metricMode, "classic", StringComparison.OrdinalIgnoreCase))
+                return "enhanced";
+            return string.IsNullOrWhiteSpace(metricMode) ? "—" : metricMode;
         }
 
         private async Task SwitchPlaybackSourceAsync(JukeboxPlaybackSource desired)
@@ -1396,8 +1405,8 @@ namespace SpotifyWPF.ViewModel.Page
                 var tracker = string.IsNullOrWhiteSpace(analysis.BeatTracker)
                     ? "beats"
                     : analysis.BeatTracker;
-                var metric = RingGraph?.MetricMode
-                             ?? (analysis.HasClassicFeatures ? "classic" : "legacy");
+                var metric = FormatMetricModeLabel(RingGraph?.MetricMode
+                             ?? (analysis.HasClassicFeatures ? "classic" : "legacy"));
                 var source = string.IsNullOrWhiteSpace(analysis.SourceType)
                     ? "cached"
                     : analysis.SourceType;
@@ -1594,6 +1603,8 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand<long> RingScrubToCommand { get; }
 
         public RelayCommand EndRingScrubCommand { get; }
+
+        public RelayCommand<bool> HoldRingSpeedCommand { get; }
 
         public RelayCommand ClearRingLocksCommand { get; }
 
@@ -1812,6 +1823,22 @@ namespace SpotifyWPF.ViewModel.Page
             RaisePropertyChanged(nameof(BranchPreferenceStatusText));
             ClearBranchPreferencesCommand?.RaiseCanExecuteChanged();
             Log($"Scrubbed to {FormatMs(_scrubPositionMs)} — replanned jukebox from here.", verbose: true);
+        }
+
+        private void SetRingHoldSpeed(bool holding)
+        {
+            if (!UseLocalPlayback)
+            {
+                if (holding)
+                    Log("Hold-to-scan needs Local WAV playback.", verbose: true);
+                _transport.SetPlaybackRate(1.0);
+                return;
+            }
+
+            _transport.SetPlaybackRate(holding ? 2.0 : 1.0);
+
+            if (holding)
+                Log("Playback 2× while holding center.", verbose: true);
         }
 
         /// <summary>Defer disk writes while a tuning slider is being dragged.</summary>
@@ -2758,7 +2785,7 @@ namespace SpotifyWPF.ViewModel.Page
                     RingGraph = graph;
                     RingSegmentCountText = graph == null
                         ? "No beat map — analyze track to build the ring"
-                        : $"{graph.Beats.Count} beats · {graph.TotalBranchCount} branches · {graph.MetricMode}";
+                        : $"{graph.Beats.Count} beats · {graph.TotalBranchCount} branches · {FormatMetricModeLabel(graph.MetricMode)}";
                     RefreshTrackStatusHud();
                 }));
         }

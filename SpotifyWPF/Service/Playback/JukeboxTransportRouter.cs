@@ -73,6 +73,15 @@ namespace SpotifyWPF.Service.Playback
 
         public void SetVolume(double volume) => Active.SetVolume(volume);
 
+        public void SetPlaybackRate(double rate)
+        {
+            // Hold-to-scan is a Local WAV feature; Spotify Web Playback has no rate API here.
+            if (_source == JukeboxPlaybackSource.Local)
+                _local.SetPlaybackRate(rate);
+            else
+                _local.SetPlaybackRate(1.0);
+        }
+
         private void HookSources()
         {
             if (!_spotifyHooked)

@@ -293,6 +293,11 @@ namespace SpotifyWPF.Service.Playback
             PostMessage(new { type = "volume", volume });
         }
 
+        public void SetPlaybackRate(double rate)
+        {
+            // Spotify Web Playback SDK does not expose a stable playback-rate API here.
+        }
+
         private void PostMessage(object message)
         {
             var core = _webView?.CoreWebView2;

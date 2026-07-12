@@ -384,9 +384,18 @@ namespace SpotifyWPF.Service.Prediction
             {
                 // Preserve navigator state (branch chance / visit memory) but replan from scrub point.
                 if (_navigator == null)
+                {
                     RearmJukebox();
+                }
                 else
-                    PlanAndArmJump(_navigator.FindBeatIndexAtMs(_lastPositionMs));
+                {
+                    var fromBeat = _navigator.FindBeatIndexAtMs(_lastPositionMs);
+                    // Large seek / skip-ahead: clear recent-destination exhaustion so Softmax
+                    // does not fall through to an end-segment-only loop.
+                    _navigator.NotifySeekReplan(fromBeat);
+                    PlanAndArmJump(fromBeat);
+                }
+
                 return;
             }
 
@@ -451,7 +460,7 @@ namespace SpotifyWPF.Service.Prediction
 
                 LoopEvent?.Invoke(this,
                     $"Jukebox: built beat graph — {graph.Beats.Count} beats, {graph.TotalBranchCount} branches " +
-                    $"({graph.BranchableBeatCount} branchable, {graph.MetricMode}" +
+                    $"({graph.BranchableBeatCount} branchable, {(string.Equals(graph.MetricMode, "classic", StringComparison.OrdinalIgnoreCase) ? "enhanced" : graph.MetricMode)}" +
                     (graph.UsedMutualKnn ? ", mutual-kNN" : "") +
                     (graph.ComponentCount > 0 ? $", {graph.ComponentCount} components" : "") +
                     (graph.BridgeEdgeCount > 0 ? $", {graph.BridgeEdgeCount} bridges" : "") +

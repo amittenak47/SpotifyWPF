@@ -22,6 +22,8 @@ namespace SpotifyWPF.Service.Playback
 
         private AudioFileReader _reader;
 
+        private VariableRateSampleProvider _rateProvider;
+
         private string _trackId;
 
         private string _trackName;
@@ -95,8 +97,9 @@ namespace SpotifyWPF.Service.Playback
                 try
                 {
                     _reader = new AudioFileReader(wavPath);
+                    _rateProvider = new VariableRateSampleProvider(_reader);
                     _output = new WaveOutEvent();
-                    _output.Init(_reader);
+                    _output.Init(_rateProvider);
                     _output.PlaybackStopped += OnPlaybackStopped;
 
                     _trackId = trackId;
@@ -198,6 +201,15 @@ namespace SpotifyWPF.Service.Playback
                     return;
 
                 _output.Volume = (float)Math.Max(0, Math.Min(1, volume));
+            }
+        }
+
+        public void SetPlaybackRate(double rate)
+        {
+            lock (_gate)
+            {
+                if (_rateProvider != null)
+                    _rateProvider.Rate = rate;
             }
         }
 
@@ -327,6 +339,8 @@ namespace SpotifyWPF.Service.Playback
                 _output.Dispose();
                 _output = null;
             }
+
+            _rateProvider = null;
 
             if (_reader != null)
             {
