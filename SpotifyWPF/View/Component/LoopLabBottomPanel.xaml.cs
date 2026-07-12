@@ -116,6 +116,21 @@ namespace SpotifyWPF.View.Component
                 vm.PlaySessionTrackCommand.Execute(null);
         }
 
+        /// <summary>
+        /// Select the row's track before the Local WAV toggle flips the global source,
+        /// so availability + reset apply to the song under the mouse.
+        /// </summary>
+        private void SessionLocalWav_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!(sender is FrameworkElement element) ||
+                !(element.DataContext is Model.Prediction.LoopLabSessionTrack track) ||
+                !(DataContext is ViewModel.Page.PredictionPageViewModel vm))
+                return;
+
+            if (!ReferenceEquals(vm.SelectedSessionTrack, track))
+                vm.SelectedSessionTrack = track;
+        }
+
         private void SlideOpen()
         {
             _isOpen = true;

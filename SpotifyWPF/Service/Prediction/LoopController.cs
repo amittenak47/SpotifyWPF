@@ -12,6 +12,12 @@ namespace SpotifyWPF.Service.Prediction
 
         string CurrentTrackId { get; }
 
+        /// <summary>Live random-branch probability from the armed navigator, if any.</summary>
+        double? NavigatorBranchChance { get; }
+
+        /// <summary>Beat index under the last reported playback position, if a navigator is armed.</summary>
+        int? NavigatorBeatIndex { get; }
+
         /// <summary>True when a loop (simple or jukebox) is currently enforcing seeks.</summary>
         bool IsLoopActive { get; }
 
@@ -80,6 +86,13 @@ namespace SpotifyWPF.Service.Prediction
         public LoopProfile ActiveProfile { get; private set; }
 
         public string CurrentTrackId { get; private set; }
+
+        /// <summary>Live random-branch probability from the armed navigator, if any.</summary>
+        public double? NavigatorBranchChance => _navigator?.CurrentBranchChance;
+
+        /// <summary>Beat index under the last reported playback position, if a navigator is armed.</summary>
+        public int? NavigatorBeatIndex =>
+            _navigator == null ? (int?)null : _navigator.FindBeatIndexAtMs(_lastPositionMs);
 
         public event EventHandler<string> LoopEvent;
 
@@ -430,6 +443,7 @@ namespace SpotifyWPF.Service.Prediction
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed to build beat graph for {trackId}: {ex}");
+                LoopEvent?.Invoke(this, $"Jukebox: beat graph failed — {ex.GetBaseException().Message}");
                 return null;
             }
         }

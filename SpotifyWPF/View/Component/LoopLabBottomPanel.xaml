@@ -127,13 +127,6 @@
                                                     MinWidth="72" MinHeight="28" Margin="0,0,6,6"
                                                     Command="{Binding AbortSessionWorkCommand}"
                                                     ToolTip="Stop analyze/capture and discard incomplete files, or stop playback (clears incomplete capture only if a capture was in progress)."/>
-                                            <CheckBox Content="Local WAV"
-                                                      Margin="4,4,0,6"
-                                                      VerticalAlignment="Center"
-                                                      Foreground="{DynamicResource AppForegroundBrush}"
-                                                      IsChecked="{Binding UseLocalPlayback}"
-                                                      IsEnabled="{Binding IsLocalPlaybackAvailable}"
-                                                      ToolTip="Play the cached analysis WAV in-process (no Spotify seek jitter). Requires a complete capture."/>
                                         </WrapPanel>
                                         <Border Height="1" Margin="0,0,0,10"
                                                 Background="{DynamicResource AppBorderBrush}" Opacity="0.55"/>
@@ -258,6 +251,7 @@
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel Grid.Column="0">
                                                     <TextBlock Text="{Binding DisplayName}"
@@ -269,10 +263,21 @@
                                                                TextTrimming="CharacterEllipsis"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                                 </StackPanel>
-                                                <TextBlock Grid.Column="1"
+                                                <ToggleButton Grid.Column="1"
+                                                              Content="Local WAV"
+                                                              FontSize="10"
+                                                              Padding="8,2"
+                                                              MinHeight="22"
+                                                              Margin="8,0,0,0"
+                                                              VerticalAlignment="Center"
+                                                              IsChecked="{Binding DataContext.UseLocalPlayback, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                              IsEnabled="{Binding HasCapture}"
+                                                              PreviewMouseLeftButtonDown="SessionLocalWav_PreviewMouseLeftButtonDown"
+                                                              ToolTip="Use this track's cached WAV for playback (no Spotify seek jitter). Toggle resets transport — press Play to start."/>
+                                                <TextBlock Grid.Column="2"
                                                            Text="{Binding StatusText}"
                                                            VerticalAlignment="Center"
-                                                           Margin="12,0,0,0"
+                                                           Margin="10,0,0,0"
                                                            FontSize="11"
                                                            Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                             </Grid>
@@ -319,6 +324,23 @@
                                                                Minimum="0"
                                                                Maximum="64"
                                                                Value="{Binding JukeboxMinBeatsBetweenJumps}"/>
+                                        <local:TuningSliderRow Label="Phrase align (beats; 0=off — use 8/16 for long drum phrases)"
+                                                               ValueText="{Binding JukeboxPhraseAlignBeatsText}"
+                                                               Minimum="0"
+                                                               Maximum="32"
+                                                               Value="{Binding JukeboxPhraseAlignBeats}"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                            <TextBlock Text="Bar phase penalty"
+                                                       Width="160"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource AppForegroundBrush}"
+                                                       ToolTip="Hard = only hop to the same beat-in-bar. Soft = prefer same phase. Off = ignore bar phase. Helps Furious Angels / Clubbed to Death-style long drum phrases when paired with Phrase align."/>
+                                            <ComboBox MinWidth="120"
+                                                      MinHeight="28"
+                                                      VerticalAlignment="Center"
+                                                      ItemsSource="{Binding PhasePenaltyModeOptions}"
+                                                      SelectedItem="{Binding SelectedPhasePenaltyMode}"/>
+                                        </StackPanel>
                                         <local:TuningSliderRow Label="Softmax temperature τ (lower = greedier)"
                                                                ValueText="{Binding JukeboxSoftmaxTemperatureText}"
                                                                Minimum="0.1"

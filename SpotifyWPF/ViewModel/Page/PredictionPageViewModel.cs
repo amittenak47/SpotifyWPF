@@ -427,6 +427,7 @@ namespace SpotifyWPF.ViewModel.Page
                     RefreshSessionCommand?.RaiseCanExecuteChanged();
                     RaisePropertyChanged(nameof(SessionPlayButtonText));
                     RefreshLocalPlaybackAvailability();
+                    RefreshTrackStatusHud();
                 }
             }
         }
@@ -532,6 +533,7 @@ namespace SpotifyWPF.ViewModel.Page
                     NotifyTransportStateChanged();
                     RaisePropertyChanged(nameof(IsIndeterminateAnalysisProgress));
                     RaisePropertyChanged(nameof(ShowAnalysisProgress));
+                    RefreshTrackStatusHud();
                 }
             }
         }
@@ -702,6 +704,77 @@ namespace SpotifyWPF.ViewModel.Page
         public string JukeboxMinBeatsBetweenJumpsText =>
             $"{_jukeboxSettingsModel.MinBeatsBetweenJumps:0} beats";
 
+        public double JukeboxPhraseAlignBeats
+        {
+            get => _jukeboxSettingsModel.PhraseAlignBeats;
+            set
+            {
+                var rounded = (int)Math.Round(value);
+
+                if (_jukeboxSettingsModel.PhraseAlignBeats == rounded)
+                    return;
+
+                _jukeboxSettingsModel.PhraseAlignBeats = Math.Max(0, rounded);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(JukeboxPhraseAlignBeatsText));
+                PersistJukeboxSettings();
+                Log(_jukeboxSettingsModel.PhraseAlignBeats <= 1
+                    ? "Jukebox: phrase align OFF."
+                    : $"Jukebox: phrase align = {_jukeboxSettingsModel.PhraseAlignBeats} beats (hop only to same phase in the phrase).");
+            }
+        }
+
+        public string JukeboxPhraseAlignBeatsText =>
+            _jukeboxSettingsModel.PhraseAlignBeats <= 1
+                ? "off"
+                : $"{_jukeboxSettingsModel.PhraseAlignBeats:0} beats";
+
+        public ObservableCollection<string> PhasePenaltyModeOptions { get; } =
+            new ObservableCollection<string> { "Off", "Soft", "Hard" };
+
+        public string SelectedPhasePenaltyMode
+        {
+            get => PhasePenaltyModeToLabel(_jukeboxSettingsModel.PhasePenaltyMode);
+            set
+            {
+                var mode = LabelToPhasePenaltyMode(value);
+
+                if (string.Equals(_jukeboxSettingsModel.PhasePenaltyMode, mode, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                _jukeboxSettingsModel.PhasePenaltyMode = mode;
+                RaisePropertyChanged();
+                PersistJukeboxSettings(invalidateGraph: true);
+                Log($"Jukebox: bar phase penalty = {mode}.");
+            }
+        }
+
+        private static string PhasePenaltyModeToLabel(string mode)
+        {
+            switch ((mode ?? "").Trim().ToLowerInvariant())
+            {
+                case "hard":
+                    return "Hard";
+                case "off":
+                    return "Off";
+                default:
+                    return "Soft";
+            }
+        }
+
+        private static string LabelToPhasePenaltyMode(string label)
+        {
+            switch ((label ?? "").Trim().ToLowerInvariant())
+            {
+                case "hard":
+                    return "hard";
+                case "off":
+                    return "off";
+                default:
+                    return "soft";
+            }
+        }
+
         public double JukeboxSoftmaxTemperature
         {
             get => _jukeboxSettingsModel.SoftmaxTemperature;
@@ -824,6 +897,24 @@ namespace SpotifyWPF.ViewModel.Page
         }
 
         private string _jukeboxBranchChanceText = "Branch chance: —";
+
+        private string _currentTrackCacheStatusText = "Capture · Analysis —";
+
+        /// <summary>Session-style capture/analysis badge for the active track (HUD).</summary>
+        public string CurrentTrackCacheStatusText
+        {
+            get => _currentTrackCacheStatusText;
+            private set => Set(ref _currentTrackCacheStatusText, value);
+        }
+
+        private string _currentTrackAnalysisDetailText = "Analysis: not probed yet";
+
+        /// <summary>Per-track analysis path / tracker / metric for the HUD.</summary>
+        public string CurrentTrackAnalysisDetailText
+        {
+            get => _currentTrackAnalysisDetailText;
+            private set => Set(ref _currentTrackAnalysisDetailText, value);
+        }
 
         public long RingDurationMs
         {
@@ -1183,16 +1274,20 @@ namespace SpotifyWPF.ViewModel.Page
                 Status = desired == JukeboxPlaybackSource.Local
                     ? "Local WAV selected — press Play."
                     : "Spotify selected — press Play.";
+                RefreshTrackStatusHud();
                 return;
             }
 
+            // Arm the selected track for the new source, but do not autoplay — user presses Play.
+            TrackInput = trackId;
+            Status = desired == JukeboxPlaybackSource.Local
+                ? "Local WAV ready — press Play."
+                : "Spotify ready — press Play.";
             Log(desired == JukeboxPlaybackSource.Local
-                ? $"Switching to local WAV for {trackId}."
-                : $"Switching to Spotify stream for {trackId}.");
-
-            await PlayTrackAsync(trackId, desired == JukeboxPlaybackSource.Local
-                ? "source-switch-local"
-                : "source-switch-spotify");
+                ? $"Local WAV armed for {trackId} (stopped — press Play)."
+                : $"Spotify armed for {trackId} (stopped — press Play).");
+            RefreshTrackStatusHud();
+            await Task.CompletedTask;
         }
 
         private void ApplyPlaybackSourceFromSettings()
@@ -1220,6 +1315,79 @@ namespace SpotifyWPF.ViewModel.Page
                 UseLocalPlayback = false;
                 Log("Local playback unavailable for this track — switched back to Spotify.");
             }
+
+            RefreshTrackStatusHud();
+        }
+
+        /// <summary>Keep the top-left HUD in sync with Session capture/analysis and live branch chance.</summary>
+        private void RefreshTrackStatusHud()
+        {
+            var trackId = _loopController.CurrentTrackId
+                          ?? _currentPlay?.TrackId
+                          ?? SelectedSessionTrack?.TrackId;
+
+            if (string.IsNullOrEmpty(trackId))
+            {
+                CurrentTrackCacheStatusText = "No track selected";
+                CurrentTrackAnalysisDetailText = AnalysisSourceText ?? "Analysis: not probed yet";
+                UpdateLiveBranchChanceText();
+                return;
+            }
+
+            var hasCapture = WavCaptureValidator.HasCompleteCapture(trackId);
+            var analysis = AnalysisCache.Load(trackId);
+            var hasAnalysis = analysis?.Beats != null && analysis.Beats.Count > 0;
+            var analyzingThis = IsAnalyzing &&
+                                string.Equals(_analyzingTrackId, trackId, StringComparison.Ordinal);
+
+            if (analyzingThis)
+                CurrentTrackCacheStatusText = "Capturing / analyzing…";
+            else
+            {
+                var capture = hasCapture ? "Capture" : "No capture";
+                var analysisLabel = hasAnalysis ? "Analysis" : "No analysis";
+                CurrentTrackCacheStatusText = $"{capture} · {analysisLabel}";
+            }
+
+            if (hasAnalysis)
+            {
+                var tracker = string.IsNullOrWhiteSpace(analysis.BeatTracker)
+                    ? "beats"
+                    : analysis.BeatTracker;
+                var metric = RingGraph?.MetricMode
+                             ?? (analysis.HasClassicFeatures ? "classic" : "legacy");
+                var source = string.IsNullOrWhiteSpace(analysis.SourceType)
+                    ? "cached"
+                    : analysis.SourceType;
+                CurrentTrackAnalysisDetailText =
+                    $"Analysis: {source} · {tracker} · {metric} · {analysis.Beats.Count} beats";
+            }
+            else
+            {
+                CurrentTrackAnalysisDetailText = AnalysisSourceText ?? "Analysis: none for this track";
+            }
+
+            UpdateLiveBranchChanceText();
+        }
+
+        private void UpdateLiveBranchChanceText()
+        {
+            var chance = _loopController.NavigatorBranchChance;
+            var beat = _loopController.NavigatorBeatIndex;
+            var phase = "";
+
+            if (RingGraph != null && beat.HasValue && beat.Value >= 0 && beat.Value < RingGraph.Beats.Count)
+            {
+                var node = RingGraph.Beats[beat.Value];
+                phase = $" · beat {beat.Value} · bar+{node.IndexInBar}";
+            }
+
+            if (chance.HasValue)
+                JukeboxBranchChanceText = $"Branch chance: {chance.Value:P0}{phase}";
+            else
+                JukeboxBranchChanceText = string.IsNullOrEmpty(phase)
+                    ? "Branch chance: —"
+                    : $"Branch chance: —{phase}";
         }
 
         public ObservableCollection<ScoredTrack> Predictions { get; } =
@@ -1835,6 +2003,7 @@ namespace SpotifyWPF.ViewModel.Page
 
                 IsPaused = position.Paused;
                 RaisePropertyChanged(nameof(ShowPauseIcon));
+                UpdateLiveBranchChanceText();
 
                 if (_currentPlay != null && position.TrackId == _currentPlay.TrackId &&
                     position.PositionMs > _currentPlay.MaxPositionMs)
@@ -1957,6 +2126,7 @@ namespace SpotifyWPF.ViewModel.Page
             RefreshLocalPlaybackAvailability();
             RefreshRingVisualization(state.TrackId);
             ApplyLoopSettings();
+            RefreshTrackStatusHud();
         }
 
         /// <summary>Whether a loop mode was active (stamped on log entries).</summary>
@@ -2016,9 +2186,11 @@ namespace SpotifyWPF.ViewModel.Page
                     RingJumpFlash = new JukeboxJumpFlash(e.FromBeatIndex, e.ToBeatIndex);
                 }
 
+                var chance = _loopController.NavigatorBranchChance;
+                var suffix = chance.HasValue ? $" · now {chance.Value:P0}" : "";
                 JukeboxBranchChanceText = e.IsPlanned
-                    ? $"Branch chance: planning jump (sim-distance {e.BranchDistance:0})"
-                    : $"Branch chance: jumped (sim-distance {e.BranchDistance:0})";
+                    ? $"Branch chance: planning (dist {e.BranchDistance:0}){suffix}"
+                    : $"Branch chance: jumped (dist {e.BranchDistance:0}){suffix}";
             });
         }
 
@@ -2222,6 +2394,7 @@ namespace SpotifyWPF.ViewModel.Page
             _jukeboxSettingsModel.ClassicMaxNeighbors = snapshot.ClassicMaxNeighbors;
             if (!string.IsNullOrEmpty(snapshot.PhasePenaltyMode))
                 _jukeboxSettingsModel.PhasePenaltyMode = snapshot.PhasePenaltyMode;
+            _jukeboxSettingsModel.PhraseAlignBeats = snapshot.PhraseAlignBeats;
             if (!string.IsNullOrEmpty(snapshot.BeatTrackerMode))
                 _jukeboxSettingsModel.BeatTrackerMode = snapshot.BeatTrackerMode;
             if (!string.IsNullOrEmpty(snapshot.GraphMetricMode))
@@ -2240,6 +2413,9 @@ namespace SpotifyWPF.ViewModel.Page
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMaxText));
             RaisePropertyChanged(nameof(JukeboxMinBeatsBetweenJumps));
             RaisePropertyChanged(nameof(JukeboxMinBeatsBetweenJumpsText));
+            RaisePropertyChanged(nameof(JukeboxPhraseAlignBeats));
+            RaisePropertyChanged(nameof(JukeboxPhraseAlignBeatsText));
+            RaisePropertyChanged(nameof(SelectedPhasePenaltyMode));
             RaisePropertyChanged(nameof(JukeboxSoftmaxTemperature));
             RaisePropertyChanged(nameof(JukeboxSoftmaxTemperatureText));
             RaisePropertyChanged(nameof(JukeboxVisitNoveltyLambda));
@@ -2362,6 +2538,7 @@ namespace SpotifyWPF.ViewModel.Page
                 MinimumJumpBeats = source.MinimumJumpBeats,
                 ClassicMaxNeighbors = source.ClassicMaxNeighbors,
                 PhasePenaltyMode = source.PhasePenaltyMode,
+                PhraseAlignBeats = source.PhraseAlignBeats,
                 BeatTrackerMode = source.BeatTrackerMode,
                 GraphMetricMode = source.GraphMetricMode,
                 MinBeatsBetweenJumps = source.MinBeatsBetweenJumps,
@@ -2503,14 +2680,27 @@ namespace SpotifyWPF.ViewModel.Page
             Task.Run(() => _loopController.GetGraphForTrack(trackId)).ContinueWith(task =>
                 RunOnUiThread(() =>
                 {
-                    if (trackId != _loopController.CurrentTrackId)
+                    // Ignore stale builds after a track change; allow when CurrentTrackId
+                    // has not been stamped yet (local play / first state).
+                    var activeId = _loopController.CurrentTrackId ?? _currentPlay?.TrackId;
+                    if (!string.IsNullOrEmpty(activeId) &&
+                        !string.Equals(trackId, activeId, StringComparison.Ordinal))
                         return;
+
+                    if (task.IsFaulted)
+                    {
+                        RingGraph = null;
+                        RingSegmentCountText = "Beat graph failed — see activity log";
+                        Log($"Beat graph failed for {trackId}: {task.Exception?.GetBaseException().Message}");
+                        return;
+                    }
 
                     var graph = task.Status == TaskStatus.RanToCompletion ? task.Result : null;
                     RingGraph = graph;
                     RingSegmentCountText = graph == null
                         ? "No beat map — analyze track to build the ring"
                         : $"{graph.Beats.Count} beats · {graph.TotalBranchCount} branches · {graph.MetricMode}";
+                    RefreshTrackStatusHud();
                 }));
         }
 
@@ -3195,6 +3385,8 @@ namespace SpotifyWPF.ViewModel.Page
                     AnalysisSourceText = "Analysis: not probed yet";
                     break;
             }
+
+            RefreshTrackStatusHud();
         }
 
         #region Export / import

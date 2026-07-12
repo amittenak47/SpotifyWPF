@@ -67,6 +67,14 @@ namespace SpotifyWPF.Model.Prediction
         public string PhasePenaltyMode { get; set; } = "soft";
 
         /// <summary>
+        /// Require hop landings to share the same position within a hypermeasure of this many beats
+        /// (0 = off). Use 8 or 16 when drum phrases are longer than a 4-beat bar so mid-phrase
+        /// similar beats don't splice. Complements <see cref="PhasePenaltyMode"/>.
+        /// </summary>
+        [JsonPropertyName("phraseAlignBeats")]
+        public int PhraseAlignBeats { get; set; } = 0;
+
+        /// <summary>
         /// Beat tracker for Path B analyze: "auto" | "beatthis" | "dp".
         /// </summary>
         [JsonPropertyName("beatTrackerMode")]

@@ -426,6 +426,20 @@ namespace SpotifyWPF.Service.Prediction
                 query = query.Where(e => Math.Abs(e.DestinationIndex - fromBeatIndex) >= minBeats);
             }
 
+            // Hypermeasure / long drum-phrase lock: only land on the same beat-within-phrase.
+            // IndexInBar alone is usually 0–3; Clubbed to Death-style grooves often need 8–16.
+            var phrase = _settings.PhraseAlignBeats;
+            if (phrase > 1)
+            {
+                var fromPhase = ((fromBeatIndex % phrase) + phrase) % phrase;
+                query = query.Where(e =>
+                {
+                    var to = e.DestinationIndex;
+                    var toPhase = ((to % phrase) + phrase) % phrase;
+                    return toPhase == fromPhase;
+                });
+            }
+
             if (_settings.EnableEndLoop && Graph.LastBranchPointIndex >= 0 && !exemptLongBranchFilter)
             {
                 var last = Graph.LastBranchPointIndex;

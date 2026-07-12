@@ -165,6 +165,42 @@
                         </TextBlock>
                     </StackPanel>
 
+                    <!-- Always-visible track name under the brand -->
+                    <Grid Height="18" Margin="0,6,0,0" ClipToBounds="True" IsHitTestVisible="True">
+                        <TextBlock Text="{Binding Status}"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource AppMutedForegroundBrush}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <component:MarqueeTextBlock Text="{Binding NowPlayingMarqueeText}"
+                                                    Height="18"
+                                                    FontSize="12"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{DynamicResource AppForegroundBrush}">
+                            <component:MarqueeTextBlock.Style>
+                                <Style TargetType="{x:Type component:MarqueeTextBlock}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </component:MarqueeTextBlock.Style>
+                        </component:MarqueeTextBlock>
+                    </Grid>
+
                     <!-- Optional status HUD: dim until hovered, under the title -->
                     <Border x:Name="StatusHoverZone"
                             Margin="0,8,0,0"
@@ -187,41 +223,14 @@
                             </Style>
                         </Border.Style>
                         <StackPanel>
-                            <Grid Height="16" ClipToBounds="True" Margin="0,0,0,4">
-                                <TextBlock Text="{Binding Status}"
-                                           FontSize="11"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource AppMutedForegroundBrush}">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                                <component:MarqueeTextBlock Text="{Binding NowPlayingMarqueeText}"
-                                                            Height="16"
-                                                            FontSize="11"
-                                                            Foreground="{DynamicResource AppForegroundBrush}">
-                                    <component:MarqueeTextBlock.Style>
-                                        <Style TargetType="{x:Type component:MarqueeTextBlock}">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </component:MarqueeTextBlock.Style>
-                                </component:MarqueeTextBlock>
-                            </Grid>
-                            <TextBlock Text="{Binding RingSegmentCountText}"
+                            <TextBlock Text="{Binding CurrentTrackCacheStatusText}"
                                        FontSize="11"
                                        FontWeight="SemiBold"
+                                       Margin="0,0,0,2"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource AppForegroundBrush}"/>
+                            <TextBlock Text="{Binding RingSegmentCountText}"
+                                       FontSize="11"
                                        Margin="0,0,0,4"
                                        TextWrapping="Wrap"
                                        Foreground="{DynamicResource AppForegroundBrush}"/>
@@ -233,9 +242,10 @@
                                        FontSize="10"
                                        Margin="0,2,0,0"
                                        Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                            <TextBlock Text="{Binding AnalysisSourceText}"
+                            <TextBlock Text="{Binding CurrentTrackAnalysisDetailText}"
                                        FontSize="10"
                                        Margin="0,2,0,0"
+                                       TextWrapping="Wrap"
                                        Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                             <TextBlock Text="{Binding DeviceText}"
                                        FontSize="10"

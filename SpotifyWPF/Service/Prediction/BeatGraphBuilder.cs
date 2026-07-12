@@ -290,20 +290,30 @@ namespace SpotifyWPF.Service.Prediction
         {
             var count = graph.Beats.Count;
             var ids = new int[count];
-
-            for (var i = 0; i < count; i++)
-                ids[i] = -1;
-
             var undirected = new List<int>[count];
 
             for (var i = 0; i < count; i++)
             {
+                ids[i] = -1;
                 undirected[i] = new List<int>();
+            }
 
+            // Init all lists first — destinations often point forward (j > i), so writing
+            // undirected[j] before j is constructed was NullReferenceException → empty ring.
+            for (var i = 0; i < count; i++)
+            {
                 foreach (var e in graph.Beats[i].Neighbors)
                 {
-                    undirected[i].Add(e.DestinationIndex);
-                    undirected[e.DestinationIndex].Add(i);
+                    if (e == null)
+                        continue;
+
+                    var j = e.DestinationIndex;
+
+                    if (j < 0 || j >= count || j == i)
+                        continue;
+
+                    undirected[i].Add(j);
+                    undirected[j].Add(i);
                 }
             }
 
