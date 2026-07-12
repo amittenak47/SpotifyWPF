@@ -101,65 +101,45 @@ namespace SpotifyWPF.View.Page
             StageRoot.RenderTransform = new ScaleTransform(_stageZoom, _stageZoom);
         }
 
-        private Point _ssmDragOffset;
-        private bool _ssmDragging;
-
-        private void SsmPanel_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            var panel = sender as Border;
-
-            if (panel == null)
-                return;
-
-            // Don't start a drag when interacting with the heatmap image itself for click-select —
-            // only drag from the title bar area (top ~22px) or empty chrome.
-            var pos = e.GetPosition(panel);
-
-            if (pos.Y > 28 && e.OriginalSource is SelfSimilarityHeatmapControl)
-                return;
-
-            _ssmDragging = true;
-            _ssmDragOffset = e.GetPosition(panel);
-            panel.CaptureMouse();
-            e.Handled = true;
-        }
-
-        private void SsmPanel_MouseMove(object sender, MouseEventArgs e)
-        {
-            var panel = sender as Border;
-
-            if (!_ssmDragging || panel == null || StageRoot == null)
-                return;
-
-            var parentPos = e.GetPosition(StageRoot);
-            var left = Math.Max(0, Math.Min(parentPos.X - _ssmDragOffset.X, StageRoot.Width - panel.Width));
-            var top = Math.Max(0, Math.Min(parentPos.Y - _ssmDragOffset.Y, StageRoot.Height - panel.Height));
-            panel.Margin = new Thickness(left, top, 0, 0);
-            panel.HorizontalAlignment = HorizontalAlignment.Left;
-            panel.VerticalAlignment = VerticalAlignment.Top;
-        }
-
-        private void SsmPanel_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            var panel = sender as Border;
-
-            if (!_ssmDragging || panel == null)
-                return;
-
-            _ssmDragging = false;
-            panel.ReleaseMouseCapture();
-        }
-
         private void HoverZone_MouseEnter(object sender, MouseEventArgs e)
         {
-            if (sender is UIElement element)
-                FadeHoverZone(element, HoverFullOpacity);
+            if (sender == SearchHoverZone && TrackSearchBox != null)
+                FadeElementOpacity(TrackSearchBox, 1.0);
+            else if (sender == WheelHoverZone && TransportWheel != null)
+                FadeElementOpacity(TransportWheel, 1.0);
+            else if (sender == StatusHoverZone)
+                FadeHoverZone(StatusHoverZone, HoverFullOpacity);
         }
 
         private void HoverZone_MouseLeave(object sender, MouseEventArgs e)
         {
-            if (sender is UIElement element)
-                FadeHoverZone(element, HoverDimOpacity);
+            if (sender == SearchHoverZone && TrackSearchBox != null)
+                FadeElementOpacity(TrackSearchBox, 0.35);
+            else if (sender == WheelHoverZone && TransportWheel != null)
+                FadeElementOpacity(TransportWheel, 0.28);
+            else if (sender == StatusHoverZone)
+                FadeHoverZone(StatusHoverZone, HoverDimOpacity);
+        }
+
+        private static void FadeElementOpacity(UIElement element, double to)
+        {
+            element.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(to, TimeSpan.FromMilliseconds(HoverFadeMs))
+                {
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                    FillBehavior = FillBehavior.HoldEnd
+                },
+                HandoffBehavior.SnapshotAndReplace);
+        }
+
+        private void ManualConfirm_Click(object sender, RoutedEventArgs e)
+        {
+            RingView?.RingCanvas?.ConfirmManualSelectionPublic();
+        }
+
+        private void ManualCancel_Click(object sender, RoutedEventArgs e)
+        {
+            RingView?.RingCanvas?.CancelManualSelectionPublic();
         }
 
         private static void FadeHoverZone(UIElement element, double to)

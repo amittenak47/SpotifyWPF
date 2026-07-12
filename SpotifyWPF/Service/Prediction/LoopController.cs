@@ -255,6 +255,8 @@ namespace SpotifyWPF.Service.Prediction
             RaiseJukeboxJump(_plannedJump, planned: true);
         }
 
+        private bool _watchdogBusy;
+
         private void OnPositionUpdated(object sender, PositionSnapshot position)
         {
             if (position.TrackId != CurrentTrackId)
@@ -262,35 +264,48 @@ namespace SpotifyWPF.Service.Prediction
 
             _lastPositionMs = position.PositionMs;
 
-            // Watchdog: planned jump trigger is behind us but transport never fired (disarm race,
-            // seek-lead past EOF, etc.) — force the seek so the white end-branch actually runs.
+            if (_watchdogBusy)
+                return;
+
+            // Watchdog: planned jump trigger is behind us but transport never fired.
             if (!IsLoopActive || ActiveProfile?.Mode != LoopModes.Jukebox || _plannedJump == null)
                 return;
 
             if (position.Paused)
                 return;
 
-            if (position.PositionMs + 40 < _plannedJump.TriggerMs)
-                return;
-
-            // More than ~120ms past the trigger with no ActionFired → poke the seek ourselves.
-            if (position.PositionMs < _plannedJump.TriggerMs + 120)
-                return;
-
             var jump = _plannedJump;
-            LoopEvent?.Invoke(this,
-                $"Jukebox: watchdog — forcing overdue jump {jump.FromBeatIndex} → {jump.TargetBeatIndex}.");
-            _playbackHost.DisarmAction();
-            _playbackHost.Seek(jump.SeekToMs);
-            _lastPositionMs = jump.SeekToMs;
 
-            // Synthesize the normal fire path so replan + UI flash still run.
-            OnJukeboxActionFired(new ArmedActionFiredEventArgs
+            if (position.PositionMs + 40 < jump.TriggerMs)
+                return;
+
+            // More than ~120ms past the trigger with no ActionFired → force the seek once.
+            if (position.PositionMs < jump.TriggerMs + 120)
+                return;
+
+            _watchdogBusy = true;
+
+            try
             {
-                ActionId = JukeboxActionId,
-                FiredAtMs = position.PositionMs,
-                SeekToMs = jump.SeekToMs
-            });
+                // Clear first so a synchronous PositionUpdated from Seek cannot re-enter.
+                _plannedJump = null;
+                _playbackHost.DisarmAction();
+                LoopEvent?.Invoke(this,
+                    $"Jukebox: watchdog — forcing overdue jump {jump.FromBeatIndex} → {jump.TargetBeatIndex}.");
+                _playbackHost.Seek(jump.SeekToMs);
+                _lastPositionMs = jump.SeekToMs;
+
+                LoopEvent?.Invoke(this,
+                    $"Jukebox: jumped beat {jump.FromBeatIndex} → {jump.TargetBeatIndex}.");
+                RaiseJukeboxJump(jump, planned: false);
+
+                if (IsLoopActive && ActiveProfile.Mode == LoopModes.Jukebox && _navigator != null)
+                    PlanAndArmJump(jump.TargetBeatIndex);
+            }
+            finally
+            {
+                _watchdogBusy = false;
+            }
         }
 
         private void RaiseJukeboxJump(JukeboxJump jump, bool planned)

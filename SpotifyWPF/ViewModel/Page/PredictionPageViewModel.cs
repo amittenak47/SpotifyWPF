@@ -721,7 +721,25 @@ namespace SpotifyWPF.ViewModel.Page
 
         private int _ringInspectBeat = -1;
 
-        /// <summary>Show the self-similarity heatmap overlay (Slice 3 Observe).</summary>
+        /// <summary>Classic beatFeatures (chroma+mfcc+rms) for hop tooltips.</summary>
+        public System.Collections.IList RingBeatFeatures
+        {
+            get => _ringBeatFeatures;
+            set => Set(ref _ringBeatFeatures, value);
+        }
+
+        private System.Collections.IList _ringBeatFeatures;
+
+        /// <summary>True while the ring is in manual hop-pick mode (shows window confirm/cancel).</summary>
+        public bool IsManualBranchSelect
+        {
+            get => _isManualBranchSelect;
+            set => Set(ref _isManualBranchSelect, value);
+        }
+
+        private bool _isManualBranchSelect;
+
+        /// <summary>Show the self-similarity heatmap (Slice 3 Observe).</summary>
         public bool ShowSsmHeatmap
         {
             get => _showSsmHeatmap;
@@ -2216,6 +2234,7 @@ namespace SpotifyWPF.ViewModel.Page
                 RingGraph = null;
                 RingSectionStartsSec = Array.Empty<double>();
                 RingStackedFeatures = null;
+                RingBeatFeatures = null;
                 RingInspectBeat = -1;
                 RingSegmentCountText = "No track playing";
                 _visualEnergy.Clear();
@@ -2229,6 +2248,7 @@ namespace SpotifyWPF.ViewModel.Page
                 RingGraph = null;
                 RingSectionStartsSec = Array.Empty<double>();
                 RingStackedFeatures = null;
+                RingBeatFeatures = null;
                 RingSegmentCountText = "No beat map — analyze track to build the ring";
                 _visualEnergy.Clear();
                 return;
@@ -2241,6 +2261,7 @@ namespace SpotifyWPF.ViewModel.Page
                 ? analysis.Sections.Select(s => s.Start).ToList()
                 : (IReadOnlyList<double>)Array.Empty<double>();
             RingStackedFeatures = analysis.HasClassicFeatures ? analysis.StackedFeatures : null;
+            RingBeatFeatures = analysis.HasClassicFeatures ? analysis.BeatFeatures : null;
             RingSegmentCountText = "Building beat graph…";
 
             // The graph is O(beats²) to build; keep the UI thread free.
