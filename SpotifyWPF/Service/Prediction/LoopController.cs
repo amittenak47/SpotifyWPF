@@ -66,6 +66,8 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly BeatGraphBuilder _graphBuilder = new BeatGraphBuilder();
 
+        private readonly BranchPreferenceStore _preferences = new BranchPreferenceStore();
+
         /// <summary>Beat graphs are pure functions of the cached analysis; keep them per track.</summary>
         private readonly Dictionary<string, BeatGraph> _graphCache = new Dictionary<string, BeatGraph>();
 
@@ -197,10 +199,15 @@ namespace SpotifyWPF.Service.Prediction
             }
 
             // Recreate on every rearm so branch-lock edits on the profile take effect immediately.
-            // Preserve visit memory so lock/settings edits don't reset anti-local-minima state.
+            // Preserve visit / dwell state so lock/settings edits don't reset anti-local-minima.
             var priorVisits = _navigator?.ExportVisitMemory();
-            _navigator = new BeatNavigator(graph, _jukeboxSettings.Get(), ActiveProfile);
+            var priorCounts = _navigator?.ExportVisitCounts();
+            var priorDwell = _navigator?.ExportBeatsSinceJump() ?? int.MaxValue / 4;
+            _navigator = new BeatNavigator(graph, _jukeboxSettings.Get(), ActiveProfile,
+                preferences: _preferences);
             _navigator.ImportVisitMemory(priorVisits);
+            _navigator.ImportVisitCounts(priorCounts);
+            _navigator.ImportBeatsSinceJump(priorDwell);
 
             if (_navigator.IsIdleWithoutLocks)
             {
@@ -341,6 +348,9 @@ namespace SpotifyWPF.Service.Prediction
             _plannedJump = null;
             _playbackHost.DisarmAction();
 
+            // Scrub shortly after a hop = preference negative (Slice 6).
+            _navigator?.NotifySkipAfterLastJump();
+
             if (!IsLoopActive)
                 return;
 
@@ -405,8 +415,11 @@ namespace SpotifyWPF.Service.Prediction
 
                 LoopEvent?.Invoke(this,
                     $"Jukebox: built beat graph — {graph.Beats.Count} beats, {graph.TotalBranchCount} branches " +
-                    $"({graph.BranchableBeatCount} branchable, {graph.MetricMode}, " +
-                    $"threshold {graph.BranchDistanceThreshold:0.###}" +
+                    $"({graph.BranchableBeatCount} branchable, {graph.MetricMode}" +
+                    (graph.UsedMutualKnn ? ", mutual-kNN" : "") +
+                    (graph.ComponentCount > 0 ? $", {graph.ComponentCount} components" : "") +
+                    (graph.BridgeEdgeCount > 0 ? $", {graph.BridgeEdgeCount} bridges" : "") +
+                    $", threshold {graph.BranchDistanceThreshold:0.###}" +
                     (graph.LastBranchPointIndex >= 0
                         ? $", end-loop escape @ beat {graph.LastBranchPointIndex}"
                         : ", end-loop off") +

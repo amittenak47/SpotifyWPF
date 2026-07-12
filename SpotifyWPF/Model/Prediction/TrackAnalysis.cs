@@ -68,11 +68,23 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("stackedFeatures")]
         public List<List<double>> StackedFeatures { get; set; }
 
+        /// <summary>
+        /// Slice 5 optional: per-beat region embeddings (e.g. musicnn/effnet pooled to beat grid).
+        /// Same length as Beats when present. Used only as a region gate over Classic candidates.
+        /// </summary>
+        [JsonPropertyName("regionEmbeddings")]
+        public List<List<double>> RegionEmbeddings { get; set; }
+
         /// <summary>True when Slice 2 Classic vectors are present for graph assembly.</summary>
         [JsonIgnore]
         public bool HasClassicFeatures =>
             StackedFeatures != null && StackedFeatures.Count > 0 &&
             Beats != null && StackedFeatures.Count == Beats.Count;
+
+        [JsonIgnore]
+        public bool HasRegionEmbeddings =>
+            RegionEmbeddings != null && Beats != null &&
+            RegionEmbeddings.Count == Beats.Count && RegionEmbeddings.Count > 0;
     }
 
     public class DpBeatAgreement

@@ -1600,7 +1600,9 @@ namespace SpotifyWPF.View.Component
 
                     var a1 = BeatAngle(beats[parent], total);
                     var a2 = BeatAngle(beats[dest], total);
-                    var branchColor = DistanceBranchColor(edge.Distance, minDist, maxDist);
+                    var branchColor = edge.IsBridge
+                        ? BridgeColor
+                        : DistanceBranchColor(edge.Distance, minDist, maxDist);
                     var locked = IsBranchLocked(locks, parent, dest);
                     var isHighlighted = dest == highlight;
                     var isCommitted = dest == committed;
@@ -1688,6 +1690,9 @@ namespace SpotifyWPF.View.Component
         private static readonly Color AccentColor = Color.FromRgb(0x1D, 0xB9, 0x54);
 
         private static readonly Color LockColor = Color.FromRgb(0xFF, 0xD1, 0x66);
+
+        /// <summary>Slice 4 inter-component / orphan bridges — cooler teal so they read as safety edges.</summary>
+        private static readonly Color BridgeColor = Color.FromRgb(0x5E, 0xC8, 0xC8);
 
         private static readonly Color HotColor = Colors.White;
 

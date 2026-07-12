@@ -10,6 +10,9 @@ namespace SpotifyWPF.Service.Prediction
         public int DestinationIndex { get; set; }
 
         public double Distance { get; set; }
+
+        /// <summary>True when this edge was added as an inter-component / orphan rescue bridge (Slice 4).</summary>
+        public bool IsBridge { get; set; }
     }
 
     public class BeatNode
@@ -44,6 +47,16 @@ namespace SpotifyWPF.Service.Prediction
 
         /// <summary>"classic" (Slice 2 vectors) or "legacy" (Echo Nest segment distance).</summary>
         public string MetricMode { get; set; } = "legacy";
+
+        /// <summary>True when Classic edges were filtered to mutual kNN.</summary>
+        public bool UsedMutualKnn { get; set; }
+
+        /// <summary>Connected-component id per beat (mutual undirected graph). -1 = unset.</summary>
+        public int[] ComponentIds { get; set; }
+
+        public int ComponentCount { get; set; }
+
+        public int BridgeEdgeCount { get; set; }
 
         public int TotalBranchCount => Beats.Sum(b => b.Neighbors.Count);
 
@@ -181,10 +194,266 @@ namespace SpotifyWPF.Service.Prediction
                     graph.Beats[i].Neighbors.Add(edge);
             }
 
+            if (settings.EssentiaRegionGate && analysis.HasRegionEmbeddings)
+                ApplyRegionGate(graph, analysis, settings, minJump);
+
+            if (settings.UseMutualKnn)
+            {
+                ApplyMutualKnn(graph);
+                graph.UsedMutualKnn = true;
+                AssignMutualComponents(graph);
+
+                if (settings.EnableSccBridges)
+                    AddCheapestComponentBridges(graph, distances, minJump);
+            }
+            else
+            {
+                graph.UsedMutualKnn = false;
+                AssignMutualComponents(graph); // still label weak components of directed graph as undirected
+            }
+
             graph.BranchDistanceThreshold = threshold;
             graph.MetricMode = "classic";
             FinishGraph(graph, distances, settings);
             return graph;
+        }
+
+        /// <summary>
+        /// Slice 5: drop Classic neighbors whose region embedding is not among the nearest
+        /// GateRegionNeighborCount for that origin (embeddings choose region; Classic already chose beat).
+        /// </summary>
+        private static void ApplyRegionGate(BeatGraph graph, TrackAnalysis analysis, JukeboxSettings settings,
+            int minJump)
+        {
+            var kRegion = Math.Max(1, settings.GateRegionNeighborCount);
+            var embeds = analysis.RegionEmbeddings;
+            var count = graph.Beats.Count;
+
+            for (var i = 0; i < count; i++)
+            {
+                var beat = graph.Beats[i];
+
+                if (beat.Neighbors.Count == 0)
+                    continue;
+
+                var regionDists = new List<(int J, double Dist)>(count);
+
+                for (var j = 0; j < count; j++)
+                {
+                    if (Math.Abs(i - j) < minJump)
+                        continue;
+
+                    regionDists.Add((j, VectorDistance(embeds[i], embeds[j])));
+                }
+
+                var allowed = new HashSet<int>(
+                    regionDists.OrderBy(t => t.Dist).Take(kRegion).Select(t => t.J));
+
+                beat.Neighbors.RemoveAll(e => !allowed.Contains(e.DestinationIndex));
+            }
+        }
+
+        private static double VectorDistance(IReadOnlyList<double> a, IReadOnlyList<double> b)
+        {
+            if (a == null || b == null || a.Count == 0 || b.Count == 0)
+                return double.MaxValue;
+
+            var length = Math.Min(a.Count, b.Count);
+            double sum = 0;
+
+            for (var i = 0; i < length; i++)
+            {
+                var d = a[i] - b[i];
+                sum += d * d;
+            }
+
+            return Math.Sqrt(sum / Math.Max(1, length));
+        }
+
+        /// <summary>Keep i→j only when j→i also exists (mutual kNN).</summary>
+        private static void ApplyMutualKnn(BeatGraph graph)
+        {
+            var count = graph.Beats.Count;
+            var destSets = new HashSet<int>[count];
+
+            for (var i = 0; i < count; i++)
+                destSets[i] = new HashSet<int>(graph.Beats[i].Neighbors.Select(e => e.DestinationIndex));
+
+            for (var i = 0; i < count; i++)
+            {
+                graph.Beats[i].Neighbors.RemoveAll(e => !destSets[e.DestinationIndex].Contains(i));
+            }
+        }
+
+        /// <summary>Undirected connected components over current neighbor lists.</summary>
+        private static void AssignMutualComponents(BeatGraph graph)
+        {
+            var count = graph.Beats.Count;
+            var ids = new int[count];
+
+            for (var i = 0; i < count; i++)
+                ids[i] = -1;
+
+            var undirected = new List<int>[count];
+
+            for (var i = 0; i < count; i++)
+            {
+                undirected[i] = new List<int>();
+
+                foreach (var e in graph.Beats[i].Neighbors)
+                {
+                    undirected[i].Add(e.DestinationIndex);
+                    undirected[e.DestinationIndex].Add(i);
+                }
+            }
+
+            var component = 0;
+
+            for (var i = 0; i < count; i++)
+            {
+                if (ids[i] >= 0)
+                    continue;
+
+                var stack = new Stack<int>();
+                stack.Push(i);
+                ids[i] = component;
+
+                while (stack.Count > 0)
+                {
+                    var u = stack.Pop();
+
+                    foreach (var v in undirected[u])
+                    {
+                        if (ids[v] >= 0)
+                            continue;
+
+                        ids[v] = component;
+                        stack.Push(v);
+                    }
+                }
+
+                component++;
+            }
+
+            graph.ComponentIds = ids;
+            graph.ComponentCount = component;
+        }
+
+        /// <summary>
+        /// Cheapest bridges between components so mutual-kNN orphans/unique passages stay reachable.
+        /// Marks edges with <see cref="BeatEdge.IsBridge"/>.
+        /// </summary>
+        private static void AddCheapestComponentBridges(BeatGraph graph, double[][] distances, int minJump)
+        {
+            if (graph.ComponentIds == null || graph.ComponentCount <= 1)
+                return;
+
+            var count = graph.Beats.Count;
+            var ids = graph.ComponentIds;
+            var best = new Dictionary<(int A, int B), (int I, int J, double Dist)>();
+
+            for (var i = 0; i < count; i++)
+            {
+                for (var j = i + 1; j < count; j++)
+                {
+                    if (ids[i] == ids[j] || Math.Abs(i - j) < minJump)
+                        continue;
+
+                    var d = distances[i][j];
+
+                    if (double.IsInfinity(d) || double.IsNaN(d) || d >= double.MaxValue / 2)
+                        continue;
+
+                    var a = Math.Min(ids[i], ids[j]);
+                    var b = Math.Max(ids[i], ids[j]);
+                    var key = (a, b);
+
+                    if (!best.TryGetValue(key, out var cur) || d < cur.Dist)
+                        best[key] = (i, j, d);
+                }
+            }
+
+            // Kruskal-style: link components with cheapest bridges until one tree (or no more).
+            var parent = Enumerable.Range(0, graph.ComponentCount).ToArray();
+
+            int Find(int x)
+            {
+                while (parent[x] != x)
+                    x = parent[x] = parent[parent[x]];
+                return x;
+            }
+
+            void Union(int x, int y)
+            {
+                x = Find(x);
+                y = Find(y);
+
+                if (x != y)
+                    parent[y] = x;
+            }
+
+            var bridges = 0;
+
+            foreach (var pair in best.OrderBy(kv => kv.Value.Dist))
+            {
+                var (i, j, dist) = pair.Value;
+                var ci = ids[i];
+                var cj = ids[j];
+
+                if (Find(ci) == Find(cj))
+                    continue;
+
+                Union(ci, cj);
+                TryAddBridge(graph.Beats[i], j, dist);
+                TryAddBridge(graph.Beats[j], i, dist);
+                bridges += 2;
+            }
+
+            // Orphan rescue: beats with zero outgoing edges get their single cheapest directed edge.
+            for (var i = 0; i < count; i++)
+            {
+                if (graph.Beats[i].Neighbors.Count > 0)
+                    continue;
+
+                var bestJ = -1;
+                var bestD = double.MaxValue;
+
+                for (var j = 0; j < count; j++)
+                {
+                    if (Math.Abs(i - j) < minJump)
+                        continue;
+
+                    var d = distances[i][j];
+
+                    if (d < bestD)
+                    {
+                        bestD = d;
+                        bestJ = j;
+                    }
+                }
+
+                if (bestJ >= 0)
+                {
+                    TryAddBridge(graph.Beats[i], bestJ, bestD);
+                    bridges++;
+                }
+            }
+
+            graph.BridgeEdgeCount = bridges;
+            AssignMutualComponents(graph);
+        }
+
+        private static void TryAddBridge(BeatNode beat, int dest, double dist)
+        {
+            if (beat.Neighbors.Any(e => e.DestinationIndex == dest))
+                return;
+
+            beat.Neighbors.Add(new BeatEdge
+            {
+                DestinationIndex = dest,
+                Distance = dist,
+                IsBridge = true
+            });
         }
 
         private BeatGraph BuildLegacy(TrackAnalysis analysis, JukeboxSettings settings)

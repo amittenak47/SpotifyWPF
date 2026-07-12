@@ -661,6 +661,135 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
+        /// <summary>Linear beats forced after a hop before another random branch (stability dwell).</summary>
+        public double JukeboxMinBeatsBetweenJumps
+        {
+            get => _jukeboxSettingsModel.MinBeatsBetweenJumps;
+            set
+            {
+                var rounded = (int)Math.Round(value);
+
+                if (_jukeboxSettingsModel.MinBeatsBetweenJumps == rounded)
+                    return;
+
+                _jukeboxSettingsModel.MinBeatsBetweenJumps = Math.Max(0, rounded);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(JukeboxMinBeatsBetweenJumpsText));
+                PersistJukeboxSettings();
+                Log($"Jukebox: dwell after hop = {_jukeboxSettingsModel.MinBeatsBetweenJumps} beats.");
+            }
+        }
+
+        public string JukeboxMinBeatsBetweenJumpsText =>
+            $"{_jukeboxSettingsModel.MinBeatsBetweenJumps:0} beats";
+
+        public double JukeboxSoftmaxTemperature
+        {
+            get => _jukeboxSettingsModel.SoftmaxTemperature;
+            set
+            {
+                if (Math.Abs(_jukeboxSettingsModel.SoftmaxTemperature - value) < 0.001)
+                    return;
+
+                _jukeboxSettingsModel.SoftmaxTemperature = Math.Max(0.05, value);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(JukeboxSoftmaxTemperatureText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string JukeboxSoftmaxTemperatureText =>
+            $"τ {_jukeboxSettingsModel.SoftmaxTemperature:0.##}";
+
+        public double JukeboxVisitNoveltyLambda
+        {
+            get => _jukeboxSettingsModel.VisitNoveltyLambda;
+            set
+            {
+                if (Math.Abs(_jukeboxSettingsModel.VisitNoveltyLambda - value) < 0.001)
+                    return;
+
+                _jukeboxSettingsModel.VisitNoveltyLambda = Math.Max(0, value);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(JukeboxVisitNoveltyLambdaText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string JukeboxVisitNoveltyLambdaText =>
+            $"λ {_jukeboxSettingsModel.VisitNoveltyLambda:0.##}";
+
+        public bool JukeboxUseMutualKnn
+        {
+            get => _jukeboxSettingsModel.UseMutualKnn;
+            set
+            {
+                if (_jukeboxSettingsModel.UseMutualKnn == value)
+                    return;
+
+                _jukeboxSettingsModel.UseMutualKnn = value;
+                RaisePropertyChanged();
+                PersistJukeboxSettings(invalidateGraph: true);
+                Log(value
+                    ? "Jukebox: mutual-kNN ON (rebuilds graph)."
+                    : "Jukebox: mutual-kNN OFF (directed kNN).");
+            }
+        }
+
+        public bool JukeboxEnableSccBridges
+        {
+            get => _jukeboxSettingsModel.EnableSccBridges;
+            set
+            {
+                if (_jukeboxSettingsModel.EnableSccBridges == value)
+                    return;
+
+                _jukeboxSettingsModel.EnableSccBridges = value;
+                RaisePropertyChanged();
+                PersistJukeboxSettings(invalidateGraph: true);
+                Log(value
+                    ? "Jukebox: component bridges ON."
+                    : "Jukebox: component bridges OFF.");
+            }
+        }
+
+        public double JukeboxPreferenceWeightPercent
+        {
+            get => _jukeboxSettingsModel.PreferenceWeight * 100;
+            set
+            {
+                var next = Math.Max(0, Math.Min(100, value)) / 100.0;
+
+                if (Math.Abs(_jukeboxSettingsModel.PreferenceWeight - next) < 0.0001)
+                    return;
+
+                _jukeboxSettingsModel.PreferenceWeight = next;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(JukeboxPreferenceWeightText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string JukeboxPreferenceWeightText =>
+            $"w_pref {_jukeboxSettingsModel.PreferenceWeight * 100:0.#}%";
+
+        public bool JukeboxEssentiaRegionGate
+        {
+            get => _jukeboxSettingsModel.EssentiaRegionGate;
+            set
+            {
+                if (_jukeboxSettingsModel.EssentiaRegionGate == value)
+                    return;
+
+                _jukeboxSettingsModel.EssentiaRegionGate = value;
+                RaisePropertyChanged();
+                PersistJukeboxSettings(invalidateGraph: true);
+                Log(value
+                    ? "Jukebox: Essentia region gate ON (needs regionEmbeddings in analysis)."
+                    : "Jukebox: Essentia region gate OFF.");
+            }
+        }
+
         public string RingSegmentCountText
         {
             get => _ringSegmentCountText;
@@ -2020,9 +2149,29 @@ namespace SpotifyWPF.ViewModel.Page
                 _jukeboxSettingsModel.BeatTrackerMode = snapshot.BeatTrackerMode;
             if (!string.IsNullOrEmpty(snapshot.GraphMetricMode))
                 _jukeboxSettingsModel.GraphMetricMode = snapshot.GraphMetricMode;
+            _jukeboxSettingsModel.MinBeatsBetweenJumps = snapshot.MinBeatsBetweenJumps;
+            _jukeboxSettingsModel.SoftmaxTemperature = snapshot.SoftmaxTemperature;
+            _jukeboxSettingsModel.VisitNoveltyLambda = snapshot.VisitNoveltyLambda;
+            _jukeboxSettingsModel.VisitRegionRadiusBeats = snapshot.VisitRegionRadiusBeats;
+            _jukeboxSettingsModel.UseMutualKnn = snapshot.UseMutualKnn;
+            _jukeboxSettingsModel.EnableSccBridges = snapshot.EnableSccBridges;
+            _jukeboxSettingsModel.PreferenceWeight = snapshot.PreferenceWeight;
+            _jukeboxSettingsModel.EssentiaRegionGate = snapshot.EssentiaRegionGate;
+            _jukeboxSettingsModel.GateRegionNeighborCount = snapshot.GateRegionNeighborCount;
 
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMax));
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMaxText));
+            RaisePropertyChanged(nameof(JukeboxMinBeatsBetweenJumps));
+            RaisePropertyChanged(nameof(JukeboxMinBeatsBetweenJumpsText));
+            RaisePropertyChanged(nameof(JukeboxSoftmaxTemperature));
+            RaisePropertyChanged(nameof(JukeboxSoftmaxTemperatureText));
+            RaisePropertyChanged(nameof(JukeboxVisitNoveltyLambda));
+            RaisePropertyChanged(nameof(JukeboxVisitNoveltyLambdaText));
+            RaisePropertyChanged(nameof(JukeboxUseMutualKnn));
+            RaisePropertyChanged(nameof(JukeboxEnableSccBridges));
+            RaisePropertyChanged(nameof(JukeboxPreferenceWeightPercent));
+            RaisePropertyChanged(nameof(JukeboxPreferenceWeightText));
+            RaisePropertyChanged(nameof(JukeboxEssentiaRegionGate));
             RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinPercent));
             RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinText));
             RaisePropertyChanged(nameof(JukeboxBranchProbabilityMaxPercent));
@@ -2137,7 +2286,16 @@ namespace SpotifyWPF.ViewModel.Page
                 ClassicMaxNeighbors = source.ClassicMaxNeighbors,
                 PhasePenaltyMode = source.PhasePenaltyMode,
                 BeatTrackerMode = source.BeatTrackerMode,
-                GraphMetricMode = source.GraphMetricMode
+                GraphMetricMode = source.GraphMetricMode,
+                MinBeatsBetweenJumps = source.MinBeatsBetweenJumps,
+                SoftmaxTemperature = source.SoftmaxTemperature,
+                VisitNoveltyLambda = source.VisitNoveltyLambda,
+                VisitRegionRadiusBeats = source.VisitRegionRadiusBeats,
+                UseMutualKnn = source.UseMutualKnn,
+                EnableSccBridges = source.EnableSccBridges,
+                PreferenceWeight = source.PreferenceWeight,
+                EssentiaRegionGate = source.EssentiaRegionGate,
+                GateRegionNeighborCount = source.GateRegionNeighborCount
             };
         }
 

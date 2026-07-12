@@ -78,6 +78,52 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("graphMetricMode")]
         public string GraphMetricMode { get; set; } = "auto";
 
+        /// <summary>
+        /// After a hop, force this many linear beats before another random branch is considered
+        /// (locks + end-loop still fire). Default 16 ≈ one phrase of stability.
+        /// </summary>
+        [JsonPropertyName("minBeatsBetweenJumps")]
+        public int MinBeatsBetweenJumps { get; set; } = 16;
+
+        /// <summary>Softmax temperature τ for Slice 4 edge pick. Lower = greedier (nearest). Default 1.</summary>
+        [JsonPropertyName("softmaxTemperature")]
+        public double SoftmaxTemperature { get; set; } = 1.0;
+
+        /// <summary>Visit-count novelty λ: subtract λ·visits(dest) from softmax score. Default 0.35.</summary>
+        [JsonPropertyName("visitNoveltyLambda")]
+        public double VisitNoveltyLambda { get; set; } = 0.35;
+
+        /// <summary>Beats within this radius of a recent landing count as the same pocket (tabu / visit bucket).</summary>
+        [JsonPropertyName("visitRegionRadiusBeats")]
+        public int VisitRegionRadiusBeats { get; set; } = 16;
+
+        /// <summary>Slice 4: keep only mutual kNN edges (i→j and j→i). Safer components; can orphan unique passages.</summary>
+        [JsonPropertyName("useMutualKnn")]
+        public bool UseMutualKnn { get; set; } = true;
+
+        /// <summary>
+        /// Slice 4 optional: after mutual-kNN, bridge weakly disconnected components with cheapest edges
+        /// so unique passages are not left edgeless.
+        /// </summary>
+        [JsonPropertyName("enableSccBridges")]
+        public bool EnableSccBridges { get; set; } = true;
+
+        /// <summary>
+        /// Slice 6: weight for preference scores when re-ranking candidates (0 = off). Does not add edges.
+        /// </summary>
+        [JsonPropertyName("preferenceWeight")]
+        public double PreferenceWeight { get; set; } = 0;
+
+        /// <summary>
+        /// Slice 5: when region embeddings exist, only allow Classic hops whose region distance
+        /// is among the nearest GateRegionNeighborCount (0 = disable gating).
+        /// </summary>
+        [JsonPropertyName("essentiaRegionGate")]
+        public bool EssentiaRegionGate { get; set; } = true;
+
+        [JsonPropertyName("gateRegionNeighborCount")]
+        public int GateRegionNeighborCount { get; set; } = 8;
+
         public static JukeboxSettings CreateDefaults() => new JukeboxSettings();
 
         /// <summary>True when a settings change requires rebuilding the beat graph (not just re-arming).</summary>
@@ -90,6 +136,10 @@ namespace SpotifyWPF.Model.Prediction
                    before.EnableEndLoop != after.EnableEndLoop ||
                    before.MinimumJumpBeats != after.MinimumJumpBeats ||
                    before.ClassicMaxNeighbors != after.ClassicMaxNeighbors ||
+                   before.UseMutualKnn != after.UseMutualKnn ||
+                   before.EnableSccBridges != after.EnableSccBridges ||
+                   before.EssentiaRegionGate != after.EssentiaRegionGate ||
+                   before.GateRegionNeighborCount != after.GateRegionNeighborCount ||
                    !string.Equals(before.PhasePenaltyMode ?? "", after.PhasePenaltyMode ?? "",
                        StringComparison.OrdinalIgnoreCase) ||
                    !string.Equals(before.GraphMetricMode ?? "", after.GraphMetricMode ?? "",

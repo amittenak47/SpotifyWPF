@@ -25,8 +25,9 @@ namespace SpotifyWPF.Service.Prediction
     /// longer playback stays linear and resets after each jump. When end-loop is enabled, the last
     /// branchable beat always jumps backwards so playback never falls off the end of the song.
     ///
-    /// Because playback between jumps is linear, the whole walk is planned ahead: PlanNextJump
-    /// returns the single next seek to arm in the player, and is called again after it fires.
+    /// Slice 4: Softmax(−dist/τ − λ·visits) among filtered candidates, plus a post-hop dwell
+    /// (<see cref="JukeboxSettings.MinBeatsBetweenJumps"/>) so the walk stays stable before
+    /// another random hop. Slice 6 optionally re-ranks with preference weight w_pref.
     /// </summary>
     public class BeatNavigator
     {
@@ -39,6 +40,10 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly bool _randomBranches;
 
+        private readonly BranchPreferenceStore _preferences;
+
+        private readonly string _trackId;
+
         private double _currentBranchChance;
 
         /// <summary>
@@ -50,10 +55,18 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly HashSet<int> _recentDestinationSet = new HashSet<int>();
 
+        /// <summary>Visit counts per destination beat (Slice 4 novelty λ).</summary>
+        private readonly Dictionary<int, int> _visitCounts = new Dictionary<int, int>();
+
         private const int RecentVisitMemory = 32;
 
-        /// <summary>Beats within this radius of a recent destination count as the same pocket.</summary>
-        private const int VisitRegionRadiusBeats = 16;
+        /// <summary>Linear beats walked since the last hop (for MinBeatsBetweenJumps dwell).</summary>
+        private int _beatsSinceJump = int.MaxValue / 4;
+
+        /// <summary>Last fired hop — used for skip-after-jump preference negatives.</summary>
+        public int LastJumpFromBeat { get; private set; } = -1;
+
+        public int LastJumpToBeat { get; private set; } = -1;
 
         public BeatGraph Graph { get; }
 
@@ -63,10 +76,12 @@ namespace SpotifyWPF.Service.Prediction
         public bool IsIdleWithoutLocks => !_randomBranches && _lockedBranches.Count == 0;
 
         public BeatNavigator(BeatGraph graph, JukeboxSettings settings, LoopProfile profile = null,
-            int? randomSeed = null)
+            int? randomSeed = null, BranchPreferenceStore preferences = null)
         {
             Graph = graph ?? throw new ArgumentNullException(nameof(graph));
             _settings = settings ?? JukeboxSettings.CreateDefaults();
+            _trackId = graph.TrackId;
+            _preferences = preferences;
             _currentBranchChance = ClampProbability(_settings.BranchProbabilityMin);
             _random = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
 
@@ -98,6 +113,12 @@ namespace SpotifyWPF.Service.Prediction
             return Math.Max(min, Math.Min(max, value));
         }
 
+        private int VisitRadius => Math.Max(1, _settings.VisitRegionRadiusBeats > 0
+            ? _settings.VisitRegionRadiusBeats
+            : 16);
+
+        private int DwellBeats => Math.Max(0, _settings.MinBeatsBetweenJumps);
+
         /// <summary>True when the graph has at least one usable branch (or end-loop can still fire).</summary>
         public bool CanJump =>
             (_settings.EnableEndLoop && Graph.LastBranchPointIndex >= 0) ||
@@ -112,7 +133,6 @@ namespace SpotifyWPF.Service.Prediction
             if (beats.Count == 0)
                 return -1;
 
-            // Beats are sorted by start time; linear scan is fine at this size.
             for (var i = 0; i < beats.Count; i++)
             {
                 if (positionMs < beats[i].EndMs)
@@ -137,8 +157,6 @@ namespace SpotifyWPF.Service.Prediction
             var lastBranch = Graph.LastBranchPointIndex;
             var endLoopActive = _settings.EnableEndLoop && lastBranch >= 0;
 
-            // A prior hop can land AFTER the last escape beat; the old == guard never ran and the
-            // song finished with "end loop" still checked. Escape immediately from wherever we are.
             if (endLoopActive && start > lastBranch)
             {
                 var escaped = TryCreateEndLoopJump(start) ?? TryCreateEndLoopJump(lastBranch);
@@ -151,8 +169,6 @@ namespace SpotifyWPF.Service.Prediction
             {
                 var beat = beats[i];
 
-                // Point of no return: at or past the last escape beat, always jump back.
-                // Checked before locks so a locked forward hop cannot run the track out.
                 if (endLoopActive && i >= lastBranch)
                 {
                     var guard = TryCreateEndLoopJump(i) ?? TryCreateEndLoopJump(lastBranch);
@@ -161,18 +177,31 @@ namespace SpotifyWPF.Service.Prediction
                         return guard;
                 }
 
-                // Locked branches at this beat: each fires at its own probability.
                 var lockedJump = TryTakeLockedJump(i, beat.Neighbors);
 
                 if (lockedJump != null)
                     return lockedJump;
 
-                // Random off: only locks (+ end-loop guard above). Never fall back to full random.
                 if (!_randomBranches)
+                {
+                    _beatsSinceJump++;
                     continue;
+                }
 
                 if (beat.Neighbors.Count == 0)
+                {
+                    _beatsSinceJump++;
                     continue;
+                }
+
+                // Dwell: stay linear for MinBeatsBetweenJumps after a hop (stability window).
+                if (_beatsSinceJump < DwellBeats)
+                {
+                    _beatsSinceJump++;
+                    _currentBranchChance = ClampProbability(
+                        _currentBranchChance + _settings.BranchProbabilityRampPerBeat);
+                    continue;
+                }
 
                 if (_random.NextDouble() < _currentBranchChance)
                 {
@@ -181,27 +210,21 @@ namespace SpotifyWPF.Service.Prediction
                     if (edge != null)
                     {
                         _currentBranchChance = ClampProbability(_settings.BranchProbabilityMin);
-                        return MakeJump(i, edge);
+                        return MakeJump(i, edge, beat.Neighbors);
                     }
                 }
-                else
-                {
-                    _currentBranchChance = ClampProbability(
-                        _currentBranchChance + _settings.BranchProbabilityRampPerBeat);
-                }
+
+                _beatsSinceJump++;
+                _currentBranchChance = ClampProbability(
+                    _currentBranchChance + _settings.BranchProbabilityRampPerBeat);
             }
 
-            // Last resort: still somehow past the escape beat with no plan.
             if (endLoopActive)
                 return TryCreateEndLoopJump(Math.Min(start, lastBranch)) ?? TryCreateEndLoopJump(lastBranch);
 
             return null;
         }
 
-        /// <summary>
-        /// Force a backward jump for end-loop. Searches the from-beat, then the last branch point,
-        /// then earlier beats until a usable backward edge exists.
-        /// </summary>
         private JukeboxJump TryCreateEndLoopJump(int fromIndex)
         {
             if (Graph.Beats.Count == 0)
@@ -213,7 +236,7 @@ namespace SpotifyWPF.Service.Prediction
             {
                 var edge = ChooseEdge(source, candidates, exemptLongBranchFilter: true)
                            ?? candidates[_random.Next(candidates.Count)];
-                return MakeJump(source, edge);
+                return MakeJump(source, edge, candidates);
             }
 
             for (var i = fromIndex - 1; i >= 0; i--)
@@ -223,7 +246,7 @@ namespace SpotifyWPF.Service.Prediction
 
                 var edge = ChooseEdge(source, candidates, exemptLongBranchFilter: true)
                            ?? candidates[_random.Next(candidates.Count)];
-                return MakeJump(source, edge);
+                return MakeJump(source, edge, candidates);
             }
 
             return null;
@@ -238,10 +261,6 @@ namespace SpotifyWPF.Service.Prediction
             return candidates.Count > 0;
         }
 
-        /// <summary>
-        /// Among locked edges leaving this beat, pick one by probability weight. Each lock's
-        /// Probability is the chance it is eligible; among eligible locks, weighted pick.
-        /// </summary>
         private JukeboxJump TryTakeLockedJump(int fromIndex, IReadOnlyList<BeatEdge> neighbors)
         {
             if (neighbors == null || neighbors.Count == 0 || _lockedBranches.Count == 0)
@@ -254,7 +273,6 @@ namespace SpotifyWPF.Service.Prediction
                 if (!TryGetLockProbability(fromIndex, edge, out var probability) || probability <= 0)
                     continue;
 
-                // Bernoulli gate per lock; Probability 1.0 always includes it.
                 if (probability >= 1.0 || _random.NextDouble() < probability)
                     eligible.Add((edge, probability));
             }
@@ -263,7 +281,7 @@ namespace SpotifyWPF.Service.Prediction
                 return null;
 
             var chosen = WeightedPick(eligible);
-            return chosen == null ? null : MakeJump(fromIndex, chosen);
+            return chosen == null ? null : MakeJump(fromIndex, chosen, neighbors);
         }
 
         private BeatEdge WeightedPick(List<(BeatEdge Edge, double Weight)> items)
@@ -304,57 +322,94 @@ namespace SpotifyWPF.Service.Prediction
             var fresh = filtered.Where(e => !IsNearRecentDestination(e.DestinationIndex)).ToList();
 
             if (fresh.Count > 0)
-                return PickAwayFromRecent(fresh);
+                return SoftmaxPick(fromBeatIndex, fresh);
 
-            // Entire candidate set lands in a recent pocket (classic chorus A↔B).
-            // Refuse the jump so PlanNextJump keeps walking linearly out of the attractor.
-            // End-loop / last-branch guard must still fire (exemptLongBranchFilter).
             if (exemptLongBranchFilter)
-                return PickAwayFromRecent(filtered);
+                return SoftmaxPick(fromBeatIndex, filtered);
 
             return null;
         }
 
         private bool IsNearRecentDestination(int destinationIndex)
         {
+            var radius = VisitRadius;
+
             foreach (var recent in _recentDestinations)
             {
-                if (Math.Abs(destinationIndex - recent) <= VisitRegionRadiusBeats)
+                if (Math.Abs(destinationIndex - recent) <= radius)
                     return true;
             }
 
             return false;
         }
 
-        /// <summary>Weighted pick favoring destinations farthest from recent visit pockets.</summary>
-        private BeatEdge PickAwayFromRecent(List<BeatEdge> edges)
+        /// <summary>
+        /// Softmax(−dist/τ − λ·visits + w_pref·pref). Lower temperature → greedier nearest pick.
+        /// </summary>
+        private BeatEdge SoftmaxPick(int fromBeatIndex, List<BeatEdge> edges)
         {
             if (edges.Count == 1)
                 return edges[0];
 
-            if (_recentDestinations.Count == 0)
-                return edges[_random.Next(edges.Count)];
+            var tau = Math.Max(0.05, _settings.SoftmaxTemperature > 0 ? _settings.SoftmaxTemperature : 1.0);
+            var lambda = Math.Max(0, _settings.VisitNoveltyLambda);
+            var wPref = _settings.PreferenceWeight;
+            var scores = new double[edges.Count];
+            var maxScore = double.NegativeInfinity;
 
-            var weighted = new List<(BeatEdge Edge, double Weight)>(edges.Count);
-
-            foreach (var edge in edges)
+            for (var i = 0; i < edges.Count; i++)
             {
-                var minDist = int.MaxValue;
+                var edge = edges[i];
+                var visits = GetVisitCountNear(edge.DestinationIndex);
+                var pref = wPref != 0 && _preferences != null
+                    ? _preferences.Score(_trackId, fromBeatIndex, edge.DestinationIndex)
+                    : 0;
+                var score = (-edge.Distance / tau) - (lambda * visits) + (wPref * pref);
+                scores[i] = score;
 
-                foreach (var recent in _recentDestinations)
-                {
-                    var dist = Math.Abs(edge.DestinationIndex - recent);
-
-                    if (dist < minDist)
-                        minDist = dist;
-                }
-
-                // Squared distance biases hard away from the pocket; +1 keeps weight > 0.
-                var weight = (minDist + 1.0) * (minDist + 1.0);
-                weighted.Add((edge, weight));
+                if (score > maxScore)
+                    maxScore = score;
             }
 
-            return WeightedPick(weighted);
+            // Stable softmax
+            double sum = 0;
+            var weights = new double[edges.Count];
+
+            for (var i = 0; i < edges.Count; i++)
+            {
+                weights[i] = Math.Exp(scores[i] - maxScore);
+                sum += weights[i];
+            }
+
+            if (sum <= 0 || double.IsNaN(sum) || double.IsInfinity(sum))
+                return edges[_random.Next(edges.Count)];
+
+            var roll = _random.NextDouble() * sum;
+            double cumulative = 0;
+
+            for (var i = 0; i < edges.Count; i++)
+            {
+                cumulative += weights[i];
+
+                if (roll <= cumulative)
+                    return edges[i];
+            }
+
+            return edges[edges.Count - 1];
+        }
+
+        private int GetVisitCountNear(int destinationIndex)
+        {
+            var radius = VisitRadius;
+            var total = 0;
+
+            foreach (var kv in _visitCounts)
+            {
+                if (Math.Abs(kv.Key - destinationIndex) <= radius)
+                    total += kv.Value;
+            }
+
+            return total;
         }
 
         private List<BeatEdge> FilterEdges(int fromBeatIndex, IReadOnlyList<BeatEdge> edges,
@@ -371,7 +426,6 @@ namespace SpotifyWPF.Service.Prediction
                 query = query.Where(e => Math.Abs(e.DestinationIndex - fromBeatIndex) >= minBeats);
             }
 
-            // Don't arm hops that land past the last escape beat — that used to finish the song.
             if (_settings.EnableEndLoop && Graph.LastBranchPointIndex >= 0 && !exemptLongBranchFilter)
             {
                 var last = Graph.LastBranchPointIndex;
@@ -381,9 +435,21 @@ namespace SpotifyWPF.Service.Prediction
             return query.ToList();
         }
 
-        private JukeboxJump MakeJump(int fromIndex, BeatEdge edge)
+        private JukeboxJump MakeJump(int fromIndex, BeatEdge edge, IReadOnlyList<BeatEdge> candidates)
         {
             RememberDestination(edge.DestinationIndex);
+            LastJumpFromBeat = fromIndex;
+            LastJumpToBeat = edge.DestinationIndex;
+            _beatsSinceJump = 0;
+
+            if (_preferences != null && candidates != null)
+            {
+                _preferences.RecordChoice(
+                    _trackId,
+                    fromIndex,
+                    edge.DestinationIndex,
+                    candidates.Select(c => c.DestinationIndex));
+            }
 
             var target = Graph.Beats[edge.DestinationIndex];
             var triggerMs = Graph.Beats[fromIndex].EndMs - _settings.SeekLeadMs;
@@ -401,8 +467,16 @@ namespace SpotifyWPF.Service.Prediction
             };
         }
 
-        private void RememberDestination(int destinationIndex)
+        private void RememberDestination(int destinationIndex, bool countVisit = true)
         {
+            if (countVisit)
+            {
+                if (!_visitCounts.ContainsKey(destinationIndex))
+                    _visitCounts[destinationIndex] = 0;
+
+                _visitCounts[destinationIndex]++;
+            }
+
             if (!_recentDestinationSet.Add(destinationIndex))
                 return;
 
@@ -422,9 +496,42 @@ namespace SpotifyWPF.Service.Prediction
                 return;
 
             foreach (var dest in destinations)
-                RememberDestination(dest);
+                RememberDestination(dest, countVisit: false);
+        }
+
+        public void ImportVisitCounts(IReadOnlyDictionary<int, int> counts)
+        {
+            if (counts == null)
+                return;
+
+            foreach (var kv in counts)
+            {
+                if (kv.Value <= 0)
+                    continue;
+
+                _visitCounts[kv.Key] = _visitCounts.TryGetValue(kv.Key, out var cur)
+                    ? cur + kv.Value
+                    : kv.Value;
+            }
         }
 
         public IReadOnlyList<int> ExportVisitMemory() => _recentDestinations.ToArray();
+
+        public IReadOnlyDictionary<int, int> ExportVisitCounts() =>
+            new Dictionary<int, int>(_visitCounts);
+
+        public int ExportBeatsSinceJump() => _beatsSinceJump;
+
+        public void ImportBeatsSinceJump(int value) =>
+            _beatsSinceJump = Math.Max(0, value);
+
+        /// <summary>Record a scrub/skip shortly after the last hop as a preference negative.</summary>
+        public void NotifySkipAfterLastJump()
+        {
+            if (_preferences == null || LastJumpFromBeat < 0 || LastJumpToBeat < 0)
+                return;
+
+            _preferences.RecordSkipAfterJump(_trackId, LastJumpFromBeat, LastJumpToBeat);
+        }
     }
 }
