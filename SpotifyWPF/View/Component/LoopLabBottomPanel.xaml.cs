@@ -107,6 +107,15 @@ namespace SpotifyWPF.View.Component
                 SlideOpen();
         }
 
+        private void SessionTracks_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (!(DataContext is ViewModel.Page.PredictionPageViewModel vm))
+                return;
+
+            if (vm.PlaySessionTrackCommand?.CanExecute(null) == true)
+                vm.PlaySessionTrackCommand.Execute(null);
+        }
+
         private void SlideOpen()
         {
             _isOpen = true;

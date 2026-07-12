@@ -424,7 +424,12 @@ namespace SpotifyWPF.ViewModel.Page
             set
             {
                 if (Set(ref _selectedBranchPreset, value))
+                {
+                    if (value != null && !string.IsNullOrWhiteSpace(value.Name))
+                        BranchPresetName = value.Name;
+
                     LoadBranchPresetCommand.RaiseCanExecuteChanged();
+                }
             }
         }
 
@@ -806,23 +811,24 @@ namespace SpotifyWPF.ViewModel.Page
                 if (_transportRouter.Source == desired)
                     return;
 
-                _transportRouter.Source = desired;
-                _jukeboxSettingsModel.PlaybackSource = desired == JukeboxPlaybackSource.Local ? "Local" : "Spotify";
-                PersistJukeboxSettings();
-                RaisePropertyChanged();
-                RaisePropertyChanged(nameof(PlaybackSourceLabel));
-                DeviceText = desired == JukeboxPlaybackSource.Local
-                    ? "Device: Local WAV"
-                    : (_playbackHost.IsReady
-                        ? $"Device: SpotifyWPF Loop Lab ({_playbackHost.DeviceId})"
-                        : "Device: —");
-                TogglePlayPauseCommand.RaiseCanExecuteChanged();
-                PlaySessionTrackCommand.RaiseCanExecuteChanged();
-                RingScrubToCommand.RaiseCanExecuteChanged();
+                _ = SwitchPlaybackSourceAsync(desired);
             }
         }
 
         public string PlaybackSourceLabel => UseLocalPlayback ? "Local WAV" : "Spotify";
+
+        private string _branchPresetName = string.Empty;
+
+        /// <summary>Editable name for the tune+branches ComboBox (type to name a save).</summary>
+        public string BranchPresetName
+        {
+            get => _branchPresetName;
+            set
+            {
+                if (Set(ref _branchPresetName, value ?? string.Empty))
+                    LoadBranchPresetCommand.RaiseCanExecuteChanged();
+            }
+        }
 
         /// <summary>Local source is only available when a complete capture WAV exists for the active track.</summary>
         public bool IsLocalPlaybackAvailable
@@ -834,6 +840,63 @@ namespace SpotifyWPF.ViewModel.Page
                               ?? _currentPlay?.TrackId;
                 return LocalWavPlaybackHost.CanPlayTrack(trackId, DurationMs);
             }
+        }
+
+        private async Task SwitchPlaybackSourceAsync(JukeboxPlaybackSource desired)
+        {
+            var trackId = SelectedSessionTrack?.TrackId
+                          ?? _currentPlay?.TrackId
+                          ?? _loopController.CurrentTrackId
+                          ?? ParseTrackId(TrackInput);
+
+            // Tear down both sides so the ring/pause wheel never keep a stale transport.
+            _transport.DisarmAction();
+            _transportRouter.Local.Stop();
+
+            if (_playbackHost.IsReady)
+            {
+                _playbackHost.DisarmAction();
+                _playbackHost.Pause();
+            }
+
+            _transportRouter.Source = desired;
+            _jukeboxSettingsModel.PlaybackSource = desired == JukeboxPlaybackSource.Local ? "Local" : "Spotify";
+            PersistJukeboxSettings();
+
+            RaisePropertyChanged(nameof(UseLocalPlayback));
+            RaisePropertyChanged(nameof(PlaybackSourceLabel));
+            DeviceText = desired == JukeboxPlaybackSource.Local
+                ? "Device: Local WAV"
+                : (_playbackHost.IsReady
+                    ? $"Device: SpotifyWPF Loop Lab ({_playbackHost.DeviceId})"
+                    : "Device: —");
+
+            // Clear stale "still playing" ring state until the new transport posts its own.
+            IsPaused = true;
+            PositionMs = 0;
+            RaisePropertyChanged(nameof(ShowPauseIcon));
+            RaisePropertyChanged(nameof(ScrubberPositionMs));
+            RaisePropertyChanged(nameof(PositionText));
+            TogglePlayPauseCommand.RaiseCanExecuteChanged();
+            PlaySessionTrackCommand.RaiseCanExecuteChanged();
+            RingScrubToCommand.RaiseCanExecuteChanged();
+            StopPlaybackCommand.RaiseCanExecuteChanged();
+
+            if (string.IsNullOrEmpty(trackId))
+            {
+                Status = desired == JukeboxPlaybackSource.Local
+                    ? "Local WAV selected — press Play."
+                    : "Spotify selected — press Play.";
+                return;
+            }
+
+            Log(desired == JukeboxPlaybackSource.Local
+                ? $"Switching to local WAV for {trackId}."
+                : $"Switching to Spotify stream for {trackId}.");
+
+            await PlayTrackAsync(trackId, desired == JukeboxPlaybackSource.Local
+                ? "source-switch-local"
+                : "source-switch-spotify");
         }
 
         private void ApplyPlaybackSourceFromSettings()
@@ -1713,20 +1776,37 @@ namespace SpotifyWPF.ViewModel.Page
 
         private bool CanLoadBranchPreset()
         {
-            if (SelectedBranchPreset == null)
+            if (ResolvePresetToLoad() == null)
                 return false;
 
             return SelectedSessionTrack != null ||
                    !string.IsNullOrEmpty(_loopController.CurrentTrackId);
         }
 
+        private BranchLockPreset ResolvePresetToLoad()
+        {
+            if (SelectedBranchPreset != null)
+                return SelectedBranchPreset;
+
+            var typed = (BranchPresetName ?? string.Empty).Trim();
+
+            if (string.IsNullOrEmpty(typed))
+                return null;
+
+            return BranchPresets.FirstOrDefault(p =>
+                string.Equals(p.Name, typed, StringComparison.OrdinalIgnoreCase));
+        }
+
         private void LoadSelectedBranchPreset()
         {
-            var preset = SelectedBranchPreset;
+            var preset = ResolvePresetToLoad();
             var trackId = SelectedSessionTrack?.TrackId ?? _loopController.CurrentTrackId;
 
             if (preset == null || string.IsNullOrEmpty(trackId))
                 return;
+
+            SelectedBranchPreset = preset;
+            BranchPresetName = preset.Name;
 
             var track = SelectedSessionTrack ??
                         SessionTracks.FirstOrDefault(t => t.TrackId == trackId);
@@ -1815,25 +1895,48 @@ namespace SpotifyWPF.ViewModel.Page
             if (profile.LockPresets == null)
                 profile.LockPresets = new List<BranchLockPreset>();
 
-            var name = $"Setup {profile.LockPresets.Count + 1}";
-            var fingerprint = AnalysisCache.ComputeFingerprint(trackId);
-            var preset = new BranchLockPreset
-            {
-                Name = name,
-                RandomBranches = JukeboxRandomBranches,
-                AnalysisFingerprint = fingerprint,
-                SettingsSnapshot = CloneJukeboxSettings(_jukeboxSettingsModel),
-                LockedBranches = profile.LockedBranches?
-                    .Select(CloneBranchLock).ToList() ?? new List<BranchLock>()
-            };
+            var typedName = (BranchPresetName ?? string.Empty).Trim();
+            var name = string.IsNullOrWhiteSpace(typedName)
+                ? $"Setup {profile.LockPresets.Count + 1}"
+                : typedName;
 
-            profile.LockPresets.Add(preset);
+            var fingerprint = AnalysisCache.ComputeFingerprint(trackId);
+            var existing = profile.LockPresets.FirstOrDefault(p =>
+                string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+
+            BranchLockPreset preset;
+
+            if (existing != null)
+            {
+                existing.RandomBranches = JukeboxRandomBranches;
+                existing.AnalysisFingerprint = fingerprint;
+                existing.SettingsSnapshot = CloneJukeboxSettings(_jukeboxSettingsModel);
+                existing.LockedBranches = profile.LockedBranches?
+                    .Select(CloneBranchLock).ToList() ?? new List<BranchLock>();
+                preset = existing;
+            }
+            else
+            {
+                preset = new BranchLockPreset
+                {
+                    Name = name,
+                    RandomBranches = JukeboxRandomBranches,
+                    AnalysisFingerprint = fingerprint,
+                    SettingsSnapshot = CloneJukeboxSettings(_jukeboxSettingsModel),
+                    LockedBranches = profile.LockedBranches?
+                        .Select(CloneBranchLock).ToList() ?? new List<BranchLock>()
+                };
+                profile.LockPresets.Add(preset);
+            }
+
             _loopRegionStore.Save(profile);
             RefreshBranchPresetsForSelection();
-            SelectedBranchPreset = preset;
+            SelectedBranchPreset = BranchPresets.FirstOrDefault(p =>
+                string.Equals(p.Name, preset.Name, StringComparison.OrdinalIgnoreCase)) ?? preset;
+            BranchPresetName = preset.Name;
             SaveBranchPresetCommand.RaiseCanExecuteChanged();
             LoadBranchPresetCommand.RaiseCanExecuteChanged();
-            Log($"Saved tune + branches \"{name}\" ({preset.LockedBranches.Count} locks" +
+            Log($"Saved tune + branches \"{preset.Name}\" ({preset.LockedBranches.Count} locks" +
                 (fingerprint != null ? ", fingerprint ok" : ", no analysis yet") + ").");
         }
 

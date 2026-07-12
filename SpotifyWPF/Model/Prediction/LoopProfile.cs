@@ -55,6 +55,8 @@ namespace SpotifyWPF.Model.Prediction
         /// <summary>SHA-256 hex of the analysis JSON this preset was authored against.</summary>
         [JsonPropertyName("analysisFingerprint")]
         public string AnalysisFingerprint { get; set; }
+
+        public override string ToString() => string.IsNullOrWhiteSpace(Name) ? "Untitled setup" : Name;
     }
 
     /// <summary>Beat-to-beat target passed from the ring canvas when locking a specific branch chord.</summary>

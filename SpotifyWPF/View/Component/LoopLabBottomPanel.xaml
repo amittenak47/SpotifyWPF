@@ -136,15 +136,19 @@
                                                 Command="{Binding ImportLoopDataCommand}"/>
                                         <ComboBox ItemsSource="{Binding BranchPresets}"
                                                   SelectedItem="{Binding SelectedBranchPreset}"
+                                                  Text="{Binding BranchPresetName, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsEditable="True"
+                                                  StaysOpenOnEdit="True"
                                                   DisplayMemberPath="Name"
-                                                  MinWidth="120"
+                                                  MinWidth="140"
                                                   Margin="16,0,0,0"
-                                                  VerticalAlignment="Center"/>
+                                                  VerticalAlignment="Center"
+                                                  ToolTip="Pick a saved setup or type a name, then Save"/>
                                         <Button Content="Load" MinWidth="56" Margin="4,0,0,0"
                                                 Command="{Binding LoadBranchPresetCommand}"/>
                                         <Button Content="Save tune+branches" MinWidth="120" Margin="4,0,0,0"
                                                 Command="{Binding SaveBranchPresetCommand}"
-                                                ToolTip="Save current tune settings, locks, and analysis fingerprint"/>
+                                                ToolTip="Save current tune settings, locks, and analysis fingerprint under the name in the box"/>
                                     </StackPanel>
 
                                     <ListBox Grid.Row="1"
@@ -154,7 +158,13 @@
                                              BorderThickness="0"
                                              VerticalAlignment="Stretch"
                                              MinHeight="72"
-                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                             MouseDoubleClick="SessionTracks_MouseDoubleClick"
+                                             ToolTip="Double-click a track to play">
+                                        <ListBox.InputBindings>
+                                            <MouseBinding MouseAction="LeftDoubleClick"
+                                                          Command="{Binding PlaySessionTrackCommand}"/>
+                                        </ListBox.InputBindings>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Grid Margin="2">
