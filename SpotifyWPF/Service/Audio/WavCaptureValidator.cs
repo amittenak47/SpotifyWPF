@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using NAudio.Wave;
@@ -185,6 +186,99 @@ namespace SpotifyWPF.Service.Audio
         {
             TryDeleteCapture(trackId);
             AnalysisCache.Delete(trackId);
+        }
+
+        /// <summary>
+        /// Startup / abort sweep: delete orphan WAVs (no complete capture metadata) and
+        /// unreadable / empty analysis JSON so a crashed playthrough does not linger.
+        /// Returns how many artifact groups were removed.
+        /// </summary>
+        public static int PurgeIncompleteArtifacts()
+        {
+            var removed = 0;
+
+            try
+            {
+                if (Directory.Exists(PredictionPaths.AudioCacheDirectory))
+                {
+                    foreach (var wav in Directory.GetFiles(PredictionPaths.AudioCacheDirectory, "*.wav"))
+                    {
+                        var trackId = Path.GetFileNameWithoutExtension(wav);
+
+                        if (string.IsNullOrWhiteSpace(trackId))
+                            continue;
+
+                        if (HasCompleteCapture(trackId))
+                            continue;
+
+                        TryDeleteCapture(trackId);
+                        removed++;
+                    }
+
+                    // Orphan metadata without a usable WAV.
+                    foreach (var meta in Directory.GetFiles(PredictionPaths.AudioCacheDirectory, "*.capture.json"))
+                    {
+                        var name = Path.GetFileName(meta);
+                        var trackId = name.EndsWith(".capture.json", StringComparison.OrdinalIgnoreCase)
+                            ? name.Substring(0, name.Length - ".capture.json".Length)
+                            : Path.GetFileNameWithoutExtension(meta);
+
+                        if (string.IsNullOrWhiteSpace(trackId))
+                            continue;
+
+                        if (HasCompleteCapture(trackId))
+                            continue;
+
+                        TryDeleteCapture(trackId);
+                        removed++;
+                    }
+                }
+
+                if (Directory.Exists(PredictionPaths.AnalysisCacheDirectory))
+                {
+                    foreach (var json in Directory.GetFiles(PredictionPaths.AnalysisCacheDirectory, "*.json"))
+                    {
+                        var trackId = Path.GetFileNameWithoutExtension(json);
+
+                        if (string.IsNullOrWhiteSpace(trackId))
+                            continue;
+
+                        var analysis = AnalysisCache.Load(trackId);
+
+                        if (analysis?.Beats != null && analysis.Beats.Count > 0)
+                            continue;
+
+                        AnalysisCache.Delete(trackId);
+                        removed++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"PurgeIncompleteArtifacts failed: {ex.Message}");
+            }
+
+            return removed;
+        }
+
+        /// <summary>Track IDs that have a complete capture WAV on disk.</summary>
+        public static IEnumerable<string> EnumerateCompleteCaptureTrackIds()
+        {
+            if (!Directory.Exists(PredictionPaths.AudioCacheDirectory))
+                yield break;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var wav in Directory.GetFiles(PredictionPaths.AudioCacheDirectory, "*.wav"))
+            {
+                var trackId = Path.GetFileNameWithoutExtension(wav);
+
+                if (string.IsNullOrWhiteSpace(trackId) || !seen.Add(trackId))
+                    continue;
+
+                if (HasCompleteCapture(trackId))
+                    yield return trackId;
+            }
         }
 
         /// <summary>

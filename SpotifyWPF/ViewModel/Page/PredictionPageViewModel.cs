@@ -127,7 +127,10 @@ namespace SpotifyWPF.ViewModel.Page
 
             try
             {
-                RefreshSessionTracks();
+                var purged = WavCaptureValidator.PurgeIncompleteArtifacts();
+                if (purged > 0)
+                    System.Console.WriteLine($"Purged {purged} incomplete capture/analysis artifact(s) on startup.");
+                ReloadSessionTracks(silent: true);
             }
             catch (System.Exception ex)
             {
@@ -158,11 +161,18 @@ namespace SpotifyWPF.ViewModel.Page
             PreviousSessionTrackCommand = new RelayCommand(() => NavigateSessionTrack(-1), () => CanNavigateSessionTrack(-1));
             NextSessionTrackCommand = new RelayCommand(() => NavigateSessionTrack(1), () => CanNavigateSessionTrack(1));
             PlaySessionTrackCommand = new RelayCommand(async () => await PlaySessionTrackAsync(), CanPlaySessionTrack);
+            AbortSessionWorkCommand = new RelayCommand(async () => await AbortSessionWorkAsync(), CanAbortSessionWork);
             RemoveSessionTrackCommand = new RelayCommand(RemoveSelectedSessionTrack,
                 () => SelectedSessionTrack != null);
-            RefreshSessionCommand = new RelayCommand(ReloadSessionTracks, () => !IsAnalyzing);
+            RefreshSessionCommand = new RelayCommand(() => ReloadSessionTracks(), () => !IsAnalyzing);
             DeleteSessionCacheCommand = new RelayCommand(DeleteSelectedSessionCache, CanDeleteSessionCache);
+            DeleteSessionCapturesCommand = new RelayCommand(DeleteSelectedSessionCaptures, CanDeleteSessionCaptures);
+            DeleteSessionAnalysisCommand = new RelayCommand(DeleteSelectedSessionAnalysis, CanDeleteSessionAnalysis);
+            DeleteSessionTuneCommand = new RelayCommand(DeleteSelectedSessionTune, () => SelectedSessionTrack != null);
             ClearSessionCommand = new RelayCommand(ClearSession, () => SessionTracks.Count > 0);
+            ExportSessionAudioCommand = new RelayCommand(ExportSessionAudio, CanExportSessionAudio);
+            ExportSessionAnalysisCommand = new RelayCommand(ExportLoopData);
+            ExportSessionBothCommand = new RelayCommand(ExportSessionBoth, () => SessionTracks.Count > 0);
             RefreshPredictionsCommand = new RelayCommand(async () => await RefreshPredictionsAsync());
             PlayPredictionCommand = new RelayCommand<ScoredTrack>(
                 async track => await PlayPredictionAsync(track));
@@ -298,6 +308,7 @@ namespace SpotifyWPF.ViewModel.Page
                 if (Set(ref _isPaused, value))
                 {
                     RaisePropertyChanged(nameof(ShowPauseIcon));
+                    RaisePropertyChanged(nameof(SessionPlayButtonText));
                     _visualEnergy.SetTransport(PositionMs, value);
                 }
             }
@@ -401,13 +412,20 @@ namespace SpotifyWPF.ViewModel.Page
                     RefreshBranchPresetsForSelection();
                     AnalyzeSessionTrackCommand.RaiseCanExecuteChanged();
                     PlaySessionTrackCommand.RaiseCanExecuteChanged();
+                    AbortSessionWorkCommand?.RaiseCanExecuteChanged();
                     RemoveSessionTrackCommand.RaiseCanExecuteChanged();
                     PreviousSessionTrackCommand.RaiseCanExecuteChanged();
                     NextSessionTrackCommand.RaiseCanExecuteChanged();
                     LoadBranchPresetCommand.RaiseCanExecuteChanged();
                     SaveBranchPresetCommand.RaiseCanExecuteChanged();
                     DeleteSessionCacheCommand?.RaiseCanExecuteChanged();
+                    DeleteSessionCapturesCommand?.RaiseCanExecuteChanged();
+                    DeleteSessionAnalysisCommand?.RaiseCanExecuteChanged();
+                    DeleteSessionTuneCommand?.RaiseCanExecuteChanged();
+                    ExportSessionAudioCommand?.RaiseCanExecuteChanged();
+                    ExportSessionBothCommand?.RaiseCanExecuteChanged();
                     RefreshSessionCommand?.RaiseCanExecuteChanged();
+                    RaisePropertyChanged(nameof(SessionPlayButtonText));
                     RefreshLocalPlaybackAvailability();
                 }
             }
@@ -510,6 +528,7 @@ namespace SpotifyWPF.ViewModel.Page
                     AnalyzeInputCommand.RaiseCanExecuteChanged();
                     PlayFromInputCommand.RaiseCanExecuteChanged();
                     AnalyzeSessionTrackCommand.RaiseCanExecuteChanged();
+                    AbortSessionWorkCommand?.RaiseCanExecuteChanged();
                     NotifyTransportStateChanged();
                     RaisePropertyChanged(nameof(IsIndeterminateAnalysisProgress));
                     RaisePropertyChanged(nameof(ShowAnalysisProgress));
@@ -1311,13 +1330,37 @@ namespace SpotifyWPF.ViewModel.Page
 
         public RelayCommand PlaySessionTrackCommand { get; }
 
+        public RelayCommand AbortSessionWorkCommand { get; }
+
         public RelayCommand RefreshSessionCommand { get; }
 
         public RelayCommand DeleteSessionCacheCommand { get; }
 
+        public RelayCommand DeleteSessionCapturesCommand { get; }
+
+        public RelayCommand DeleteSessionAnalysisCommand { get; }
+
+        public RelayCommand DeleteSessionTuneCommand { get; }
+
         public RelayCommand RemoveSessionTrackCommand { get; }
 
         public RelayCommand ClearSessionCommand { get; }
+
+        public RelayCommand ExportSessionAudioCommand { get; }
+
+        public RelayCommand ExportSessionAnalysisCommand { get; }
+
+        public RelayCommand ExportSessionBothCommand { get; }
+
+        public string SessionPlayButtonText =>
+            SelectedSessionTrack != null &&
+            string.Equals(SelectedSessionTrack.TrackId, ActivePlaybackTrackId, StringComparison.Ordinal) &&
+            !IsPaused
+                ? "Pause"
+                : "Play";
+
+        private string ActivePlaybackTrackId =>
+            _loopController.CurrentTrackId ?? _currentPlay?.TrackId;
 
         public RelayCommand RefreshPredictionsCommand { get; }
 
@@ -1380,14 +1423,39 @@ namespace SpotifyWPF.ViewModel.Page
 
         private bool CanDeleteSessionCache()
         {
+            return CanDeleteSessionCaptures() || CanDeleteSessionAnalysis();
+        }
+
+        private bool CanDeleteSessionCaptures()
+        {
             if (SelectedSessionTrack == null || IsAnalyzing)
                 return false;
 
             var trackId = SelectedSessionTrack.TrackId;
-
-            return AnalysisCache.Exists(trackId) ||
-                   WavCaptureValidator.HasCompleteCapture(trackId) ||
+            return WavCaptureValidator.HasCompleteCapture(trackId) ||
                    File.Exists(PredictionPaths.ResolveAudioCachePath(trackId));
+        }
+
+        private bool CanDeleteSessionAnalysis()
+        {
+            if (SelectedSessionTrack == null || IsAnalyzing)
+                return false;
+
+            return AnalysisCache.Exists(SelectedSessionTrack.TrackId);
+        }
+
+        private bool CanExportSessionAudio()
+        {
+            if (SelectedSessionTrack == null)
+                return false;
+
+            return WavCaptureValidator.HasCompleteCapture(SelectedSessionTrack.TrackId) ||
+                   File.Exists(PredictionPaths.ResolveAudioCachePath(SelectedSessionTrack.TrackId));
+        }
+
+        private bool CanAbortSessionWork()
+        {
+            return IsAnalyzing || _captureInProgress || CanStopPlayback();
         }
 
         private bool CanUsePlayer() => CanPlayTransport();
@@ -1397,8 +1465,16 @@ namespace SpotifyWPF.ViewModel.Page
             TogglePlayPauseCommand.RaiseCanExecuteChanged();
             StopPlaybackCommand.RaiseCanExecuteChanged();
             PlaySessionTrackCommand.RaiseCanExecuteChanged();
+            AbortSessionWorkCommand?.RaiseCanExecuteChanged();
             RefreshSessionCommand?.RaiseCanExecuteChanged();
             DeleteSessionCacheCommand?.RaiseCanExecuteChanged();
+            DeleteSessionCapturesCommand?.RaiseCanExecuteChanged();
+            DeleteSessionAnalysisCommand?.RaiseCanExecuteChanged();
+            DeleteSessionTuneCommand?.RaiseCanExecuteChanged();
+            ExportSessionAudioCommand?.RaiseCanExecuteChanged();
+            ExportSessionBothCommand?.RaiseCanExecuteChanged();
+            ClearSessionCommand?.RaiseCanExecuteChanged();
+            RaisePropertyChanged(nameof(SessionPlayButtonText));
             RingScrubToCommand.RaiseCanExecuteChanged();
         }
 
@@ -1733,6 +1809,7 @@ namespace SpotifyWPF.ViewModel.Page
                 PositionMs = state.PositionMs;
                 IsPaused = state.Paused;
                 RaisePropertyChanged(nameof(ShowPauseIcon));
+                RaisePropertyChanged(nameof(SessionPlayButtonText));
                 RaisePropertyChanged(nameof(HasScrubbableTrack));
                 if (!_isUserScrubbing)
                     RaisePropertyChanged(nameof(ScrubberPositionMs));
@@ -2520,7 +2597,10 @@ namespace SpotifyWPF.ViewModel.Page
             SessionTracks.Clear();
 
             foreach (var track in _sessionStore.Tracks)
+            {
+                SyncSessionTrackCacheFlags(track);
                 SessionTracks.Add(track);
+            }
 
             if (!string.IsNullOrEmpty(selectedId))
             {
@@ -2545,6 +2625,30 @@ namespace SpotifyWPF.ViewModel.Page
             NextSessionTrackCommand?.RaiseCanExecuteChanged();
             SaveBranchPresetCommand?.RaiseCanExecuteChanged();
             LoadBranchPresetCommand?.RaiseCanExecuteChanged();
+            DeleteSessionCapturesCommand?.RaiseCanExecuteChanged();
+            DeleteSessionAnalysisCommand?.RaiseCanExecuteChanged();
+            DeleteSessionTuneCommand?.RaiseCanExecuteChanged();
+            ExportSessionAudioCommand?.RaiseCanExecuteChanged();
+            ExportSessionBothCommand?.RaiseCanExecuteChanged();
+            AbortSessionWorkCommand?.RaiseCanExecuteChanged();
+            RaisePropertyChanged(nameof(SessionPlayButtonText));
+        }
+
+        private static void SyncSessionTrackCacheFlags(LoopLabSessionTrack track)
+        {
+            if (track == null || string.IsNullOrEmpty(track.TrackId))
+                return;
+
+            track.HasCapture = WavCaptureValidator.HasCompleteCapture(track.TrackId);
+            track.HasAnalysis = AnalysisCache.Exists(track.TrackId);
+
+            if (track.AnalysisStatus != SessionAnalysisStatus.Analyzing &&
+                track.AnalysisStatus != SessionAnalysisStatus.Failed)
+            {
+                track.AnalysisStatus = track.HasAnalysis
+                    ? SessionAnalysisStatus.Ready
+                    : SessionAnalysisStatus.Pending;
+            }
         }
 
         private bool CanAnalyzeInput()
@@ -2675,47 +2779,160 @@ namespace SpotifyWPF.ViewModel.Page
             if (track == null || !CanPlayTransport())
                 return;
 
+            if (string.Equals(track.TrackId, ActivePlaybackTrackId, StringComparison.Ordinal) && !IsPaused)
+            {
+                _transport.Pause();
+                return;
+            }
+
+            if (string.Equals(track.TrackId, ActivePlaybackTrackId, StringComparison.Ordinal) && IsPaused)
+            {
+                _transport.Resume();
+                return;
+            }
+
             TrackInput = track.TrackId;
             await PlayTrackAsync(track.TrackId, "session-track");
         }
 
-        private void ReloadSessionTracks()
+        private async Task AbortSessionWorkAsync()
         {
+            if (!CanAbortSessionWork())
+                return;
+
+            var captureTrackId = _captureInProgress ? _analyzingTrackId : null;
+            var wasAnalyzing = IsAnalyzing;
+
+            if (wasAnalyzing)
+                _analysisCancellation?.Cancel();
+
+            if (CanStopPlayback() || wasAnalyzing || _captureInProgress)
+                await StopPlaybackInternalAsync().ConfigureAwait(true);
+
+            // Discard incomplete capture/analysis left by cancel or stop-during-capture.
+            var purged = WavCaptureValidator.PurgeIncompleteArtifacts();
+
+            if (!string.IsNullOrEmpty(captureTrackId) &&
+                !WavCaptureValidator.HasCompleteCapture(captureTrackId))
+            {
+                WavCaptureValidator.TryDeleteCapture(captureTrackId);
+            }
+
+            if (!string.IsNullOrEmpty(captureTrackId) || !string.IsNullOrEmpty(_analyzingTrackId))
+            {
+                var id = captureTrackId ?? _analyzingTrackId;
+                var analysis = AnalysisCache.Load(id);
+
+                if (analysis?.Beats == null || analysis.Beats.Count == 0)
+                    AnalysisCache.Delete(id);
+
+                UpdateSessionTrackAnalysisStatus(id, SessionAnalysisStatus.Pending);
+            }
+
+            if (wasAnalyzing || !string.IsNullOrEmpty(captureTrackId))
+            {
+                Log(purged > 0
+                    ? $"Aborted — discarded incomplete capture/analysis ({purged} artifact(s))."
+                    : "Aborted — incomplete capture/analysis discarded.");
+                Status = "Aborted.";
+            }
+            else
+            {
+                Status = "Stopped.";
+            }
+
+            AbortSessionWorkCommand?.RaiseCanExecuteChanged();
+            NotifyTransportStateChanged();
+        }
+
+        private void ReloadSessionTracks(bool silent = false)
+        {
+            WavCaptureValidator.PurgeIncompleteArtifacts();
             _sessionStore.Load();
 
-            foreach (var track in _sessionStore.Tracks)
+            var known = new HashSet<string>(_sessionStore.GetTrackIds(), StringComparer.Ordinal);
+
+            foreach (var trackId in WavCaptureValidator.EnumerateCompleteCaptureTrackIds()
+                         .Concat(AnalysisCache.EnumerateCachedTrackIds()))
             {
+                if (string.IsNullOrWhiteSpace(trackId) || !known.Add(trackId))
+                    continue;
+
                 _sessionStore.AddOrUpdate(new LoopLabSessionTrack
                 {
-                    TrackId = track.TrackId,
-                    Title = track.Title,
-                    Artist = track.Artist,
-                    AnalysisStatus = AnalysisCache.Exists(track.TrackId)
+                    TrackId = trackId,
+                    Title = trackId,
+                    Artist = "",
+                    AnalysisStatus = AnalysisCache.Exists(trackId)
                         ? SessionAnalysisStatus.Ready
                         : SessionAnalysisStatus.Pending
                 });
             }
 
+            foreach (var track in _sessionStore.Tracks.ToList())
+            {
+                SyncSessionTrackCacheFlags(track);
+                _sessionStore.AddOrUpdate(track);
+            }
+
             RefreshSessionTracks();
             DeleteSessionCacheCommand?.RaiseCanExecuteChanged();
-            Log($"Session refreshed ({SessionTracks.Count} tracks).");
+
+            if (!silent)
+                Log($"Refreshed from cache ({SessionTracks.Count} tracks).");
         }
 
         private void DeleteSelectedSessionCache()
+        {
+            DeleteSelectedSessionCaptures();
+            DeleteSelectedSessionAnalysis();
+        }
+
+        private void DeleteSelectedSessionCaptures()
         {
             var track = SelectedSessionTrack;
 
             if (track == null || IsAnalyzing)
                 return;
 
-            WavCaptureValidator.DeleteTrackArtifacts(track.TrackId);
+            WavCaptureValidator.TryDeleteCapture(track.TrackId);
+            SyncSessionTrackCacheFlags(track);
+            _sessionStore.AddOrUpdate(track);
+            RefreshSessionTracks();
+            RefreshLocalPlaybackAvailability();
+            Log($"Deleted saved captures for {track.DisplayName}.");
+        }
+
+        private void DeleteSelectedSessionAnalysis()
+        {
+            var track = SelectedSessionTrack;
+
+            if (track == null || IsAnalyzing)
+                return;
+
+            AnalysisCache.Delete(track.TrackId);
             UpdateSessionTrackAnalysisStatus(track.TrackId, SessionAnalysisStatus.Pending);
 
             if (track.TrackId == _loopController.CurrentTrackId)
                 RefreshRingVisualization(track.TrackId);
 
-            DeleteSessionCacheCommand.RaiseCanExecuteChanged();
-            Log($"Deleted cached audio and analysis for {track.DisplayName}.");
+            Log($"Deleted saved analysis for {track.DisplayName}.");
+        }
+
+        private void DeleteSelectedSessionTune()
+        {
+            var track = SelectedSessionTrack;
+
+            if (track == null)
+                return;
+
+            _loopRegionStore.ClearTuneAndBranches(track.TrackId);
+            RefreshBranchPresetsForSelection();
+
+            if (track.TrackId == _loopController.CurrentTrackId)
+                RefreshLoopSettingsFromStore(track.TrackId);
+
+            Log($"Deleted tune+branches for {track.DisplayName}.");
         }
 
         private void RemoveSelectedSessionTrack()
@@ -2728,7 +2945,7 @@ namespace SpotifyWPF.ViewModel.Page
             _sessionStore.Remove(track.TrackId);
             SelectedSessionTrack = null;
             RefreshSessionTracks();
-            Log($"Removed {track.DisplayName} from session.");
+            Log($"Removed {track.DisplayName} from the list (cache kept).");
         }
 
         private void ClearSession()
@@ -2738,7 +2955,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             SelectedSessionTrack = null;
             RefreshSessionTracks();
-            Log("Cleared Loop Lab session tracks.");
+            Log("Removed all tracks from the list (cache kept). Use Refresh from cache to restore.");
         }
 
         private async Task AnalyzeTrackByIdAsync(string trackId, string displayName)
@@ -3020,12 +3237,26 @@ namespace SpotifyWPF.ViewModel.Page
             Status = "Python interpreter saved.";
         }
 
-        private void ExportLoopData()
+        private void ExportSessionAudio()
         {
+            var track = SelectedSessionTrack;
+
+            if (track == null)
+                return;
+
+            var source = PredictionPaths.ResolveAudioCachePath(track.TrackId);
+
+            if (string.IsNullOrEmpty(source) || !File.Exists(source))
+            {
+                Status = "No capture WAV to export.";
+                return;
+            }
+
             var dialog = new SaveFileDialog
             {
-                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
-                FileName = $"spotifywpf-loop-data-{DateTime.Now:yyyyMMdd-HHmmss}.json"
+                Filter = "WAV audio (*.wav)|*.wav|All files (*.*)|*.*",
+                FileName = $"{track.TrackId}.wav",
+                Title = "Export capture audio"
             };
 
             if (dialog.ShowDialog() != true)
@@ -3033,36 +3264,82 @@ namespace SpotifyWPF.ViewModel.Page
 
             try
             {
-                var sessionIds = new HashSet<string>(_sessionStore.GetTrackIds());
-                var export = new LoopDataExport
-                {
-                    LoopRegions = _loopRegionStore.GetAll().Values
-                        .Where(p => p != null && sessionIds.Contains(p.TrackId))
-                        .ToList()
-                };
+                File.Copy(source, dialog.FileName, overwrite: true);
+                Log($"Exported capture audio for {track.DisplayName}.");
+                Status = "Capture audio exported.";
+            }
+            catch (Exception ex)
+            {
+                Status = $"Export failed: {ex.Message}";
+                Log($"Export audio failed: {ex.Message}");
+            }
+        }
 
-                if (Directory.Exists(PredictionPaths.AnalysisCacheDirectory))
-                {
-                    foreach (var file in Directory.GetFiles(PredictionPaths.AnalysisCacheDirectory, "*.json"))
-                    {
-                        try
-                        {
-                            var analysis = JsonSerializer.Deserialize<TrackAnalysis>(File.ReadAllText(file));
+        private void ExportSessionBoth()
+        {
+            var dialog = new SaveFileDialog
+            {
+                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                FileName = $"spotifywpf-export-{DateTime.Now:yyyyMMdd-HHmmss}.json",
+                Title = "Export analysis JSON (WAVs copy beside it)"
+            };
 
-                            if (analysis != null && !string.IsNullOrEmpty(analysis.TrackId) &&
-                                sessionIds.Contains(analysis.TrackId))
-                                export.Analyses.Add(analysis);
-                        }
-                        catch (JsonException)
-                        {
-                            // Skip unreadable cache entries.
-                        }
-                    }
+            if (dialog.ShowDialog() != true)
+                return;
+
+            try
+            {
+                ExportLoopDataToPath(dialog.FileName);
+                var audioDir = Path.Combine(
+                    Path.GetDirectoryName(dialog.FileName) ?? ".",
+                    Path.GetFileNameWithoutExtension(dialog.FileName) + "-audio");
+                Directory.CreateDirectory(audioDir);
+
+                var copied = 0;
+
+                foreach (var trackId in _sessionStore.GetTrackIds())
+                {
+                    var source = PredictionPaths.ResolveAudioCachePath(trackId);
+
+                    if (string.IsNullOrEmpty(source) || !File.Exists(source))
+                        continue;
+
+                    File.Copy(source, Path.Combine(audioDir, trackId + ".wav"), overwrite: true);
+
+                    var meta = PredictionPaths.GetAudioCacheMetadataPath(trackId);
+
+                    if (File.Exists(meta))
+                        File.Copy(meta, Path.Combine(audioDir, trackId + ".capture.json"), overwrite: true);
+
+                    copied++;
                 }
 
-                File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(export));
-                Log($"Exported {export.LoopRegions.Count} loop profiles and {export.Analyses.Count} analyses for {sessionIds.Count} session tracks.");
-                Status = "Session loop data exported.";
+                Log($"Exported analysis + {copied} capture(s) to {audioDir}.");
+                Status = "Exported analysis and audio.";
+            }
+            catch (Exception ex)
+            {
+                Status = $"Export failed: {ex.Message}";
+                Log($"Export both failed: {ex.Message}");
+            }
+        }
+
+        private void ExportLoopData()
+        {
+            var dialog = new SaveFileDialog
+            {
+                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                FileName = $"spotifywpf-loop-data-{DateTime.Now:yyyyMMdd-HHmmss}.json",
+                Title = "Export analysis + tune/branches"
+            };
+
+            if (dialog.ShowDialog() != true)
+                return;
+
+            try
+            {
+                ExportLoopDataToPath(dialog.FileName);
+                Status = "Analysis exported.";
             }
             catch (Exception ex)
             {
@@ -3071,11 +3348,46 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
+        private void ExportLoopDataToPath(string path)
+        {
+            var sessionIds = new HashSet<string>(_sessionStore.GetTrackIds());
+            var export = new LoopDataExport
+            {
+                LoopRegions = _loopRegionStore.GetAll().Values
+                    .Where(p => p != null && sessionIds.Contains(p.TrackId))
+                    .ToList()
+            };
+
+            if (Directory.Exists(PredictionPaths.AnalysisCacheDirectory))
+            {
+                foreach (var file in Directory.GetFiles(PredictionPaths.AnalysisCacheDirectory, "*.json"))
+                {
+                    try
+                    {
+                        var analysis = JsonSerializer.Deserialize<TrackAnalysis>(File.ReadAllText(file));
+
+                        if (analysis != null && !string.IsNullOrEmpty(analysis.TrackId) &&
+                            sessionIds.Contains(analysis.TrackId))
+                            export.Analyses.Add(analysis);
+                    }
+                    catch (JsonException)
+                    {
+                        // Skip unreadable cache entries.
+                    }
+                }
+            }
+
+            File.WriteAllText(path, JsonSerializer.Serialize(export));
+            Log($"Exported {export.LoopRegions.Count} loop profiles and {export.Analyses.Count} analyses for {sessionIds.Count} session tracks.");
+        }
+
         private void ImportLoopData()
         {
             var dialog = new OpenFileDialog
             {
-                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*"
+                Filter = "Analysis or audio|*.json;*.wav|JSON analysis (*.json)|*.json|WAV capture (*.wav)|*.wav|All files (*.*)|*.*",
+                Title = "Import analysis JSON and/or capture WAV",
+                Multiselect = true
             };
 
             if (dialog.ShowDialog() != true)
@@ -3083,22 +3395,66 @@ namespace SpotifyWPF.ViewModel.Page
 
             try
             {
-                var import = JsonSerializer.Deserialize<LoopDataExport>(File.ReadAllText(dialog.FileName));
-
-                if (import == null)
-                {
-                    Status = "Import failed: file was empty.";
-                    return;
-                }
-
-                _loopRegionStore.ImportAll(import.LoopRegions);
-
                 var analysisCount = 0;
+                var audioCount = 0;
+                var profileCount = 0;
 
-                foreach (var analysis in import.Analyses ?? new List<TrackAnalysis>())
+                foreach (var file in dialog.FileNames)
                 {
-                    if (analysis != null && !string.IsNullOrEmpty(analysis.TrackId))
+                    var ext = Path.GetExtension(file);
+
+                    if (string.Equals(ext, ".wav", StringComparison.OrdinalIgnoreCase))
                     {
+                        var trackId = Path.GetFileNameWithoutExtension(file);
+
+                        if (string.IsNullOrWhiteSpace(trackId))
+                            continue;
+
+                        Directory.CreateDirectory(PredictionPaths.AudioCacheDirectory);
+                        var dest = PredictionPaths.GetAudioCachePath(trackId);
+                        File.Copy(file, dest, overwrite: true);
+                        audioCount++;
+                        _sessionStore.AddOrUpdate(new LoopLabSessionTrack
+                        {
+                            TrackId = trackId,
+                            Title = trackId,
+                            AnalysisStatus = AnalysisCache.Exists(trackId)
+                                ? SessionAnalysisStatus.Ready
+                                : SessionAnalysisStatus.Pending
+                        });
+                        continue;
+                    }
+
+                    if (!string.Equals(ext, ".json", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    // Sidecar capture metadata next to a WAV import, or LoopDataExport.
+                    if (file.EndsWith(".capture.json", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var trackId = Path.GetFileName(file);
+                        trackId = trackId.Substring(0, trackId.Length - ".capture.json".Length);
+                        Directory.CreateDirectory(PredictionPaths.AudioCacheDirectory);
+                        File.Copy(file, PredictionPaths.GetAudioCacheMetadataPath(trackId), overwrite: true);
+                        audioCount++;
+                        continue;
+                    }
+
+                    var import = JsonSerializer.Deserialize<LoopDataExport>(File.ReadAllText(file));
+
+                    if (import == null)
+                        continue;
+
+                    if (import.LoopRegions != null)
+                    {
+                        _loopRegionStore.ImportAll(import.LoopRegions);
+                        profileCount += import.LoopRegions.Count;
+                    }
+
+                    foreach (var analysis in import.Analyses ?? new List<TrackAnalysis>())
+                    {
+                        if (analysis == null || string.IsNullOrEmpty(analysis.TrackId))
+                            continue;
+
                         AnalysisCache.Save(analysis);
                         analysisCount++;
                         _sessionStore.AddOrUpdate(new LoopLabSessionTrack
@@ -3107,12 +3463,12 @@ namespace SpotifyWPF.ViewModel.Page
                             AnalysisStatus = SessionAnalysisStatus.Ready
                         });
                     }
-                }
 
-                foreach (var profile in import.LoopRegions ?? new List<LoopProfile>())
-                {
-                    if (profile != null && !string.IsNullOrEmpty(profile.TrackId))
+                    foreach (var profile in import.LoopRegions ?? new List<LoopProfile>())
                     {
+                        if (profile == null || string.IsNullOrEmpty(profile.TrackId))
+                            continue;
+
                         _sessionStore.AddOrUpdate(new LoopLabSessionTrack
                         {
                             TrackId = profile.TrackId,
@@ -3124,9 +3480,8 @@ namespace SpotifyWPF.ViewModel.Page
                 }
 
                 RefreshSessionTracks();
-                Log($"Imported {import.LoopRegions?.Count ?? 0} loop profiles and {analysisCount} analyses.");
-                Status = "Session loop data imported.";
-
+                Log($"Imported {profileCount} tune profile(s), {analysisCount} analysis file(s), {audioCount} audio file(s).");
+                Status = "Import complete.";
                 RefreshLoopSettingsFromStore(_loopController.CurrentTrackId);
             }
             catch (Exception ex)

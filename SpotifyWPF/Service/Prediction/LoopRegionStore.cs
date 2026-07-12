@@ -15,6 +15,9 @@ namespace SpotifyWPF.Service.Prediction
         IReadOnlyDictionary<string, LoopProfile> GetAll();
 
         void ImportAll(IEnumerable<LoopProfile> profiles);
+
+        /// <summary>Clears locks + saved tune presets for a track (leaves mode/enabled alone if profile exists).</summary>
+        void ClearTuneAndBranches(string trackId);
     }
 
     /// <summary>
@@ -76,6 +79,26 @@ namespace SpotifyWPF.Service.Prediction
                         _profiles[profile.TrackId] = profile;
                 }
 
+                Persist();
+            }
+        }
+
+        public void ClearTuneAndBranches(string trackId)
+        {
+            if (string.IsNullOrEmpty(trackId))
+                return;
+
+            lock (_lock)
+            {
+                EnsureLoaded();
+
+                if (!_profiles.TryGetValue(trackId, out var profile) || profile == null)
+                    return;
+
+                profile.LockedBranches = new List<BranchLock>();
+                profile.LockPresets = new List<BranchLockPreset>();
+                profile.RandomBranches = true;
+                _profiles[trackId] = profile;
                 Persist();
             }
         }

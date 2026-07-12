@@ -86,6 +86,26 @@ namespace SpotifyWPF.Service.Prediction
             }
         }
 
+        /// <summary>Track IDs that have a loadable analysis JSON with at least one beat.</summary>
+        public static System.Collections.Generic.IEnumerable<string> EnumerateCachedTrackIds()
+        {
+            if (!Directory.Exists(PredictionPaths.AnalysisCacheDirectory))
+                yield break;
+
+            foreach (var file in Directory.GetFiles(PredictionPaths.AnalysisCacheDirectory, "*.json"))
+            {
+                var trackId = Path.GetFileNameWithoutExtension(file);
+
+                if (string.IsNullOrWhiteSpace(trackId))
+                    continue;
+
+                var analysis = Load(trackId);
+
+                if (analysis?.Beats != null && analysis.Beats.Count > 0)
+                    yield return analysis.TrackId ?? trackId;
+            }
+        }
+
         /// <summary>
         /// SHA-256 hex of the analysis JSON file. Same file bytes ⇒ same fingerprint ⇒
         /// deterministic graph rebuild when paired with the same jukebox settings.

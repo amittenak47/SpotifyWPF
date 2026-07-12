@@ -107,48 +107,135 @@
                                         <RowDefinition Height="*"/>
                                     </Grid.RowDefinitions>
 
-                                    <StackPanel Grid.Row="0"
-                                                Style="{StaticResource ControlPanelToolbarStyle}">
-                                        <Button Content="Play" MinWidth="56"
-                                                Command="{Binding PlaySessionTrackCommand}"/>
-                                        <CheckBox Content="Local WAV"
-                                                  Margin="8,0,0,0"
-                                                  VerticalAlignment="Center"
-                                                  Foreground="{DynamicResource AppForegroundBrush}"
-                                                  IsChecked="{Binding UseLocalPlayback}"
-                                                  IsEnabled="{Binding IsLocalPlaybackAvailable}"
-                                                  ToolTip="Play the cached analysis WAV in-process (no Spotify seek jitter). Requires Analyze capture."/>
-                                        <Button Content="Analyze" MinWidth="72" Margin="8,0,0,0"
-                                                Command="{Binding AnalyzeSessionTrackCommand}"
-                                                ToolTip="New track: capture audio and run analysis. Cached track: rebuild beat graph from tuning only."/>
-                                        <Button Content="Refresh" MinWidth="72" Margin="8,0,0,0"
-                                                Command="{Binding RefreshSessionCommand}"/>
-                                        <Button Content="Delete cache" MinWidth="88" Margin="8,0,0,0"
-                                                Command="{Binding DeleteSessionCacheCommand}"
-                                                ToolTip="Delete cached WAV and analysis JSON for the selected track"/>
-                                        <Button Content="Remove" MinWidth="72" Margin="8,0,0,0"
-                                                Command="{Binding RemoveSessionTrackCommand}"/>
-                                        <Button Content="Clear" MinWidth="56" Margin="8,0,0,0"
-                                                Command="{Binding ClearSessionCommand}"/>
-                                        <Button Content="Export" MinWidth="64" Margin="16,0,0,0"
-                                                Command="{Binding ExportLoopDataCommand}"/>
-                                        <Button Content="Import" MinWidth="64" Margin="8,0,0,0"
-                                                Command="{Binding ImportLoopDataCommand}"/>
-                                        <ComboBox ItemsSource="{Binding BranchPresets}"
-                                                  SelectedItem="{Binding SelectedBranchPreset}"
-                                                  Text="{Binding BranchPresetName, UpdateSourceTrigger=PropertyChanged}"
-                                                  IsEditable="True"
-                                                  StaysOpenOnEdit="True"
-                                                  DisplayMemberPath="Name"
-                                                  MinWidth="140"
-                                                  Margin="16,0,0,0"
-                                                  VerticalAlignment="Center"
-                                                  ToolTip="Pick a saved setup or type a name, then Save"/>
-                                        <Button Content="Load" MinWidth="56" Margin="4,0,0,0"
-                                                Command="{Binding LoadBranchPresetCommand}"/>
-                                        <Button Content="Save tune+branches" MinWidth="120" Margin="4,0,0,0"
-                                                Command="{Binding SaveBranchPresetCommand}"
-                                                ToolTip="Save current tune settings, locks, and analysis fingerprint under the name in the box"/>
+                                    <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                                        <!-- Transport -->
+                                        <TextBlock Text="TRANSPORT"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,4"
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <Button Content="{Binding SessionPlayButtonText}"
+                                                    MinWidth="72" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding PlaySessionTrackCommand}"
+                                                    ToolTip="Play or pause the selected track (double-click in the list also plays)"/>
+                                            <Button Content="Analyze"
+                                                    MinWidth="72" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding AnalyzeSessionTrackCommand}"
+                                                    ToolTip="New track: capture playthrough + analyze in one pass. Cached: rebuild graph from tuning."/>
+                                            <Button Content="Abort"
+                                                    MinWidth="72" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding AbortSessionWorkCommand}"
+                                                    ToolTip="Stop analyze/capture and discard incomplete files, or stop playback (clears incomplete capture only if a capture was in progress)."/>
+                                            <CheckBox Content="Local WAV"
+                                                      Margin="4,4,0,6"
+                                                      VerticalAlignment="Center"
+                                                      Foreground="{DynamicResource AppForegroundBrush}"
+                                                      IsChecked="{Binding UseLocalPlayback}"
+                                                      IsEnabled="{Binding IsLocalPlaybackAvailable}"
+                                                      ToolTip="Play the cached analysis WAV in-process (no Spotify seek jitter). Requires a complete capture."/>
+                                        </WrapPanel>
+                                        <Border Height="1" Margin="0,0,0,10"
+                                                Background="{DynamicResource AppBorderBrush}" Opacity="0.55"/>
+
+                                        <!-- List -->
+                                        <TextBlock Text="LIST"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,4"
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <Button Content="Remove"
+                                                    MinWidth="72" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding RemoveSessionTrackCommand}"
+                                                    ToolTip="Remove the selected track from this list only — does not delete cached files"/>
+                                            <Button Content="Remove all"
+                                                    MinWidth="88" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding ClearSessionCommand}"
+                                                    ToolTip="Clear the session list only — does not delete cached captures, analysis, or presets"/>
+                                            <Button Content="Refresh from cache"
+                                                    MinWidth="120" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding RefreshSessionCommand}"
+                                                    ToolTip="Reload the list and add any tracks found in audio/analysis caches"/>
+                                        </WrapPanel>
+                                        <Border Height="1" Margin="0,0,0,10"
+                                                Background="{DynamicResource AppBorderBrush}" Opacity="0.55"/>
+
+                                        <!-- Delete data -->
+                                        <TextBlock Text="DELETE SAVED DATA"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,4"
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <Button Content="Delete captures"
+                                                    MinWidth="110" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding DeleteSessionCapturesCommand}"
+                                                    ToolTip="Delete saved WAV captures for the selected track"/>
+                                            <Button Content="Delete analysis"
+                                                    MinWidth="110" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding DeleteSessionAnalysisCommand}"
+                                                    ToolTip="Delete saved analysis JSON for the selected track"/>
+                                            <Button Content="Delete tune+branches"
+                                                    MinWidth="130" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding DeleteSessionTuneCommand}"
+                                                    ToolTip="Delete saved tune settings, locks, and presets for the selected track"/>
+                                        </WrapPanel>
+                                        <Border Height="1" Margin="0,0,0,10"
+                                                Background="{DynamicResource AppBorderBrush}" Opacity="0.55"/>
+
+                                        <!-- Import / Export -->
+                                        <TextBlock Text="IMPORT / EXPORT"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,4"
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <Button Content="Export audio…"
+                                                    MinWidth="100" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding ExportSessionAudioCommand}"
+                                                    ToolTip="Copy the selected track's capture WAV"/>
+                                            <Button Content="Export analysis…"
+                                                    MinWidth="110" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding ExportSessionAnalysisCommand}"
+                                                    ToolTip="Export analysis JSON (+ tune/locks) for session tracks"/>
+                                            <Button Content="Export both…"
+                                                    MinWidth="100" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding ExportSessionBothCommand}"
+                                                    ToolTip="Export analysis JSON and copy WAV captures into a folder"/>
+                                            <Button Content="Import…"
+                                                    MinWidth="80" MinHeight="28" Margin="0,0,6,6"
+                                                    Command="{Binding ImportLoopDataCommand}"
+                                                    ToolTip="Import analysis JSON, tune+branches, and/or capture WAV files"/>
+                                        </WrapPanel>
+                                        <Border Height="1" Margin="0,0,0,10"
+                                                Background="{DynamicResource AppBorderBrush}" Opacity="0.55"/>
+
+                                        <!-- Presets -->
+                                        <TextBlock Text="TUNE PRESET"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,4"
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                        <DockPanel LastChildFill="True" Margin="0,0,0,2">
+                                            <Button DockPanel.Dock="Right" Content="Save"
+                                                    MinWidth="64" MinHeight="28" Margin="6,0,0,0"
+                                                    Command="{Binding SaveBranchPresetCommand}"
+                                                    ToolTip="Save current tune + locks under the name in the box (rename anytime)"/>
+                                            <Button DockPanel.Dock="Right" Content="Load"
+                                                    MinWidth="64" MinHeight="28" Margin="6,0,0,0"
+                                                    Command="{Binding LoadBranchPresetCommand}"
+                                                    ToolTip="Load the selected or named tune+branches preset"/>
+                                            <ComboBox ItemsSource="{Binding BranchPresets}"
+                                                      SelectedItem="{Binding SelectedBranchPreset}"
+                                                      Text="{Binding BranchPresetName, UpdateSourceTrigger=PropertyChanged}"
+                                                      IsEditable="True"
+                                                      StaysOpenOnEdit="True"
+                                                      DisplayMemberPath="Name"
+                                                      MinHeight="28"
+                                                      VerticalAlignment="Center"
+                                                      ToolTip="Type a new name to rename on Save, or pick an existing preset"/>
+                                        </DockPanel>
                                     </StackPanel>
 
                                     <ListBox Grid.Row="1"
@@ -167,7 +254,7 @@
                                         </ListBox.InputBindings>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid Margin="2">
+                                            <Grid Margin="2,4">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
@@ -186,6 +273,7 @@
                                                            Text="{Binding StatusText}"
                                                            VerticalAlignment="Center"
                                                            Margin="12,0,0,0"
+                                                           FontSize="11"
                                                            Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                                             </Grid>
                                         </DataTemplate>
