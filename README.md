@@ -18,7 +18,7 @@ Refactoring parts of the codebase to reduce single-file bloat and abstract/restr
 
 **Infinite Jukebox (experimental)**
 
-Added **Infinite Jukebox** under **Experimental**, preparing to merge into `master` with a ring mini player, session track list, and caching of local AppData analyses and tracks to support low-latency skipping. Builds are **x64** today; an **x86** build may be added later.
+**Infinite Jukebox** under **Experimental** — now merged from `algo-overhaul` into `master`. Beat-aware infinite looping with an **Enhanced** similarity pipeline (z-scored stacked features, continuation scoring, kNN + percentile graph, softmax navigation), ring mini player, session track list, Local WAV transport, and cached AppData analyses. Builds are **x64** today; an **x86** build may be added later.
 
 **Release packaging**
 
@@ -27,6 +27,105 @@ Building a release zip and MSIX installer with an Azure-signed app certificate.
 > These are working descriptions, not release milestones. Watch rate limits during usage; try to set a delay (>500ms between actions) and reduce large requests into smaller chunks. 500 consecutive requests can result in a 24-hour restriction.
 
 ## Changelog
+
+### `master` — `algo-overhaul` merge: Enhanced Infinite Jukebox algorithm
+
+Merged **`algo-overhaul`** into **`master`** (fast-forward from `628d958` through `f3dec16`). This is the largest jukebox change since the original Echo Nest port: a full MIR overhaul, authoring UX, Local WAV playback, and offline evaluation tooling.
+
+**Algorithm — Enhanced (Classic) metric (Slices 2–6)**
+
+Path B analysis (`tools/analyze_track.py`) now emits **beat-synchronous feature vectors** alongside the legacy Echo Nest-shaped segment list:
+
+1. **Features** — L2-normalized chroma + MFCC[1:] (MFCC-0 dropped) + RMS-dB, per-dimension **z-scored** over the track.
+2. **Beat sync** — `librosa.util.sync` with **median** aggregation → one vector per beat (symmetric; no segment-index pairing).
+3. **Time-delay stack** — `librosa.feature.stack_memory` (`STACK_STEPS=4`) → each beat carries a short continuation fingerprint.
+4. **Continuation edges** — hop `i→j` scores **`stack[i+1]` vs `stack[j]`** (landing fits what follows the exit), not twin downbeats (avoids doubled attacks/cymbals).
+5. **Graph build** — **kNN** neighbors outside a **Theiler min-jump** window (≥8 beats default), **track-relative percentile** quality cap (replaces ε-threshold auto-tune loop), optional **mutual kNN**, **SCC bridge** edges for reachability, optional **Essentia region gate** when `regionEmbeddings` exist.
+6. **Phase** — graduated **Soft / Hard / Off** circular mod-4 bar-phase penalty; **BeatThis** downbeats when available (bars from real downbeats, not `beat_times[::4]` only).
+7. **Navigation** — **Softmax(−dist/τ − λ·visits + w_pref·preference)** with visit-radius novelty, post-hop dwell (`MinBeatsBetweenJumps`), end-loop guard (toggleable), locked branches with per-edge probability, and **Slice 6** pairwise preference reranking from scrub-after-hop negatives.
+
+**Beat tracking** — **BeatThis** (learned beat/downbeat, ONNX or pip) with **Ellis DP** (`librosa.beat.beat_track`) fallback; **gap-split** for monster inter-beat intervals. Settings: Auto / BeatThis / DP. Legacy graph metric still available for old caches (`Graph metric: Legacy`).
+
+**Compared to the original Infinite Jukebox (Paul Lamere, Echo Nest, 2012)**
+
+| | **Original** | **This build (Enhanced)** |
+|--|--------------|---------------------------|
+| Features | Variable-length Echo Nest segments; weighted pitch/timbre/loudness/duration/confidence | Fixed beat-sync vectors; duration/confidence dropped on Path B |
+| Distance | Single-beat segment list pairing (asymmetric); global threshold raised until ~10% of beats branch | Symmetric z-scored stack; continuation-oriented edge score |
+| Graph | All pairs under ε; keeps nearest *and farthest* under threshold | Per-beat kNN + percentile cap only |
+| Phase | Hard +100 veto for different bar position | Graduated soft penalty (or hard/off) |
+| Playback choice | Uniform random among threshold survivors | Temperature softmax + visit novelty + optional preference ranker |
+| Authoring | Tune slider only | Locks, presets bound to analysis fingerprint, ring hover, SSM heatmap |
+
+**Compared to Remixatron (Dave Rensin)**
+
+| | **Remixatron** | **This build (Enhanced)** |
+|--|----------------|---------------------------|
+| Similarity | **Spectral clustering** → each beat in one discrete cluster | **Continuous** z-scored distances end-to-end |
+| Continuation | Boolean: candidate in correct cluster; next-beat cluster alignment | Numeric: `stack[i+1]` vs `stack[j]` |
+| Phase | **Hard** same position in measure | Soft/Hard/Off graduated circular mod-4 |
+| Jump choice | Random among cluster-valid targets | Softmax(−dist/τ − λ·visits) |
+| Playback | Sample-accurate beat-buffer stitch (native engine) | Spotify Web Playback or **Local WAV** in-process seeks (±~50ms SDK jitter on streaming) |
+| Authoring | Automatic CLI/player | Ring UI, locks, tune presets, heatmap, harness metrics |
+
+Remixatron is the closest open-source prior art for beat-sync features and structure-aware jumps; Enhanced diverges by keeping **graded** similarity through graph build and navigation, scoring **continuation** instead of cluster membership, and exposing an **authoring** surface the original and Remixatron lack.
+
+**UX & infrastructure (Slices 1, 1B, 3)**
+
+- **Slice 1** — Toggleable end-loop guard, random-branches vs locks-only, tune presets with analysis fingerprint.
+- **Slice 1B** — **Local WAV** transport (`LocalWavPlaybackHost`) for sample-accurate in-app seeks during jukebox hops; transport router switches Spotify vs local.
+- **Slice 3** — **Self-similarity heatmap** (`SelfSimilarityHeatmapControl`) for Classic stacked features; ring Observe/hover hop diagnostics.
+- **Manage** page, login → Infinite Jukebox landing, fractal/EQ visual chrome, session Local WAV cache controls, `tools/jukebox_harness.py` offline metrics (dead-beat rate, jump-length distribution, component coverage).
+
+**Related readings**
+
+*Foundations — where the original design came from*
+
+- Tristan Jehan, *Creating Music by Listening* (PhD thesis, MIT Media Lab, 2005) — intellectual origin of the Echo Nest analyzer (segments, timbre, pitches, loudness, beats/bars); explains why duration/confidence existed for variable-length onset segments (dead on Path B).
+- The Echo Nest Analyzer Documentation (Jehan & DesRoches) — JSON format spec; timbre as PCA coefficients (not raw MFCCs), which is why ported Echo Nest weights are misleading once Path B uses MFCCs.
+- [Paul Lamere's Infinite Jukebox posts (2012)](https://musicmachinery.com/2012/11/12/the-infinite-jukebox/) — original weighted segment distance and threshold-to-target-branch-ratio heuristic.
+- [Remixatron](https://github.com/drensin/Remixatron) — open-source reimplementation with beat-sync features, clustering, and jump selection; closest prior art to Enhanced Slices 2+4.
+
+*Slice 2 — beat-synchronous features, stacking, distance*
+
+- Ellis, "Beat Tracking by Dynamic Programming" (*J. New Music Research*, 2007) — `librosa.beat.beat_track`; monster-beat failure mode in quiet gaps; motivates gap-split.
+- Bartsch & Wakefield, "To Catch a Chorus…" (WASPAA 2001) — beat-synchronous chroma aggregation; ancestor of `librosa.util.sync`.
+- Logan, "Mel Frequency Cepstral Coefficients for Music Modeling" (ISMIR 2000) — MFCCs; MFCC-0 as log-energy (loudness triple-count fix).
+- Fujishima (ICMC 1999); Müller, *Fundamentals of Music Processing* (Springer, 2015/2021) — chroma, SSM/structure toolkit; [FMP notebooks](https://www.audiolabs-erlangen.de/resources/MIR/FMP).
+- Serrà, Serra & Andrzejak (2009); Takens (1981) — time-delay embedding justification for `stack_memory` / k=2–4 stacking.
+- Theiler (1986); Kantz & Schreiber, *Nonlinear Time Series Analysis* — Theiler window → build-time min-jump.
+
+*Slice 3 — self-similarity matrices*
+
+- Foote (ACM Multimedia 1999; ICME 2000) — SSM visualization and diagonal-stripe interpretation (heatmap diagnostic).
+- Müller & Kurth (ICASSP 2006) — path/diagonal SSM enhancement (`librosa.segment.path_enhance`).
+- Paulus, Müller & Klapuri (ISMIR 2010) — music structure analysis survey.
+
+*Slice 4 — graph topology, components, walk policy*
+
+- McFee & Ellis (ISMIR 2014) — spectral clustering on recurrence + timeline (future Laplacian segmentation).
+- von Luxburg (2007) — mutual-kNN vs hubs; Laplacian machinery.
+- Radovanović et al. (JMLR 2010); Schnitzer et al. (ISMIR 2011) — hubness and mutual proximity in audio similarity.
+- Tarjan (1972) — SCC for reachability bridges.
+- Sutton & Barto, *Reinforcement Learning* (2nd ed., 2018), ch. 2 — softmax/Boltzmann selection and count-based novelty (exp(−d/τ) − λ·visits).
+
+*Slice 5 — embeddings (optional region gate)*
+
+- Pons & Serra, musicnn (2019); Alonso-Jiménez et al. (ICASSP 2020, ISMIR 2022) — Essentia TensorFlow models; `tools/attach_region_embeddings.py`.
+- Cramer et al., OpenL3 (ICASSP 2019); Li et al., MERT (2023) — region vs beat-resolution tradeoffs; two-stage "embeddings pick region, Classic picks beat."
+
+*Slice 6 — preference learning*
+
+- Bradley & Terry (1952); Burges et al., RankNet (ICML 2005); Joachims (KDD 2002) — pairwise ranker and implicit negative feedback (scrub-after-hop).
+
+*Rejected alternatives (confirmed deferrals)*
+
+- Rabiner (1989) HMM; Lee & Seung (1999) NMF — deferred unless layered structure still disappoints after P1+P4.
+- Transposition-invariant chroma — harmful without pitch-shifted playback (finds key-change splices that sound wrong).
+
+**If you only read three:** Müller *FMP* (ch. 3–4, 7), McFee & Ellis 2014, Jehan's thesis.
+
+---
 
 ### `experimental` since `aecb17d` — Infinite Jukebox UI, control panels, and mini player
 
@@ -95,14 +194,14 @@ Building a release zip and MSIX installer with an Azure-signed app certificate.
 
 ## Experimental
 
-The **`experimental`** branch adds personal experimental features on a separate page under **Experimental → Infinite Jukebox** (formerly Prediction / Loop Lab). This is not part of the main playlist tooling roadmap. Current direction includes beat-aware infinite jukebox looping, personalized next-track prediction, and a ring mini player—kept isolated from the core Playlists workflow.
+**Infinite Jukebox** lives under **Experimental → Infinite Jukebox** on `master` (merged from `algo-overhaul`). It is isolated from the core Playlists workflow: beat-aware infinite looping, personalized next-track prediction experiments, ring mini player, and Local WAV analysis/playback. See the **`algo-overhaul` merge** changelog entry above for the Enhanced algorithm, Remixatron/original comparison, and bibliography.
 
 ## Planned improvements
 
 - Revise the installer/publish flow for this fork (certificate, `appinstaller`, and release packaging).
 - Continue playlist content workflows (track grid actions, create/add tracks, import/export polish).
 - Keep rate-limit-safe request spacing across load, delete, and track-fetch operations.
-- Ring hover/chaining visualization and further jukebox tuning on the Infinite Jukebox page.
+- Laplacian section labels (McFee & Ellis 2014) and further Essentia region-gate polish on Infinite Jukebox.
 
 ## Using this fork
 
@@ -126,9 +225,9 @@ The original upstream installer links below still point at the upstream author's
 
 ---
 
-# Experimental: Loop Lab (Prediction page)
+# Experimental: Infinite Jukebox (Prediction page)
 
-The `experimental` branch adds **Infinite Jukebox** (Loop Lab) under **Experimental → Infinite Jukebox**. It is an in-app Spotify player used for beat-aware looping, infinite-jukebox-style branch tuning, and personalized next-track prediction experiments.
+**Infinite Jukebox** (Loop Lab) is under **Experimental → Infinite Jukebox** on `master`. It is an in-app Spotify player used for beat-aware looping, infinite-jukebox-style branch tuning, and personalized next-track prediction experiments. The **Enhanced** graph metric (z-scored stacked beat vectors, continuation edges, kNN + percentile, softmax navigation) is documented in the main changelog under **`algo-overhaul` merge**.
 
 **Requirements (all users):**
 
@@ -146,7 +245,7 @@ Or download the Evergreen Bootstrapper from [Microsoft's WebView2 page](https://
 
 **Requirements (Path B local analysis only):**
 
-If Spotify's `/audio-analysis` endpoint is unavailable for your developer app (403 — common for apps registered after Nov 2024), Infinite Jukebox falls back to **local analysis**: it records one full play-through via WASAPI loopback, then runs a Python sidecar (`tools/analyze_track.py`) with **librosa**.
+If Spotify's `/audio-analysis` endpoint is unavailable for your developer app (403 — common for apps registered after Nov 2024), Infinite Jukebox falls back to **local analysis**: it records one full play-through via WASAPI loopback, then runs a Python sidecar (`tools/analyze_track.py`) with **librosa** and optional **BeatThis** beat/downbeat tracking.
 
 Install Python 3 and the sidecar dependencies:
 
@@ -154,6 +253,13 @@ Install Python 3 and the sidecar dependencies:
 # Use the Windows Python launcher so you don't pick up an old Python 2.x on PATH
 py -3.12 -m pip install --upgrade pip
 py -3.12 -m pip install librosa soundfile
+```
+
+Optional — learned beat/downbeat tracking (recommended; falls back to Ellis DP if missing):
+
+```powershell
+py -3.12 -m pip install beat_this onnxruntime
+# Place BeatThis ONNX under tools/models/ — see tools/models/README.md
 ```
 
 Verify:
