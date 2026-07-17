@@ -97,88 +97,237 @@
                     <TabControl Grid.Row="1"
                                 Style="{StaticResource ControlPanelTabControlStyle}"
                                 DataContext="{Binding DataContext, ElementName=Root}">
-                    <TabItem Header="Tracks">
-                        <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
+                        <TabItem Header="Create">
+                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Margin="2,4,2,8">
+                                        <!-- Playlist ops (jukebox-style menus) + load/delete -->
+                                        <DockPanel Margin="0,0,0,10" LastChildFill="True">
+                                            <StackPanel DockPanel.Dock="Right"
+                                                        Orientation="Horizontal"
+                                                        VerticalAlignment="Center">
+                                                <TextBlock Text="Load"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"
+                                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                                <Slider Width="100"
+                                                        Minimum="1"
+                                                        Maximum="50"
+                                                        TickFrequency="1"
+                                                        IsSnapToTickEnabled="True"
+                                                        VerticalAlignment="Center"
+                                                        Margin="0,0,4,0"
+                                                        Value="{Binding PlaylistLoadLimit, Mode=TwoWay}"/>
+                                                <TextBlock Text="{Binding PlaylistLoadLimit}"
+                                                           Width="22"
+                                                           TextAlignment="Right"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"/>
+                                                <Button Content="Load"
+                                                        Command="{Binding EnqueueLoadLimitCommand}"
+                                                        Focusable="False"
+                                                        Padding="10,4"
+                                                        Margin="0,0,4,0"/>
+                                                <Button Content="All"
+                                                        Command="{Binding EnqueueLoadAllCommand}"
+                                                        Focusable="False"
+                                                        Padding="10,4"
+                                                        Margin="0,0,10,0"/>
+                                                <Button Content="Delete"
+                                                        Command="{Binding ToggleDeleteQueueCommand}"
+                                                        CommandParameter="{Binding SelectedPlaylistItems}"
+                                                        Focusable="False"
+                                                        Padding="10,4"
+                                                        Margin="0,0,4,0"/>
+                                                <Button Content="Delete All"
+                                                        Command="{Binding DeleteAllToQueueCommand}"
+                                                        Focusable="False"
+                                                        Padding="10,4"
+                                                        Margin="0,0,10,0"/>
+                                                <Button Content="Refresh"
+                                                        Command="{Binding RefreshDeletionResultsCommand}"
+                                                        Focusable="False"
+                                                        Padding="10,4"
+                                                        Margin="0,0,4,0"/>
+                                                <Button Content="Export"
+                                                        Command="{Binding ExportToJsonCommand}"
+                                                        Focusable="False"
+                                                        Padding="10,4"/>
+                                            </StackPanel>
 
-                                <StackPanel Grid.Row="0"
-                                            Style="{StaticResource ControlPanelToolbarStyle}"
-                                            HorizontalAlignment="Right">
-                                    <TextBlock Text="Double-click a playlist or use Load Tracks."
-                                               VerticalAlignment="Center"
-                                               Margin="0,0,8,0"
-                                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                                    <Button Content="Load Tracks"
-                                            Command="{Binding LoadTracksCommand}"
-                                            CommandParameter="{Binding SelectedPlaylist}"
-                                            Focusable="False"
-                                            Padding="12,4"/>
-                                </StackPanel>
+                                            <Menu Background="Transparent" VerticalAlignment="Center">
+                                                <MenuItem Header="Create playlist" Padding="8,4">
+                                                    <StackPanel Margin="8" Width="320">
+                                                        <TextBox Text="{Binding NewPlaylistName, UpdateSourceTrigger=PropertyChanged}"
+                                                                 MinHeight="28"
+                                                                 Margin="0,0,0,6"
+                                                                 VerticalContentAlignment="Center"
+                                                                 ToolTip="Playlist name"/>
+                                                        <TextBox Text="{Binding NewPlaylistDescription, UpdateSourceTrigger=PropertyChanged}"
+                                                                 MinHeight="28"
+                                                                 Margin="0,0,0,6"
+                                                                 VerticalContentAlignment="Center"
+                                                                 ToolTip="Description"/>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                            <CheckBox Content="Public"
+                                                                      IsChecked="{Binding NewPlaylistIsPublic}"
+                                                                      Margin="0,0,10,0"/>
+                                                            <CheckBox Content="Collab"
+                                                                      IsChecked="{Binding NewPlaylistIsCollaborative}"
+                                                                      Margin="0,0,10,0"/>
+                                                            <Button Content="Create"
+                                                                    Command="{Binding CreatePlaylistCommand}"
+                                                                    Padding="12,4"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </MenuItem>
+                                            </Menu>
+                                        </DockPanel>
 
-                                <DataGrid Grid.Row="1"
-                                          x:Name="TracksDataGrid"
-                                          ItemsSource="{Binding Tracks}"
-                                          AutoGenerateColumns="False"
-                                          CanUserAddRows="False"
-                                          IsReadOnly="True"
-                                          CanUserSortColumns="True"
-                                          HeadersVisibility="Column"
-                                          Background="Transparent"
-                                          BorderThickness="0"
-                                          VerticalAlignment="Stretch"
-                                          MinHeight="72">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="#" Binding="{Binding Position}" SortMemberPath="Position" Width="Auto"/>
-                                        <DataGridTextColumn Header="Name" Binding="{Binding TrackName}" SortMemberPath="TrackName" Width="*"/>
-                                        <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}" SortMemberPath="Artists" Width="*"/>
-                                        <DataGridTextColumn Header="Album" Binding="{Binding Album}" SortMemberPath="Album" Width="*"/>
-                                        <DataGridTextColumn Header="Disc #" Binding="{Binding DiscNumber}" SortMemberPath="DiscNumber" Width="Auto"/>
-                                        <DataGridTextColumn Header="Track #" Binding="{Binding TrackNumber}" SortMemberPath="TrackNumber" Width="Auto"/>
-                                        <DataGridTextColumn Header="Duration" Binding="{Binding Duration}" SortMemberPath="Duration" Width="Auto"/>
-                                        <DataGridTextColumn Header="Type" Binding="{Binding ItemType}" SortMemberPath="ItemType" Width="Auto"/>
-                                        <DataGridTextColumn Header="Spotify ID" Binding="{Binding SpotifyId}" SortMemberPath="SpotifyId" Width="*"/>
-                                        <DataGridTextColumn Header="Note" Binding="{Binding StatusNote}" SortMemberPath="StatusNote" Width="*"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </Grid>
-                        </Border>
-                    </TabItem>
+                                        <!-- Status + delay + execute (from former status bar) -->
+                                        <Border Background="{DynamicResource AppSurfaceAltBrush}"
+                                                BorderBrush="{DynamicResource AppBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="10,8"
+                                                Margin="0,0,0,10">
+                                            <DockPanel LastChildFill="True">
+                                                <StackPanel DockPanel.Dock="Right"
+                                                            Orientation="Horizontal"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Text="Delay between requests"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,6,0"
+                                                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                               ToolTip="Milliseconds between Spotify API calls"/>
+                                                    <TextBox Text="{Binding RequestSpacingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                                                             Width="48"
+                                                             MinHeight="26"
+                                                             VerticalContentAlignment="Center"
+                                                             Margin="0,0,8,0"/>
+                                                    <Button Content="{Binding ExecuteOrPauseButtonLabel}"
+                                                            Command="{Binding ExecuteOrPauseCommand}"
+                                                            Padding="12,4"
+                                                            Margin="0,0,6,0"/>
+                                                    <Button Content="Abort"
+                                                            Command="{Binding CancelCurrentActionCommand}"
+                                                            Padding="12,4"/>
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Status, Converter={StaticResource StatusActionConverter}}"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,10,0"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                    <ProgressBar Width="120"
+                                                                 Height="8"
+                                                                 VerticalAlignment="Center"
+                                                                 IsIndeterminate="True"
+                                                                 Visibility="{Binding ProgressVisibility}"/>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
 
-                    <TabItem Header="Actions">
-                        <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
-                            <TreeView x:Name="QueuedActionsTreeView"
-                                      ItemsSource="{Binding QueuedActions}"
-                                      FontFamily="Consolas"
-                                      FontSize="11"
-                                      Background="Transparent"
-                                      BorderThickness="0"
-                                      VerticalAlignment="Stretch"
-                                      MinHeight="72"
-                                      PreviewKeyDown="QueuedActionsTreeView_PreviewKeyDown">
-                                <TreeView.ItemTemplate>
-                                    <HierarchicalDataTemplate ItemsSource="{Binding DetailItems}">
-                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
-                                        <HierarchicalDataTemplate.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding DisplayName}" Margin="4,1,0,1"/>
-                                            </DataTemplate>
-                                        </HierarchicalDataTemplate.ItemTemplate>
-                                    </HierarchicalDataTemplate>
-                                </TreeView.ItemTemplate>
-                            </TreeView>
-                        </Border>
-                    </TabItem>
+                                        <Expander Header="Actions"
+                                                  IsExpanded="False"
+                                                  Margin="0,0,0,8"
+                                                  Foreground="{DynamicResource AppForegroundBrush}">
+                                            <Border Margin="0,6,0,0"
+                                                    Padding="4"
+                                                    MinHeight="100"
+                                                    MaxHeight="180"
+                                                    Background="#22000000"
+                                                    BorderBrush="{DynamicResource AppBorderBrush}"
+                                                    BorderThickness="1">
+                                                <TreeView x:Name="QueuedActionsTreeView"
+                                                          ItemsSource="{Binding QueuedActions}"
+                                                          FontFamily="Consolas"
+                                                          FontSize="11"
+                                                          Background="Transparent"
+                                                          BorderThickness="0"
+                                                          PreviewKeyDown="QueuedActionsTreeView_PreviewKeyDown">
+                                                    <TreeView.ItemTemplate>
+                                                        <HierarchicalDataTemplate ItemsSource="{Binding DetailItems}">
+                                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                                            <HierarchicalDataTemplate.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding DisplayName}" Margin="4,1,0,1"/>
+                                                                </DataTemplate>
+                                                            </HierarchicalDataTemplate.ItemTemplate>
+                                                        </HierarchicalDataTemplate>
+                                                    </TreeView.ItemTemplate>
+                                                </TreeView>
+                                            </Border>
+                                        </Expander>
 
-                    <TabItem Header="Logs">
-                        <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
-                            <local:ActivityLogView DataContext="{Binding ActivityLog, ElementName=Root}"/>
-                        </Border>
-                    </TabItem>
-                </TabControl>
+                                        <Expander Header="Logs"
+                                                  IsExpanded="False"
+                                                  Foreground="{DynamicResource AppForegroundBrush}">
+                                            <Border Margin="0,6,0,0"
+                                                    MinHeight="120"
+                                                    MaxHeight="220"
+                                                    Background="#22000000"
+                                                    BorderBrush="{DynamicResource AppBorderBrush}"
+                                                    BorderThickness="1">
+                                                <local:ActivityLogView DataContext="{Binding ActivityLog, ElementName=Root}"/>
+                                            </Border>
+                                        </Expander>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+                        </TabItem>
+
+                        <TabItem Header="Tracks">
+                            <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0"
+                                                Style="{StaticResource ControlPanelToolbarStyle}"
+                                                HorizontalAlignment="Right">
+                                        <TextBlock Text="Double-click a playlist or use Load Tracks."
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                        <Button Content="Load Tracks"
+                                                Command="{Binding LoadTracksCommand}"
+                                                CommandParameter="{Binding SelectedPlaylist}"
+                                                Focusable="False"
+                                                Padding="12,4"/>
+                                    </StackPanel>
+
+                                    <DataGrid Grid.Row="1"
+                                              x:Name="TracksDataGrid"
+                                              ItemsSource="{Binding Tracks}"
+                                              AutoGenerateColumns="False"
+                                              CanUserAddRows="False"
+                                              IsReadOnly="True"
+                                              CanUserSortColumns="True"
+                                              HeadersVisibility="Column"
+                                              Background="Transparent"
+                                              BorderThickness="0"
+                                              VerticalAlignment="Stretch"
+                                              MinHeight="72">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="#" Binding="{Binding Position}" SortMemberPath="Position" Width="Auto"/>
+                                            <DataGridTextColumn Header="Name" Binding="{Binding TrackName}" SortMemberPath="TrackName" Width="*"/>
+                                            <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}" SortMemberPath="Artists" Width="*"/>
+                                            <DataGridTextColumn Header="Album" Binding="{Binding Album}" SortMemberPath="Album" Width="*"/>
+                                            <DataGridTextColumn Header="Disc #" Binding="{Binding DiscNumber}" SortMemberPath="DiscNumber" Width="Auto"/>
+                                            <DataGridTextColumn Header="Track #" Binding="{Binding TrackNumber}" SortMemberPath="TrackNumber" Width="Auto"/>
+                                            <DataGridTextColumn Header="Duration" Binding="{Binding Duration}" SortMemberPath="Duration" Width="Auto"/>
+                                            <DataGridTextColumn Header="Type" Binding="{Binding ItemType}" SortMemberPath="ItemType" Width="Auto"/>
+                                            <DataGridTextColumn Header="Spotify ID" Binding="{Binding SpotifyId}" SortMemberPath="SpotifyId" Width="*"/>
+                                            <DataGridTextColumn Header="Note" Binding="{Binding StatusNote}" SortMemberPath="StatusNote" Width="*"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </Grid>
+                            </Border>
+                        </TabItem>
+                    </TabControl>
                 </Grid>
             </DockPanel>
 

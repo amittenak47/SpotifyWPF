@@ -2,6 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SpotifyWPF.View.Component"
+             xmlns:conv="clr-namespace:SpotifyWPF.Converter"
              x:Name="Root"
              MinHeight="28"
              ClipToBounds="False"
@@ -11,6 +12,17 @@
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <conv:SessionPlayGlyphConverter x:Key="SessionPlayGlyphConverter"/>
+        <conv:SessionStatusMarqueeConverter x:Key="SessionStatusMarqueeConverter"/>
+        <Style x:Key="SessionIconButtonStyle" TargetType="Button">
+            <Setter Property="MinWidth" Value="28"/>
+            <Setter Property="MinHeight" Value="26"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Margin" Value="0,0,2,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontFamily" Value="Segoe UI Symbol"/>
+            <Setter Property="Focusable" Value="False"/>
+        </Style>
     </UserControl.Resources>
 
     <Border Background="{DynamicResource AppSurfaceBrush}"
@@ -107,75 +119,78 @@
                                         <RowDefinition Height="*"/>
                                     </Grid.RowDefinitions>
 
-                                    <WrapPanel Grid.Row="0" Margin="0,0,0,8">
-                                        <Button Content="Remove"
-                                                MinWidth="72" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding RemoveSessionTrackCommand}"
-                                                ToolTip="Remove the selected track from this list only — does not delete cached files"/>
-                                        <Button Content="Remove all"
-                                                MinWidth="88" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding ClearSessionCommand}"
-                                                ToolTip="Clear the session list only — does not delete cached captures, analysis, or presets"/>
-                                        <Button Content="Refresh from cache"
-                                                MinWidth="120" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding RefreshSessionCommand}"
-                                                ToolTip="Reload the list and add any tracks found in audio/analysis caches"/>
-                                        <Button Content="Delete captures"
-                                                MinWidth="110" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding DeleteSessionCapturesCommand}"
-                                                ToolTip="Delete saved WAV captures for the selected track"/>
-                                        <Button Content="Delete analysis"
-                                                MinWidth="110" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding DeleteSessionAnalysisCommand}"
-                                                ToolTip="Delete saved analysis JSON for the selected track"/>
-                                        <Button Content="Delete tune+branches"
-                                                MinWidth="130" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding DeleteSessionTuneCommand}"
-                                                ToolTip="Delete saved tune settings, locks, and presets for the selected track"/>
-                                        <Button Content="Export audio…"
-                                                MinWidth="100" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding ExportSessionAudioCommand}"
-                                                ToolTip="Copy the selected track's capture WAV"/>
-                                        <Button Content="Export analysis…"
-                                                MinWidth="110" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding ExportSessionAnalysisCommand}"
-                                                ToolTip="Export analysis JSON (+ tune/locks) for session tracks"/>
-                                        <Button Content="Export both…"
-                                                MinWidth="100" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding ExportSessionBothCommand}"
-                                                ToolTip="Export analysis JSON and copy WAV captures into a folder"/>
-                                        <Button Content="Import…"
-                                                MinWidth="80" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding ImportLoopDataCommand}"
-                                                ToolTip="Import analysis JSON, tune+branches, and/or capture WAV files"/>
-                                        <TextBlock Text="Tune preset"
-                                                   VerticalAlignment="Center"
-                                                   Margin="8,0,6,6"
-                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                                        <ComboBox ItemsSource="{Binding BranchPresets}"
-                                                  SelectedItem="{Binding SelectedBranchPreset, Mode=OneWay}"
-                                                  DisplayMemberPath="Name"
-                                                  Width="140"
-                                                  MinHeight="28"
-                                                  Margin="0,0,6,6"
-                                                  VerticalAlignment="Center"
-                                                  ToolTip="Pick an existing preset to load into the name box"
-                                                  SelectionChanged="BranchPresetPicker_SelectionChanged"/>
-                                        <TextBox Text="{Binding BranchPresetName, UpdateSourceTrigger=PropertyChanged}"
-                                                 Width="160"
-                                                 MinHeight="28"
-                                                 Margin="0,0,6,6"
-                                                 VerticalContentAlignment="Center"
-                                                 ToolTip="Type a custom preset name, then Save"/>
-                                        <Button Content="Load"
-                                                MinWidth="64" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding LoadBranchPresetCommand}"
-                                                ToolTip="Load the named tune+branches preset"/>
-                                        <Button Content="Save"
-                                                MinWidth="64" MinHeight="28" Margin="0,0,6,6"
-                                                Command="{Binding SaveBranchPresetCommand}"
-                                                ToolTip="Save current tune + locks under the name in the box"/>
-                                    </WrapPanel>
+                                    <DockPanel Grid.Row="0" Margin="0,0,0,8" LastChildFill="True">
+                                        <StackPanel DockPanel.Dock="Right"
+                                                    Orientation="Horizontal"
+                                                    VerticalAlignment="Center"
+                                                    Margin="12,0,0,0">
+                                            <TextBlock Text="Preset"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,6,0"
+                                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                            <ComboBox ItemsSource="{Binding BranchPresets}"
+                                                      SelectedItem="{Binding SelectedBranchPreset, Mode=OneWay}"
+                                                      DisplayMemberPath="Name"
+                                                      Width="120"
+                                                      MinHeight="28"
+                                                      Margin="0,0,6,0"
+                                                      VerticalAlignment="Center"
+                                                      ToolTip="Pick an existing preset"
+                                                      SelectionChanged="BranchPresetPicker_SelectionChanged"/>
+                                            <TextBox Text="{Binding BranchPresetName, UpdateSourceTrigger=PropertyChanged}"
+                                                     Width="120"
+                                                     MinHeight="28"
+                                                     Margin="0,0,6,0"
+                                                     VerticalContentAlignment="Center"
+                                                     ToolTip="Custom preset name"/>
+                                            <Button Content="Load"
+                                                    MinWidth="52" MinHeight="28" Margin="0,0,4,0"
+                                                    Command="{Binding LoadBranchPresetCommand}"
+                                                    ToolTip="Load the named tune+branches preset"/>
+                                            <Button Content="Save"
+                                                    MinWidth="52" MinHeight="28"
+                                                    Command="{Binding SaveBranchPresetCommand}"
+                                                    ToolTip="Save current tune + locks under the name in the box"/>
+                                        </StackPanel>
+
+                                        <Menu Background="Transparent"
+                                              VerticalAlignment="Center">
+                                            <MenuItem Header="List" Padding="8,4">
+                                                <MenuItem Header="Remove"
+                                                          Command="{Binding RemoveSessionTrackCommand}"
+                                                          ToolTip="Remove the selected track from this list only"/>
+                                                <MenuItem Header="Remove all"
+                                                          Command="{Binding ClearSessionCommand}"
+                                                          ToolTip="Clear the session list only"/>
+                                                <MenuItem Header="Refresh from cache"
+                                                          Command="{Binding RefreshSessionCommand}"
+                                                          ToolTip="Reload the list from audio/analysis caches"/>
+                                            </MenuItem>
+                                            <MenuItem Header="Delete data" Padding="8,4">
+                                                <MenuItem Header="Captures"
+                                                          Command="{Binding DeleteSessionCapturesCommand}"
+                                                          ToolTip="Delete saved WAV captures for the selected track"/>
+                                                <MenuItem Header="Analysis"
+                                                          Command="{Binding DeleteSessionAnalysisCommand}"
+                                                          ToolTip="Delete saved analysis JSON for the selected track"/>
+                                                <MenuItem Header="Tune + branches"
+                                                          Command="{Binding DeleteSessionTuneCommand}"
+                                                          ToolTip="Delete saved tune settings, locks, and presets"/>
+                                            </MenuItem>
+                                            <MenuItem Header="Export" Padding="8,4">
+                                                <MenuItem Header="Audio…"
+                                                          Command="{Binding ExportSessionAudioCommand}"/>
+                                                <MenuItem Header="Analysis…"
+                                                          Command="{Binding ExportSessionAnalysisCommand}"/>
+                                                <MenuItem Header="Both…"
+                                                          Command="{Binding ExportSessionBothCommand}"/>
+                                            </MenuItem>
+                                            <MenuItem Header="Import…"
+                                                      Padding="8,4"
+                                                      Command="{Binding ImportLoopDataCommand}"
+                                                      ToolTip="Import analysis JSON, tune+branches, and/or capture WAV files"/>
+                                        </Menu>
+                                    </DockPanel>
 
                                     <ListBox Grid.Row="1"
                                              ItemsSource="{Binding SessionTracks}"
@@ -189,12 +204,12 @@
                                              MouseDoubleClick="SessionTracks_MouseDoubleClick">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid Margin="2,6">
+                                            <Grid Margin="2,5">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="140"/>
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel Grid.Column="0" Margin="0,0,8,0">
                                                     <TextBlock Text="{Binding DisplayName}"
@@ -209,43 +224,52 @@
                                                 <StackPanel Grid.Column="1"
                                                             Orientation="Horizontal"
                                                             VerticalAlignment="Center"
-                                                            Margin="0,0,8,0">
-                                                    <Button Content="Play"
-                                                            MinWidth="56" MinHeight="26" Margin="0,0,4,0" Padding="8,2"
-                                                            FontSize="11"
+                                                            Margin="0,0,6,0">
+                                                    <Button Style="{StaticResource SessionIconButtonStyle}"
                                                             Command="{Binding DataContext.PlaySessionTrackCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                             CommandParameter="{Binding}"
-                                                            ToolTip="Play or pause this track"/>
+                                                            ToolTip="Play / pause">
+                                                        <Button.Content>
+                                                            <MultiBinding Converter="{StaticResource SessionPlayGlyphConverter}">
+                                                                <Binding Path="."/>
+                                                                <Binding Path="DataContext.SessionActiveTrackId"
+                                                                         RelativeSource="{RelativeSource AncestorType=ListBox}"/>
+                                                                <Binding Path="DataContext.IsPaused"
+                                                                         RelativeSource="{RelativeSource AncestorType=ListBox}"/>
+                                                            </MultiBinding>
+                                                        </Button.Content>
+                                                    </Button>
+                                                    <Button Content="■"
+                                                            Style="{StaticResource SessionIconButtonStyle}"
+                                                            Margin="0,0,6,0"
+                                                            Command="{Binding DataContext.AbortSessionWorkCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                            ToolTip="Stop analyze/capture or playback"/>
                                                     <Button Content="Analyze"
-                                                            MinWidth="64" MinHeight="26" Margin="0,0,4,0" Padding="8,2"
+                                                            MinWidth="58" MinHeight="26" Padding="6,2"
                                                             FontSize="11"
+                                                            Focusable="False"
                                                             Command="{Binding DataContext.AnalyzeSessionTrackCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                             CommandParameter="{Binding}"
                                                             ToolTip="Capture/analyze this track"/>
-                                                    <Button Content="Abort"
-                                                            MinWidth="56" MinHeight="26" Margin="0,0,0,0" Padding="8,2"
-                                                            FontSize="11"
-                                                            Command="{Binding DataContext.AbortSessionWorkCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                                            ToolTip="Stop analyze/capture or playback"/>
                                                 </StackPanel>
                                                 <ToggleButton Grid.Column="2"
-                                                              Margin="0,0,8,0"
+                                                              Margin="0,0,6,0"
                                                               VerticalAlignment="Center"
+                                                              MinWidth="36"
                                                               MinHeight="22"
-                                                              Padding="8,2"
-                                                              FontSize="10"
+                                                              Padding="4,1"
+                                                              FontSize="9"
                                                               IsChecked="{Binding DataContext.UseLocalPlayback, RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                               IsEnabled="{Binding HasCapture}"
                                                               PreviewMouseLeftButtonDown="SessionLocalWav_PreviewMouseLeftButtonDown"
-                                                              ToolTipService.IsEnabled="False">
+                                                              ToolTip="Toggle Local WAV / Spotify">
                                                     <ToggleButton.Style>
                                                         <Style TargetType="ToggleButton">
                                                             <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
-                                                            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource AppMutedForegroundBrush}"/>
                                                             <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
                                                             <Setter Property="BorderThickness" Value="1"/>
                                                             <Setter Property="Cursor" Value="Hand"/>
-                                                            <Setter Property="ToolTipService.IsEnabled" Value="False"/>
                                                             <Setter Property="Template">
                                                                 <Setter.Value>
                                                                     <ControlTemplate TargetType="ToggleButton">
@@ -254,19 +278,16 @@
                                                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                                                 BorderThickness="{TemplateBinding BorderThickness}"
                                                                                 Padding="{TemplateBinding Padding}"
+                                                                                CornerRadius="2"
                                                                                 SnapsToDevicePixels="True">
                                                                             <ContentPresenter HorizontalAlignment="Center"
-                                                                                              VerticalAlignment="Center"
-                                                                                              RecognizesAccessKey="True"/>
+                                                                                              VerticalAlignment="Center"/>
                                                                         </Border>
                                                                         <ControlTemplate.Triggers>
                                                                             <Trigger Property="IsChecked" Value="True">
                                                                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppSelectedBrush}"/>
                                                                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
                                                                                 <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
-                                                                            </Trigger>
-                                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
                                                                             </Trigger>
                                                                             <Trigger Property="IsEnabled" Value="False">
                                                                                 <Setter Property="Opacity" Value="0.4"/>
@@ -275,20 +296,30 @@
                                                                     </ControlTemplate>
                                                                 </Setter.Value>
                                                             </Setter>
-                                                            <Setter Property="Content" Value="Spotify"/>
+                                                            <Setter Property="Content" Value="SP"/>
                                                             <Style.Triggers>
                                                                 <Trigger Property="IsChecked" Value="True">
-                                                                    <Setter Property="Content" Value="Local WAV"/>
+                                                                    <Setter Property="Content" Value="WAV"/>
                                                                 </Trigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </ToggleButton.Style>
                                                 </ToggleButton>
-                                                <TextBlock Grid.Column="3"
-                                                           Text="{Binding StatusText}"
-                                                           VerticalAlignment="Center"
-                                                           FontSize="11"
-                                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                                <local:MarqueeTextBlock Grid.Column="3"
+                                                                        Height="18"
+                                                                        VerticalAlignment="Center"
+                                                                        FontSize="10"
+                                                                        AlwaysScroll="True"
+                                                                        Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                                        ToolTip="{Binding StatusText}">
+                                                    <local:MarqueeTextBlock.Text>
+                                                        <MultiBinding Converter="{StaticResource SessionStatusMarqueeConverter}">
+                                                            <Binding Path="."/>
+                                                            <Binding Path="DataContext.UseLocalPlayback"
+                                                                     RelativeSource="{RelativeSource AncestorType=ListBox}"/>
+                                                        </MultiBinding>
+                                                    </local:MarqueeTextBlock.Text>
+                                                </local:MarqueeTextBlock>
                                             </Grid>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>

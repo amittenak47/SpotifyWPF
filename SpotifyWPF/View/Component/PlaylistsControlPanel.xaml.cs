@@ -33,11 +33,18 @@ namespace SpotifyWPF.View.Component
                 nameof(ExpandedHeight),
                 typeof(double),
                 typeof(PlaylistsControlPanel),
-                new FrameworkPropertyMetadata(220.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnExpandedHeightChanged));
+                new FrameworkPropertyMetadata(280.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnExpandedHeightChanged));
+
+        public static readonly DependencyProperty FillRemainingSpaceProperty =
+            DependencyProperty.Register(
+                nameof(FillRemainingSpace),
+                typeof(bool),
+                typeof(PlaylistsControlPanel),
+                new PropertyMetadata(false, OnFillRemainingSpaceChanged));
 
         private const double PeekHeight = 32;
         private const double MinExpandedHeight = 120;
-        private const double MaxExpandedHeight = 520;
+        private const double MaxExpandedHeight = 720;
         private const double PeekDimOpacity = 0.0;
         private const double PeekFullOpacity = 1.0;
         private const double PeekFadeMs = 180;
@@ -101,10 +108,25 @@ namespace SpotifyWPF.View.Component
             set => SetValue(ExpandedHeightProperty, value);
         }
 
+        public bool FillRemainingSpace
+        {
+            get => (bool)GetValue(FillRemainingSpaceProperty);
+            set => SetValue(FillRemainingSpaceProperty, value);
+        }
+
         private static void OnExpandedHeightChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (d is PlaylistsControlPanel panel && panel._isOpen && !panel._isResizing)
+            if (!(d is PlaylistsControlPanel panel) || panel._isResizing)
+                return;
+
+            if (panel._isOpen && !panel.FillRemainingSpace)
                 panel.Height = ClampExpandedHeight(panel.ExpandedHeight);
+        }
+
+        private static void OnFillRemainingSpaceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is PlaylistsControlPanel panel)
+                panel.ApplyLayoutMode();
         }
 
         private static void OnIsExpandedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -117,17 +139,41 @@ namespace SpotifyWPF.View.Component
                 panel.ApplyOpenImmediate();
             else if (!expanded && panel._isOpen)
                 panel.SlideClosed();
+            else if (expanded && panel._isOpen)
+                panel.ApplyLayoutMode();
+        }
+
+        private void ApplyLayoutMode()
+        {
+            if (!_isOpen)
+                return;
+
+            BeginAnimation(HeightProperty, null);
+            BeginAnimation(OpacityProperty, null);
+            Opacity = PeekFullOpacity;
+
+            if (FillRemainingSpace)
+            {
+                Height = double.NaN;
+                VerticalAlignment = VerticalAlignment.Stretch;
+                if (ResizeBar != null)
+                    ResizeBar.IsEnabled = false;
+            }
+            else
+            {
+                VerticalAlignment = VerticalAlignment.Bottom;
+                Height = ClampExpandedHeight(ExpandedHeight);
+                if (ResizeBar != null)
+                    ResizeBar.IsEnabled = true;
+            }
         }
 
         private void ApplyOpenImmediate()
         {
             _isOpen = true;
-            BeginAnimation(HeightProperty, null);
-            BeginAnimation(OpacityProperty, null);
-            Height = ClampExpandedHeight(ExpandedHeight);
-            Opacity = PeekFullOpacity;
             if (!IsExpanded)
                 IsExpanded = true;
+            ApplyLayoutMode();
         }
 
         private void Root_MouseEnter(object sender, MouseEventArgs e)
@@ -157,13 +203,26 @@ namespace SpotifyWPF.View.Component
             _isOpen = true;
             IsExpanded = true;
             AnimatePeekOpacity(PeekFullOpacity);
-            AnimateHeight(ClampExpandedHeight(ExpandedHeight));
+            if (FillRemainingSpace)
+            {
+                ApplyLayoutMode();
+            }
+            else
+            {
+                AnimateHeight(ClampExpandedHeight(ExpandedHeight));
+            }
         }
 
         private void SlideClosed()
         {
             _isOpen = false;
             IsExpanded = false;
+            VerticalAlignment = VerticalAlignment.Bottom;
+            if (ResizeBar != null)
+                ResizeBar.IsEnabled = true;
+            // Restore a concrete height before peek animation when leaving fill mode.
+            if (double.IsNaN(Height))
+                Height = ClampExpandedHeight(ExpandedHeight);
             AnimateHeight(PeekHeight);
             AnimatePeekOpacity(IsMouseOver ? PeekFullOpacity : PeekDimOpacity);
         }
@@ -234,7 +293,7 @@ namespace SpotifyWPF.View.Component
 
         private void ResizeBar_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (!_isOpen)
+            if (!_isOpen || FillRemainingSpace)
                 return;
 
             _isResizing = true;
@@ -315,7 +374,8 @@ namespace SpotifyWPF.View.Component
                 IsExpanded = true;
                 BeginAnimation(OpacityProperty, null);
                 Opacity = PeekFullOpacity;
-                Height = ClampExpandedHeight(ExpandedHeight);
+                if (!FillRemainingSpace)
+                    Height = ClampExpandedHeight(ExpandedHeight);
             }
         }
 

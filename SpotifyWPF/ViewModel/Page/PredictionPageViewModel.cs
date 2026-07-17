@@ -328,6 +328,7 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     RaisePropertyChanged(nameof(ShowPauseIcon));
                     RaisePropertyChanged(nameof(SessionPlayButtonText));
+                    RaisePropertyChanged(nameof(SessionActiveTrackId));
                     _visualEnergy.SetTransport(PositionMs, value);
                 }
             }
@@ -488,6 +489,7 @@ namespace SpotifyWPF.ViewModel.Page
                     ExportSessionBothCommand?.RaiseCanExecuteChanged();
                     RefreshSessionCommand?.RaiseCanExecuteChanged();
                     RaisePropertyChanged(nameof(SessionPlayButtonText));
+                    RaisePropertyChanged(nameof(SessionActiveTrackId));
                     RefreshLocalPlaybackAvailability();
                     RefreshTrackStatusHud();
                 }
@@ -1355,6 +1357,7 @@ namespace SpotifyWPF.ViewModel.Page
             PositionMs = 0;
             RaisePropertyChanged(nameof(ShowPauseIcon));
             RaisePropertyChanged(nameof(SessionPlayButtonText));
+            RaisePropertyChanged(nameof(SessionActiveTrackId));
             RaisePropertyChanged(nameof(ScrubberPositionMs));
             RaisePropertyChanged(nameof(PositionText));
             NotifyNowPlayingDisplayChanged();
@@ -1622,6 +1625,9 @@ namespace SpotifyWPF.ViewModel.Page
         private string ActivePlaybackTrackId =>
             _loopController.CurrentTrackId ?? _currentPlay?.TrackId;
 
+        /// <summary>Public for session-row play/pause glyph bindings.</summary>
+        public string SessionActiveTrackId => ActivePlaybackTrackId;
+
         public RelayCommand RefreshPredictionsCommand { get; }
 
         public RelayCommand<ScoredTrack> PlayPredictionCommand { get; }
@@ -1828,6 +1834,7 @@ namespace SpotifyWPF.ViewModel.Page
             ExportSessionBothCommand?.RaiseCanExecuteChanged();
             ClearSessionCommand?.RaiseCanExecuteChanged();
             RaisePropertyChanged(nameof(SessionPlayButtonText));
+            RaisePropertyChanged(nameof(SessionActiveTrackId));
             RingScrubToCommand.RaiseCanExecuteChanged();
         }
 
@@ -2228,6 +2235,7 @@ namespace SpotifyWPF.ViewModel.Page
                 IsPaused = state.Paused;
                 RaisePropertyChanged(nameof(ShowPauseIcon));
                 RaisePropertyChanged(nameof(SessionPlayButtonText));
+                RaisePropertyChanged(nameof(SessionActiveTrackId));
                 RaisePropertyChanged(nameof(HasScrubbableTrack));
                 if (!_isUserScrubbing)
                     RaisePropertyChanged(nameof(ScrubberPositionMs));
@@ -3122,6 +3130,7 @@ namespace SpotifyWPF.ViewModel.Page
             ExportSessionBothCommand?.RaiseCanExecuteChanged();
             AbortSessionWorkCommand?.RaiseCanExecuteChanged();
             RaisePropertyChanged(nameof(SessionPlayButtonText));
+            RaisePropertyChanged(nameof(SessionActiveTrackId));
         }
 
         private static void SyncSessionTrackCacheFlags(LoopLabSessionTrack track)

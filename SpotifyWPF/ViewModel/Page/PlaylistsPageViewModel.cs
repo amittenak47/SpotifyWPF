@@ -112,6 +112,7 @@ namespace SpotifyWPF.ViewModel.Page
             ToggleMarkCommand = new RelayCommand<IList>(ToggleMark);
             DeletePlaylistsCommand = new RelayCommand(async () => await DeletePlaylistsAsync(), CanDeleteMarkedPlaylists);
             ToggleDeleteQueueCommand = new RelayCommand<IList>(ToggleDeleteQueue);
+            EnqueueDeleteKeyCommand = new RelayCommand<IList>(EnqueueDeleteSelectionOnly);
             DeleteAllToQueueCommand = new RelayCommand(DeleteAllToQueue, CanDeleteAllToQueue);
             RefreshDeletionResultsCommand = new RelayCommand(RefreshDeletionResults);
             RefreshCombinedCommand = new RelayCommand<IList>(RefreshCombined);
@@ -173,7 +174,47 @@ namespace SpotifyWPF.ViewModel.Page
         public bool IsControlsPanelExpanded
         {
             get => _isControlsPanelExpanded;
-            set => Set(ref _isControlsPanelExpanded, value);
+            set
+            {
+                if (Set(ref _isControlsPanelExpanded, value))
+                    RaisePropertyChanged(nameof(FillControlsPanel));
+            }
+        }
+
+        private bool _isPlaylistsSectionExpanded = true;
+
+        public bool IsPlaylistsSectionExpanded
+        {
+            get => _isPlaylistsSectionExpanded;
+            set
+            {
+                if (Set(ref _isPlaylistsSectionExpanded, value))
+                    RaisePropertyChanged(nameof(FillControlsPanel));
+            }
+        }
+
+        /// <summary>
+        /// When Playlists is collapsed and Controls is open, Controls stretches to fill leftover space.
+        /// </summary>
+        public bool FillControlsPanel => IsControlsPanelExpanded && !IsPlaylistsSectionExpanded;
+
+        private double _controlsPanelHeight = 280;
+
+        public double ControlsPanelHeight
+        {
+            get => _controlsPanelHeight;
+            set => Set(ref _controlsPanelHeight, value);
+        }
+
+        /// <summary>Multi-selection from the Playlists grid (for Delete / keyboard enqueue).</summary>
+        public System.Collections.IList SelectedPlaylistItems { get; private set; }
+
+        public void SetSelectedPlaylistItems(System.Collections.IList items)
+        {
+            SelectedPlaylistItems = items;
+            RaisePropertyChanged(nameof(SelectedPlaylistItems));
+            ToggleDeleteQueueCommand?.RaiseCanExecuteChanged();
+            EnqueueDeleteKeyCommand?.RaiseCanExecuteChanged();
         }
 
         public ObservableCollection<QueuedPlaylistAction> QueuedActions => _actionQueue.QueuedActions;
@@ -335,6 +376,8 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand DeletePlaylistsCommand { get; }
 
         public RelayCommand<IList> ToggleDeleteQueueCommand { get; }
+
+        public RelayCommand<IList> EnqueueDeleteKeyCommand { get; }
 
         public RelayCommand DeleteAllToQueueCommand { get; }
 
@@ -894,6 +937,9 @@ namespace SpotifyWPF.ViewModel.Page
         /// </summary>
         private void ToggleDeleteQueue(IList items)
         {
+            if (items == null || items.Count == 0)
+                items = SelectedPlaylistItems as IList;
+
             var rows = ExtractGridItems(items);
             if (rows.Count == 0)
             {
@@ -956,6 +1002,10 @@ namespace SpotifyWPF.ViewModel.Page
         {
             var availablePlaylists = _localStore.LoadAvailablePlaylists();
             var deletionQueue = _localStore.LoadDeletionQueue();
+            var acknowledged = 0;
+            var clearedDeleted = 0;
+            var restoredFailed = 0;
+            var restoredIds = new List<string>();
 
             foreach (var stagedPlaylist in deletionQueue.Values.ToList())
             {
@@ -965,20 +1015,29 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     case DeletionStatus.Deleted:
                         if (stagedPlaylist.ResultsAcknowledged)
-                            deletionQueue.Remove(stagedPlaylist.Playlist.Id);
-                        else
-                            stagedPlaylist.ResultsAcknowledged = true;
-                        break;
-                    case DeletionStatus.Failed:
-                        if (stagedPlaylist.ResultsAcknowledged)
                         {
-                            stagedPlaylist.DeletionStatus = DeletionStatus.Pending;
-                            stagedPlaylist.IsMarkedForDeletion = true;
-                            stagedPlaylist.ResultsAcknowledged = false;
+                            deletionQueue.Remove(stagedPlaylist.Playlist.Id);
+                            clearedDeleted++;
                         }
                         else
                         {
                             stagedPlaylist.ResultsAcknowledged = true;
+                            acknowledged++;
+                        }
+                        break;
+                    case DeletionStatus.Failed:
+                        if (stagedPlaylist.ResultsAcknowledged)
+                        {
+                            // Second refresh: restore failed playlists to the normal list.
+                            availablePlaylists[stagedPlaylist.Playlist.Id] = stagedPlaylist.Playlist;
+                            deletionQueue.Remove(stagedPlaylist.Playlist.Id);
+                            restoredIds.Add(stagedPlaylist.Playlist.Id);
+                            restoredFailed++;
+                        }
+                        else
+                        {
+                            stagedPlaylist.ResultsAcknowledged = true;
+                            acknowledged++;
                         }
                         break;
                 }
@@ -986,9 +1045,59 @@ namespace SpotifyWPF.ViewModel.Page
 
             _localStore.SaveAvailablePlaylists(availablePlaylists);
             _localStore.SaveDeletionQueue(deletionQueue);
+
+            if (restoredIds.Count > 0)
+                RemovePlaylistIdsFromQueuedDeletes(restoredIds);
+
             RefreshGridFromLocalFiles();
             RaiseDeletionCommandStates();
-            Log("Refreshed staged deletion results.");
+
+            if (clearedDeleted > 0 || restoredFailed > 0)
+                Log($"Refresh: cleared {clearedDeleted} deleted row(s), restored {restoredFailed} failed playlist(s) to the list.");
+            else if (acknowledged > 0)
+                Log($"Refresh: acknowledged {acknowledged} delete result(s). Refresh again to clear deleted / restore failed.");
+            else
+                Log("Refresh: no delete results to update.");
+        }
+
+        /// <summary>
+        /// Enqueue selected playlists for deletion (does not unqueue). Used by Delete/Backspace keys.
+        /// </summary>
+        private void EnqueueDeleteSelectionOnly(IList items)
+        {
+            if (items == null || items.Count == 0)
+                items = SelectedPlaylistItems as IList;
+
+            var rows = ExtractGridItems(items);
+            var toStage = rows
+                .Where(r => r.IsLoaded && r.Playlist != null)
+                .Select(r => r.Playlist)
+                .ToList();
+
+            if (toStage.Count == 0)
+            {
+                // Already queued selection: still ensure they are marked and present in the action queue.
+                var staged = rows
+                    .Where(r => r.IsStaged && r.DeletionItem != null &&
+                                r.DeletionItem.DeletionStatus != DeletionStatus.Deleted)
+                    .Select(r => r.DeletionItem)
+                    .ToList();
+
+                if (staged.Count == 0)
+                {
+                    Log("Select one or more playlists to enqueue for deletion.");
+                    return;
+                }
+
+                foreach (var item in staged)
+                    item.IsMarkedForDeletion = true;
+
+                EnqueueDeleteForIds(staged.Select(s => s.Playlist.Id).Where(id => !string.IsNullOrWhiteSpace(id)).ToList());
+                PersistStagedDeletionGridToStore();
+                return;
+            }
+
+            StagePlaylists(toStage);
         }
 
         private async Task RefreshSelectedPlaylistsAsync(IList selectedItems)
