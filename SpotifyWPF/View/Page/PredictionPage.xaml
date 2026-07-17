@@ -72,7 +72,7 @@
                                 Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"
                                 MouseEnter="HoverZone_MouseEnter"
                                 MouseLeave="HoverZone_MouseLeave">
-                            <StackPanel>
+                            <Grid>
                                 <TextBox x:Name="TrackSearchBox"
                                          Width="560"
                                          Opacity="0.35"
@@ -87,9 +87,9 @@
                                          BorderThickness="0"
                                          CaretBrush="{DynamicResource AppForegroundBrush}"
                                          Foreground="{DynamicResource AppForegroundBrush}"
-                                         ToolTip="Track ID, URI, or Spotify link — press Enter to play"
+                                         ToolTip="Search Spotify, or paste a track ID / URI — Enter to play"
                                          PreviewKeyDown="TrackSearchBox_PreviewKeyDown"/>
-                            </StackPanel>
+                            </Grid>
                         </Border>
 
                         <Grid Grid.Row="1"
@@ -107,8 +107,8 @@
 
                             <!-- Play/pause only — keep small so the gray disc can receive hold-to-scan. -->
                             <Border x:Name="WheelHoverZone"
-                                    Width="44"
-                                    Height="44"
+                                    Width="52"
+                                    Height="52"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     Background="Transparent"
@@ -117,9 +117,9 @@
                                     MouseEnter="HoverZone_MouseEnter"
                                     MouseLeave="HoverZone_MouseLeave">
                                 <component:TransportWheelControl x:Name="TransportWheel"
-                                                                 Width="40"
-                                                                 Height="40"
-                                                                 Opacity="0.28"
+                                                                 Width="48"
+                                                                 Height="48"
+                                                                 Opacity="0.42"
                                                                  HorizontalAlignment="Center"
                                                                  VerticalAlignment="Center"
                                                                  DataContext="{Binding}"/>
@@ -128,16 +128,99 @@
                     </Grid>
                 </Viewbox>
 
-                <!-- Scrubber clock footnote -->
-                <TextBlock HorizontalAlignment="Right"
-                           VerticalAlignment="Bottom"
-                           Margin="0,0,14,10"
-                           Panel.ZIndex="30"
-                           FontSize="11"
-                           Opacity="0.7"
-                           Foreground="{DynamicResource AppMutedForegroundBrush}"
-                           Text="{Binding PositionText}"
-                           Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <!-- Search results picker (below search, over the stage) -->
+                <Border x:Name="SearchResultsPopup"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Top"
+                        Margin="0,56,0,0"
+                        MinWidth="320"
+                        MaxWidth="520"
+                        MaxHeight="240"
+                        Panel.ZIndex="50"
+                        Background="#F0121214"
+                        BorderBrush="{DynamicResource AppBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Opacity="0"
+                        Visibility="Collapsed"
+                        IsHitTestVisible="False"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.35" Direction="270"/>
+                    </Border.Effect>
+                    <ListBox ItemsSource="{Binding TrackSearchResults}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Focusable" Value="False"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Button HorizontalContentAlignment="Left"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Padding="12,9"
+                                        Cursor="Hand"
+                                        Command="{Binding DataContext.SelectTrackSearchHitCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                        CommandParameter="{Binding}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource AppForegroundBrush}"/>
+                                        <TextBlock Text="{Binding Artist}"
+                                                   FontSize="11"
+                                                   Opacity="0.75"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <!-- Repeat (left) + scrubber clock (right) -->
+                <DockPanel VerticalAlignment="Bottom"
+                           Margin="12,0,14,10"
+                           Panel.ZIndex="45"
+                           LastChildFill="False"
+                           Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Button DockPanel.Dock="Left"
+                            Width="32" Height="28"
+                            FontFamily="Segoe MDL2 Assets"
+                            FontSize="13"
+                            Focusable="False"
+                            ToolTip="Repeat session list"
+                            Command="{Binding ToggleSessionRepeatCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                <Setter Property="Content" Value="&#xE8EE;"/>
+                                <Setter Property="Opacity" Value="0.45"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SessionRepeatEnabled}" Value="True">
+                                        <Setter Property="Opacity" Value="1"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <TextBlock DockPanel.Dock="Right"
+                               VerticalAlignment="Center"
+                               FontSize="11"
+                               Opacity="0.7"
+                               Foreground="{DynamicResource AppMutedForegroundBrush}"
+                               Text="{Binding PositionText}"/>
+                </DockPanel>
 
                 <!-- Title + status + SSM stacked top-left (SSM below details, not over them) -->
                 <StackPanel HorizontalAlignment="Left"

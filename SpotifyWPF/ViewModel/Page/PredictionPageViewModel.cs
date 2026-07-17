@@ -60,6 +60,8 @@ namespace SpotifyWPF.ViewModel.Page
 
         private readonly IVisualEffectsStore _visualEffectsStore;
 
+        private readonly IPlaylistLocalStore _playlistLocalStore;
+
         private readonly VisualEffectsSettings _visualEffectsSettings;
 
         /// <summary>Shared beat/energy state feeding the plasma equalizer and fractal background.</summary>
@@ -96,12 +98,14 @@ namespace SpotifyWPF.ViewModel.Page
             ILoopRegionStore loopRegionStore,
             IJukeboxSettingsStore jukeboxSettings,
             ILoopLabSessionStore sessionStore,
-            IVisualEffectsStore visualEffectsStore)
+            IVisualEffectsStore visualEffectsStore,
+            IPlaylistLocalStore playlistLocalStore)
         {
             _loopRegionStore = loopRegionStore;
             _jukeboxSettings = jukeboxSettings;
             _sessionStore = sessionStore;
             _visualEffectsStore = visualEffectsStore;
+            _playlistLocalStore = playlistLocalStore;
             _visualEffectsSettings = visualEffectsStore.Get();
             _visualEffectsStore.SettingsChanged += (_, __) =>
             {
@@ -125,6 +129,8 @@ namespace SpotifyWPF.ViewModel.Page
 
             ActivityLog = new ActivityLogViewModel { NewestFirst = true };
             SessionTracks = new ObservableCollection<LoopLabSessionTrack>();
+            LibraryPlaylists = new ObservableCollection<PlaylistCacheItem>();
+            TrackSearchResults = new ObservableCollection<TrackSearchHit>();
 
             try
             {
@@ -132,6 +138,7 @@ namespace SpotifyWPF.ViewModel.Page
                 if (purged > 0)
                     System.Console.WriteLine($"Purged {purged} incomplete capture/analysis artifact(s) on startup.");
                 ReloadSessionTracks(silent: true);
+                RefreshLibraryPlaylists();
             }
             catch (System.Exception ex)
             {
@@ -171,8 +178,17 @@ namespace SpotifyWPF.ViewModel.Page
             AnalyzeSessionTrackCommand = new RelayCommand<LoopLabSessionTrack>(
                 async track => await AnalyzeSessionTrackAsync(track),
                 track => (track ?? SelectedSessionTrack) != null && !IsAnalyzing);
-            PreviousSessionTrackCommand = new RelayCommand(() => NavigateSessionTrack(-1), () => CanNavigateSessionTrack(-1));
-            NextSessionTrackCommand = new RelayCommand(() => NavigateSessionTrack(1), () => CanNavigateSessionTrack(1));
+            PreviousSessionTrackCommand = new RelayCommand(async () => await NavigateAndPlaySessionTrackAsync(-1), () => CanNavigateSessionTrack(-1));
+            NextSessionTrackCommand = new RelayCommand(async () => await NavigateAndPlaySessionTrackAsync(1), () => CanNavigateSessionTrack(1));
+            ToggleSessionRepeatCommand = new RelayCommand(() => SessionRepeatEnabled = !SessionRepeatEnabled);
+            ToggleLibrarySidebarCommand = new RelayCommand(() => IsLibrarySidebarOpen = !IsLibrarySidebarOpen);
+            RefreshLibraryPlaylistsCommand = new RelayCommand(RefreshLibraryPlaylists);
+            AddLibraryPlaylistToSessionCommand = new RelayCommand<PlaylistCacheItem>(
+                async playlist => await AddLibraryPlaylistToSessionAsync(playlist),
+                playlist => playlist != null && _spotify.Api != null);
+            SelectTrackSearchHitCommand = new RelayCommand<TrackSearchHit>(
+                async hit => await SelectTrackSearchHitAsync(hit),
+                hit => hit != null && !string.IsNullOrWhiteSpace(hit.Id));
             PlaySessionTrackCommand = new RelayCommand<LoopLabSessionTrack>(
                 async track => await PlaySessionTrackAsync(track),
                 track => (track ?? SelectedSessionTrack) != null && CanPlayTransport());
@@ -239,6 +255,7 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     AnalyzeInputCommand?.RaiseCanExecuteChanged();
                     PlayFromInputCommand?.RaiseCanExecuteChanged();
+                    _ = RunTrackSearchAsync(value);
                 }
             }
         }
@@ -459,6 +476,56 @@ namespace SpotifyWPF.ViewModel.Page
         public ActivityLogViewModel ActivityLog { get; }
 
         public ObservableCollection<LoopLabSessionTrack> SessionTracks { get; }
+
+        public ObservableCollection<PlaylistCacheItem> LibraryPlaylists { get; }
+
+        public ObservableCollection<TrackSearchHit> TrackSearchResults { get; }
+
+        private PlaylistCacheItem _selectedLibraryPlaylist;
+
+        public PlaylistCacheItem SelectedLibraryPlaylist
+        {
+            get => _selectedLibraryPlaylist;
+            set => Set(ref _selectedLibraryPlaylist, value);
+        }
+
+        private bool _isLibrarySidebarOpen;
+
+        public bool IsLibrarySidebarOpen
+        {
+            get => _isLibrarySidebarOpen;
+            set
+            {
+                if (Set(ref _isLibrarySidebarOpen, value) && value)
+                    RefreshLibraryPlaylists();
+            }
+        }
+
+        private bool _sessionRepeatEnabled;
+
+        public bool SessionRepeatEnabled
+        {
+            get => _sessionRepeatEnabled;
+            set
+            {
+                if (Set(ref _sessionRepeatEnabled, value))
+                {
+                    RaisePropertyChanged(nameof(SessionRepeatGlyph));
+                    PreviousSessionTrackCommand?.RaiseCanExecuteChanged();
+                    NextSessionTrackCommand?.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        public string SessionRepeatGlyph => SessionRepeatEnabled ? "🔁" : "➡";
+
+        private bool _isTrackSearchOpen;
+
+        public bool IsTrackSearchOpen
+        {
+            get => _isTrackSearchOpen;
+            set => Set(ref _isTrackSearchOpen, value);
+        }
 
         private LoopLabSessionTrack _selectedSessionTrack;
 
@@ -1590,6 +1657,16 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand PreviousSessionTrackCommand { get; }
 
         public RelayCommand NextSessionTrackCommand { get; }
+
+        public RelayCommand ToggleSessionRepeatCommand { get; }
+
+        public RelayCommand ToggleLibrarySidebarCommand { get; }
+
+        public RelayCommand RefreshLibraryPlaylistsCommand { get; }
+
+        public RelayCommand<PlaylistCacheItem> AddLibraryPlaylistToSessionCommand { get; }
+
+        public RelayCommand<TrackSearchHit> SelectTrackSearchHitCommand { get; }
 
         public RelayCommand<LoopLabSessionTrack> PlaySessionTrackCommand { get; }
 
@@ -3195,6 +3272,9 @@ namespace SpotifyWPF.ViewModel.Page
             if (SessionTracks.Count == 0)
                 return false;
 
+            if (SessionRepeatEnabled)
+                return true;
+
             var index = GetSessionTrackIndex();
             var targetIndex = index < 0
                 ? (delta > 0 ? 0 : SessionTracks.Count - 1)
@@ -3203,20 +3283,190 @@ namespace SpotifyWPF.ViewModel.Page
             return targetIndex >= 0 && targetIndex < SessionTracks.Count;
         }
 
-        private void NavigateSessionTrack(int delta)
+        private async Task NavigateAndPlaySessionTrackAsync(int delta)
         {
             if (SessionTracks.Count == 0)
                 return;
 
             var index = GetSessionTrackIndex();
-            var targetIndex = index < 0
-                ? (delta > 0 ? 0 : SessionTracks.Count - 1)
-                : index + delta;
+            int targetIndex;
+            if (index < 0)
+            {
+                targetIndex = delta > 0 ? 0 : SessionTracks.Count - 1;
+            }
+            else if (SessionRepeatEnabled)
+            {
+                targetIndex = (index + delta) % SessionTracks.Count;
+                if (targetIndex < 0)
+                    targetIndex += SessionTracks.Count;
+            }
+            else
+            {
+                targetIndex = index + delta;
+            }
 
             if (targetIndex < 0 || targetIndex >= SessionTracks.Count)
                 return;
 
             SelectedSessionTrack = SessionTracks[targetIndex];
+            await PlaySessionTrackAsync(SelectedSessionTrack);
+        }
+
+        private void NavigateSessionTrack(int delta)
+        {
+            _ = NavigateAndPlaySessionTrackAsync(delta);
+        }
+
+        private void RefreshLibraryPlaylists()
+        {
+            if (_playlistLocalStore == null)
+                return;
+
+            var items = _playlistLocalStore.LoadAvailablePlaylists().Values
+                .OrderBy(p => p.Name)
+                .ToList();
+
+            LibraryPlaylists.Clear();
+            foreach (var item in items)
+                LibraryPlaylists.Add(item);
+
+            RaisePropertyChanged(nameof(HasLibraryPlaylists));
+        }
+
+        public bool HasLibraryPlaylists => LibraryPlaylists.Count > 0;
+
+        private async Task AddLibraryPlaylistToSessionAsync(PlaylistCacheItem playlist)
+        {
+            if (playlist == null || string.IsNullOrWhiteSpace(playlist.Id) || _spotify.Api == null)
+                return;
+
+            try
+            {
+                Status = $"Adding tracks from '{playlist.Name}'…";
+                var added = 0;
+                var offset = 0;
+
+                while (true)
+                {
+                    var page = await _spotify.Api.Playlists.GetItems(playlist.Id,
+                        new SpotifyAPI.Web.PlaylistGetItemsRequest(SpotifyAPI.Web.PlaylistGetItemsRequest.AdditionalTypes.All)
+                        {
+                            Limit = 50,
+                            Offset = offset
+                        });
+
+                    if (page?.Items == null || page.Items.Count == 0)
+                        break;
+
+                    foreach (var item in page.Items)
+                    {
+                        if (!(item.Track is SpotifyAPI.Web.FullTrack track) || string.IsNullOrWhiteSpace(track.Id))
+                            continue;
+
+                        var artist = track.Artists != null && track.Artists.Count > 0
+                            ? string.Join(", ", track.Artists.Select(a => a.Name))
+                            : "";
+                        UpsertSessionTrack(track.Id, track.Name ?? track.Id, artist);
+                        added++;
+                    }
+
+                    offset += page.Items.Count;
+                    if (page.Next == null || page.Items.Count == 0)
+                        break;
+                }
+
+                Status = added > 0
+                    ? $"Added {added} track(s) from '{playlist.Name}'."
+                    : $"No playable tracks in '{playlist.Name}'.";
+                Log(Status);
+            }
+            catch (Exception ex)
+            {
+                Status = "Failed to add playlist tracks.";
+                Log($"Failed to add playlist '{playlist.Name}' to session: {ex.Message}");
+            }
+        }
+
+        private CancellationTokenSource _trackSearchCts;
+
+        private async Task RunTrackSearchAsync(string query)
+        {
+            _trackSearchCts?.Cancel();
+            _trackSearchCts?.Dispose();
+            _trackSearchCts = new CancellationTokenSource();
+            var token = _trackSearchCts.Token;
+
+            if (_spotify.Api == null || string.IsNullOrWhiteSpace(query) || query.Length < 2)
+            {
+                TrackSearchResults.Clear();
+                IsTrackSearchOpen = false;
+                return;
+            }
+
+            // Skip pure IDs / URIs — those go through PlayFromInput.
+            if (ParseTrackId(query) != null && query.IndexOf(' ') < 0)
+            {
+                TrackSearchResults.Clear();
+                IsTrackSearchOpen = false;
+                return;
+            }
+
+            try
+            {
+                await Task.Delay(220, token);
+
+                var req = new SpotifyAPI.Web.SearchRequest(SpotifyAPI.Web.SearchRequest.Types.Track, query)
+                {
+                    Limit = 8,
+                    Offset = 0
+                };
+                var resp = await _spotify.Api.Search.Item(req);
+                token.ThrowIfCancellationRequested();
+
+                var hits = resp?.Tracks?.Items?
+                    .Where(t => t != null && !string.IsNullOrWhiteSpace(t.Id))
+                    .Select(t => new TrackSearchHit
+                    {
+                        Id = t.Id,
+                        Title = t.Name,
+                        Artist = t.Artists != null && t.Artists.Count > 0
+                            ? string.Join(", ", t.Artists.Select(a => a.Name))
+                            : ""
+                    })
+                    .ToList() ?? new List<TrackSearchHit>();
+
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    if (token.IsCancellationRequested)
+                        return;
+
+                    TrackSearchResults.Clear();
+                    foreach (var hit in hits)
+                        TrackSearchResults.Add(hit);
+                    IsTrackSearchOpen = TrackSearchResults.Count > 0;
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // superseded by a newer query
+            }
+            catch (Exception ex)
+            {
+                Log($"Track search failed: {ex.Message}", true);
+                TrackSearchResults.Clear();
+                IsTrackSearchOpen = false;
+            }
+        }
+
+        private async Task SelectTrackSearchHitAsync(TrackSearchHit hit)
+        {
+            if (hit == null || string.IsNullOrWhiteSpace(hit.Id))
+                return;
+
+            IsTrackSearchOpen = false;
+            TrackInput = hit.Id;
+            UpsertSessionTrack(hit.Id, hit.Title ?? hit.Id, hit.Artist ?? "");
+            await PlayTrackAsync(hit.Id, "search-picker");
         }
 
         private void UpsertSessionTrack(string trackId, string title, string artist)

@@ -6,12 +6,12 @@
 
     <UserControl.Resources>
         <Style x:Key="TransportWheelCenterButtonStyle" TargetType="{x:Type Button}">
-            <Setter Property="Width" Value="34"/>
-            <Setter Property="Height" Value="34"/>
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="36"/>
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="#CC1A1A1C"/>
+            <Setter Property="BorderBrush" Value="#66FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
             <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -20,13 +20,14 @@
                         <Grid Width="{TemplateBinding Width}"
                               Height="{TemplateBinding Height}"
                               Background="#01FFFFFF">
+                            <Ellipse Fill="#33000000" Margin="-2"/>
                             <Border x:Name="Border"
                                     HorizontalAlignment="Stretch"
                                     VerticalAlignment="Stretch"
-                                    Background="Transparent"
+                                    Background="{TemplateBinding Background}"
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="17"
+                                    CornerRadius="18"
                                     SnapsToDevicePixels="True"/>
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
@@ -34,6 +35,10 @@
                                               IsHitTestVisible="False"/>
                         </Grid>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#AAFFFFFF"/>
+                                <Setter TargetName="Border" Property="Background" Value="#E01E1E22"/>
+                            </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Border" Property="Opacity" Value="0.4"/>
                             </Trigger>
@@ -45,9 +50,9 @@
 
         <Style x:Key="TransportWheelGlyphStyle" TargetType="{x:Type TextBlock}">
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Width" Value="16"/>
-            <Setter Property="Height" Value="16"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
             <Setter Property="TextAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
@@ -57,19 +62,20 @@
 
         <Style x:Key="TransportWheelSliceIconStyle" TargetType="{x:Type TextBlock}">
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="12"/>
             <Setter Property="Width" Value="16"/>
             <Setter Property="Height" Value="16"/>
             <Setter Property="TextAlignment" Value="Center"/>
-            <Setter Property="Foreground" Value="#AAFFFFFF"/>
-            <Setter Property="Opacity" Value="0.55"/>
+            <Setter Property="Foreground" Value="#CCFFFFFF"/>
+            <Setter Property="Opacity" Value="0.7"/>
             <Setter Property="IsHitTestVisible" Value="False"/>
         </Style>
 
-        <PathGeometry x:Key="WheelNorthWestWedge" Figures="M 16.54,67.46 A 36,36 0 0,1 16.54,16.54 L 31.39,31.39 A 15,15 0 0,0 31.39,52.61 Z"/>
-        <PathGeometry x:Key="WheelNorthEastWedge" Figures="M 16.54,16.54 A 36,36 0 0,1 67.46,16.54 L 52.61,31.39 A 15,15 0 0,0 31.39,31.39 Z"/>
-        <PathGeometry x:Key="WheelSouthEastWedge" Figures="M 67.46,16.54 A 36,36 0 0,1 67.46,67.46 L 52.61,52.61 A 15,15 0 0,0 52.61,31.39 Z"/>
-        <PathGeometry x:Key="WheelSouthWestWedge" Figures="M 67.46,67.46 A 36,36 0 0,1 16.54,67.46 L 31.39,52.61 A 15,15 0 0,0 52.61,52.61 Z"/>
+        <!-- Cardinal wedges: west=Prev, north=Minimize, east=Next, south=Stop -->
+        <PathGeometry x:Key="WheelWestWedge" Figures="M 16.54,67.46 A 36,36 0 0,1 16.54,16.54 L 31.39,31.39 A 15,15 0 0,0 31.39,52.61 Z"/>
+        <PathGeometry x:Key="WheelNorthWedge" Figures="M 16.54,16.54 A 36,36 0 0,1 67.46,16.54 L 52.61,31.39 A 15,15 0 0,0 31.39,31.39 Z"/>
+        <PathGeometry x:Key="WheelEastWedge" Figures="M 67.46,16.54 A 36,36 0 0,1 67.46,67.46 L 52.61,52.61 A 15,15 0 0,0 52.61,31.39 Z"/>
+        <PathGeometry x:Key="WheelSouthWedge" Figures="M 67.46,67.46 A 36,36 0 0,1 16.54,67.46 L 31.39,52.61 A 15,15 0 0,0 52.61,52.61 Z"/>
     </UserControl.Resources>
 
     <Viewbox Stretch="Uniform">
@@ -82,20 +88,26 @@
                     IsHitTestVisible="False">
                 <Ellipse Width="80" Height="80"
                          Canvas.Left="2" Canvas.Top="2"
-                         Fill="Transparent" Stroke="#55FFFFFF" StrokeThickness="1.5"
+                         Fill="#990C0C0E"
+                         Stroke="#55FFFFFF"
+                         StrokeThickness="1.25"
                          IsHitTestVisible="False"/>
-                <Line X1="12" Y1="12" X2="72" Y2="72" Stroke="#22FFFFFF" StrokeThickness="1" IsHitTestVisible="False"/>
-                <Line X1="72" Y1="12" X2="12" Y2="72" Stroke="#22FFFFFF" StrokeThickness="1" IsHitTestVisible="False"/>
+                <Ellipse Width="34" Height="34"
+                         Canvas.Left="25" Canvas.Top="25"
+                         Fill="Transparent"
+                         Stroke="#22FFFFFF"
+                         StrokeThickness="1"
+                         IsHitTestVisible="False"/>
 
-                <Path x:Name="PrevArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelNorthWestWedge}" IsHitTestVisible="False"/>
-                <Path x:Name="MinimizeArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelNorthEastWedge}" IsHitTestVisible="False"/>
-                <Path x:Name="NextArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelSouthEastWedge}" IsHitTestVisible="False"/>
-                <Path x:Name="StopArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelSouthWestWedge}" IsHitTestVisible="False"/>
+                <Path x:Name="PrevArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelWestWedge}" IsHitTestVisible="False"/>
+                <Path x:Name="MinimizeArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelNorthWedge}" IsHitTestVisible="False"/>
+                <Path x:Name="NextArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelEastWedge}" IsHitTestVisible="False"/>
+                <Path x:Name="StopArc" Fill="Transparent" Stroke="Transparent" Data="{StaticResource WheelSouthWedge}" IsHitTestVisible="False"/>
 
                 <TextBlock x:Name="PrevLabel" Text="&#xE892;" ToolTip="Previous"
                            Style="{StaticResource TransportWheelSliceIconStyle}"
                            Canvas.Left="8" Canvas.Top="34"/>
-                <TextBlock x:Name="MinimizeLabel" Text="&#xE919;" ToolTip="Minimize"
+                <TextBlock x:Name="MinimizeLabel" Text="&#xE921;" ToolTip="Minimize"
                            Style="{StaticResource TransportWheelSliceIconStyle}"
                            Canvas.Left="34" Canvas.Top="8"/>
                 <TextBlock x:Name="NextLabel" Text="&#xE893;" ToolTip="Next"

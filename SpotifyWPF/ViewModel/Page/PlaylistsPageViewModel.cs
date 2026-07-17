@@ -117,7 +117,7 @@ namespace SpotifyWPF.ViewModel.Page
             RefreshDeletionResultsCommand = new RelayCommand(RefreshDeletionResults);
             RefreshCombinedCommand = new RelayCommand<IList>(RefreshCombined);
             ExportToJsonCommand = new RelayCommand(ExportToJson);
-            ImportFromJsonCommand = new RelayCommand(() => { }, () => false);
+            ImportFromJsonCommand = new RelayCommand(ImportFromJson);
             CreatePlaylistCommand = new RelayCommand(async () => await CreatePlaylistAsync(), CanCreatePlaylist);
             ApplyPlaylistsFilterCommand = new RelayCommand(() => RefreshGridFromLocalFiles());
             ClearPlaylistsFilterCommand = new RelayCommand(ClearPlaylistsFilter);
@@ -1840,6 +1840,57 @@ namespace SpotifyWPF.ViewModel.Page
 
             File.WriteAllText(dialog.FileName, json);
             Log($"Exported {Playlists.Count} playlist(s) to {dialog.FileName}.");
+        }
+
+        private void ImportFromJson()
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                Title = "Import playlists"
+            };
+
+            if (dialog.ShowDialog() != true)
+                return;
+
+            try
+            {
+                var json = File.ReadAllText(dialog.FileName);
+                var imported = JsonSerializer.Deserialize<List<PlaylistCacheItem>>(json)
+                               ?? new List<PlaylistCacheItem>();
+
+                var available = _localStore.LoadAvailablePlaylists();
+                var added = 0;
+                var updated = 0;
+
+                foreach (var item in imported)
+                {
+                    if (item == null || string.IsNullOrWhiteSpace(item.Id))
+                        continue;
+
+                    if (available.ContainsKey(item.Id))
+                        updated++;
+                    else
+                        added++;
+
+                    if (item.SnapshotUpdatedAtUtc == default)
+                        item.SnapshotUpdatedAtUtc = DateTime.UtcNow;
+
+                    available[item.Id] = item;
+                }
+
+                _localStore.SaveAvailablePlaylists(available);
+                RefreshGridFromLocalFiles();
+                RaiseDeletionCommandStates();
+                DeleteAllToQueueCommand?.RaiseCanExecuteChanged();
+                Log($"Imported {added + updated} playlist(s) from {dialog.FileName} ({added} new, {updated} updated).");
+                Status = $"Imported {added + updated} playlist(s).";
+            }
+            catch (Exception ex)
+            {
+                Log($"Failed to import playlists: {ex.Message}");
+                Status = "Failed to import playlists.";
+            }
         }
 
         private async Task LogCurrentUserAsync()

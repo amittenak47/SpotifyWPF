@@ -162,6 +162,15 @@ namespace SpotifyWPF.View.Component
             e.Handled = true;
         }
 
+        private void LibrarySidebar_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is ViewModel.Page.PredictionPageViewModel vm &&
+                vm.RefreshLibraryPlaylistsCommand?.CanExecute(null) == true)
+            {
+                vm.RefreshLibraryPlaylistsCommand.Execute(null);
+            }
+        }
+
         private void BranchPresetPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!(DataContext is ViewModel.Page.PredictionPageViewModel vm))

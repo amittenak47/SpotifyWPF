@@ -196,6 +196,10 @@
                                   Padding="8,4"
                                   Command="{Binding ExportToJsonCommand}"
                                   ToolTip="Export playlists to JSON"/>
+                        <MenuItem Header="Import…"
+                                  Padding="8,4"
+                                  Command="{Binding ImportFromJsonCommand}"
+                                  ToolTip="Import playlists from a JSON export"/>
                     </Menu>
                 </DockPanel>
 

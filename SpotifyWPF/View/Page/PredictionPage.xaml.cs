@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -25,15 +26,98 @@ namespace SpotifyWPF.View.Page
         private const double HoverFadeMs = 180;
         private const double MinStageZoom = 0.75;
         private const double MaxStageZoom = 2.0;
+        private static readonly TimeSpan SearchPopupFadeMs = TimeSpan.FromMilliseconds(180);
 
         private double _stageZoom = 1.0;
+        private PredictionPageViewModel _subscribedVm;
 
         public PredictionPage()
         {
             InitializeComponent();
+            DataContextChanged += PredictionPage_DataContextChanged;
+            Loaded += (_, __) => SyncSearchPopup(animate: false);
         }
 
         private PredictionPageViewModel ViewModel => DataContext as PredictionPageViewModel;
+
+        private void PredictionPage_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (_subscribedVm != null)
+                _subscribedVm.PropertyChanged -= ViewModel_PropertyChanged;
+
+            _subscribedVm = e.NewValue as PredictionPageViewModel;
+            if (_subscribedVm != null)
+                _subscribedVm.PropertyChanged += ViewModel_PropertyChanged;
+
+            SyncSearchPopup(animate: false);
+        }
+
+        private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(PredictionPageViewModel.IsTrackSearchOpen))
+                AnimateSearchPopup(_subscribedVm?.IsTrackSearchOpen == true);
+        }
+
+        private void SyncSearchPopup(bool animate)
+        {
+            if (ViewModel == null)
+                return;
+
+            if (animate)
+                AnimateSearchPopup(ViewModel.IsTrackSearchOpen);
+            else
+                ApplySearchPopupImmediate(ViewModel.IsTrackSearchOpen);
+        }
+
+        private void ApplySearchPopupImmediate(bool open)
+        {
+            if (SearchResultsPopup == null)
+                return;
+
+            SearchResultsPopup.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            SearchResultsPopup.Opacity = open ? 1 : 0;
+            SearchResultsPopup.IsHitTestVisible = open;
+        }
+
+        private void AnimateSearchPopup(bool open)
+        {
+            if (SearchResultsPopup == null)
+                return;
+
+            if (open)
+            {
+                SearchResultsPopup.Visibility = Visibility.Visible;
+                SearchResultsPopup.IsHitTestVisible = true;
+                SearchResultsPopup.BeginAnimation(OpacityProperty, new DoubleAnimation
+                {
+                    From = 0,
+                    To = 1,
+                    Duration = SearchPopupFadeMs,
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                    FillBehavior = FillBehavior.HoldEnd
+                }, HandoffBehavior.SnapshotAndReplace);
+            }
+            else
+            {
+                SearchResultsPopup.IsHitTestVisible = false;
+                var fade = new DoubleAnimation
+                {
+                    To = 0,
+                    Duration = TimeSpan.FromMilliseconds(140),
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseIn },
+                    FillBehavior = FillBehavior.Stop
+                };
+                fade.Completed += (_, __) =>
+                {
+                    if (ViewModel?.IsTrackSearchOpen != true)
+                    {
+                        SearchResultsPopup.Visibility = Visibility.Collapsed;
+                        SearchResultsPopup.Opacity = 0;
+                    }
+                };
+                SearchResultsPopup.BeginAnimation(OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
+            }
+        }
 
         private async void PredictionPage_Loaded(object sender, RoutedEventArgs e)
         {
@@ -48,6 +132,7 @@ namespace SpotifyWPF.View.Page
             // Full-page zoom lives on StageRoot so search/wheel stay locked to the ring.
             RingView.OwnsWheelZoom = false;
             ApplyStageZoom();
+            SyncSearchPopup(animate: false);
 
             var host = ServiceLocator.Current.GetInstance<IWebPlaybackHost>();
             var view = host.GetOrCreateView();
@@ -116,7 +201,7 @@ namespace SpotifyWPF.View.Page
             if (sender == SearchHoverZone && TrackSearchBox != null)
                 FadeElementOpacity(TrackSearchBox, 0.35);
             else if (sender == WheelHoverZone && TransportWheel != null)
-                FadeElementOpacity(TransportWheel, 0.28);
+                FadeElementOpacity(TransportWheel, 0.42);
             else if (sender == StatusHoverZone)
                 FadeHoverZone(StatusHoverZone, HoverDimOpacity);
         }
@@ -155,8 +240,23 @@ namespace SpotifyWPF.View.Page
 
         private void TrackSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (e.Key == Key.Escape)
+            {
+                if (ViewModel != null)
+                    ViewModel.IsTrackSearchOpen = false;
+                e.Handled = true;
+                return;
+            }
+
             if (e.Key != Key.Enter)
                 return;
+
+            if (ViewModel?.IsTrackSearchOpen == true && ViewModel.TrackSearchResults.Count > 0)
+            {
+                ViewModel.SelectTrackSearchHitCommand.Execute(ViewModel.TrackSearchResults[0]);
+                e.Handled = true;
+                return;
+            }
 
             if (ViewModel?.PlayFromInputCommand.CanExecute(null) == true)
                 ViewModel.PlayFromInputCommand.Execute(null);

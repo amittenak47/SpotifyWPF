@@ -24,13 +24,13 @@ namespace SpotifyWPF.View.Component
         private const double WheelFadeMs = 140;
 
         private static readonly SolidColorBrush WheelGoldFill =
-            new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xD1, 0x66));
+            new SolidColorBrush(Color.FromArgb(0x44, 0xFF, 0xD1, 0x66));
 
         private static readonly SolidColorBrush WheelGoldStroke =
-            new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0xD1, 0x66));
+            new SolidColorBrush(Color.FromArgb(0xEE, 0xFF, 0xD1, 0x66));
 
         private static readonly SolidColorBrush WheelMutedLabel =
-            new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF));
+            new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF));
 
         private bool _pressActive;
         private bool _wheelActive;
@@ -192,7 +192,7 @@ namespace SpotifyWPF.View.Component
 
         private static void HighlightLabel(TextBlock label, bool selected)
         {
-            label.Opacity = selected ? 1.0 : 0.55;
+            label.Opacity = selected ? 1.0 : 0.7;
             label.Foreground = selected ? WheelGoldStroke : WheelMutedLabel;
         }
 
@@ -202,13 +202,13 @@ namespace SpotifyWPF.View.Component
             {
                 segment.Fill = WheelGoldFill;
                 segment.Stroke = WheelGoldStroke;
-                segment.StrokeThickness = 2;
+                segment.StrokeThickness = 1.75;
             }
             else
             {
                 segment.Fill = Brushes.Transparent;
                 segment.Stroke = Brushes.Transparent;
-                segment.StrokeThickness = 1.5;
+                segment.StrokeThickness = 1.25;
             }
         }
 

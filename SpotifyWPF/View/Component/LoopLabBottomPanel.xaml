@@ -114,6 +114,17 @@
                         <TabItem Header="Session">
                             <Border Style="{StaticResource ControlPanelTabContentBorderStyle}">
                                 <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="240" MinWidth="180"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <local:LoopLabLibrarySidebar Grid.Column="0"
+                                                                 DataContext="{Binding}"
+                                                                 Loaded="LibrarySidebar_Loaded"/>
+
+                                    <Grid Grid.Column="2">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="*"/>
@@ -324,6 +335,7 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                     </ListBox>
+                                    </Grid>
                                 </Grid>
                             </Border>
                         </TabItem>
