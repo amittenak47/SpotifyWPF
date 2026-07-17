@@ -95,6 +95,14 @@ namespace SpotifyWPF.View.Page
             }
         }
 
+        private void LoadLimitSlider_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Keep the Load submenu open while dragging/clicking the slider track.
+            // Do not mark Handled — the slider still needs the click for IsMoveToPointEnabled.
+            if (sender is Slider slider && !slider.IsKeyboardFocusWithin)
+                slider.Focus();
+        }
+
         private void QueuedActionsTreeView_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key != Key.Delete)

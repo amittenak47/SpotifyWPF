@@ -142,33 +142,39 @@
                     </StackPanel>
 
                     <Menu Background="Transparent" VerticalAlignment="Center">
-                        <MenuItem Header="Load" Padding="8,4">
-                            <StackPanel Margin="10,8" Width="260">
-                                <DockPanel LastChildFill="True">
-                                    <Button DockPanel.Dock="Right"
-                                            Content="Load"
-                                            MinWidth="52"
-                                            MinHeight="28"
-                                            Margin="8,0,0,0"
-                                            Padding="10,4"
-                                            Command="{Binding EnqueueLoadLimitCommand}"
-                                            ToolTip="Enqueue loading the next page of playlists"/>
-                                    <TextBlock DockPanel.Dock="Right"
-                                               Text="{Binding PlaylistLoadLimit}"
-                                               Width="28"
-                                               TextAlignment="Right"
-                                               VerticalAlignment="Center"
-                                               Margin="6,0,0,0"/>
-                                    <Slider Style="{StaticResource DarkMediaSliderStyle}"
-                                            Minimum="1"
-                                            Maximum="50"
-                                            TickFrequency="1"
-                                            IsSnapToTickEnabled="True"
-                                            VerticalAlignment="Center"
-                                            Value="{Binding PlaylistLoadLimit, Mode=TwoWay}"
-                                            ToolTip="Playlists per load page"/>
-                                </DockPanel>
-                            </StackPanel>
+                        <MenuItem Header="Load" Padding="8,4" StaysOpenOnClick="True">
+                            <!-- Interactive controls must live in a StaysOpenOnClick item or the menu closes on slider click. -->
+                            <MenuItem StaysOpenOnClick="True" Focusable="False">
+                                <MenuItem.Header>
+                                    <StackPanel Width="260">
+                                        <DockPanel LastChildFill="True">
+                                            <Button DockPanel.Dock="Right"
+                                                    Content="Load"
+                                                    MinWidth="52"
+                                                    MinHeight="28"
+                                                    Margin="8,0,0,0"
+                                                    Padding="10,4"
+                                                    Command="{Binding EnqueueLoadLimitCommand}"
+                                                    ToolTip="Enqueue loading the next page of playlists"/>
+                                            <TextBlock DockPanel.Dock="Right"
+                                                       Text="{Binding PlaylistLoadLimit}"
+                                                       Width="28"
+                                                       TextAlignment="Right"
+                                                       VerticalAlignment="Center"
+                                                       Margin="6,0,0,0"/>
+                                            <Slider Style="{StaticResource DarkMediaSliderStyle}"
+                                                    Minimum="1"
+                                                    Maximum="50"
+                                                    TickFrequency="1"
+                                                    IsSnapToTickEnabled="True"
+                                                    VerticalAlignment="Center"
+                                                    Value="{Binding PlaylistLoadLimit, Mode=TwoWay}"
+                                                    ToolTip="Playlists per load page"
+                                                    PreviewMouseLeftButtonDown="LoadLimitSlider_PreviewMouseLeftButtonDown"/>
+                                        </DockPanel>
+                                    </StackPanel>
+                                </MenuItem.Header>
+                            </MenuItem>
                             <MenuItem Header="Load all"
                                       Command="{Binding EnqueueLoadAllCommand}"
                                       ToolTip="Enqueue loading all remaining playlist pages"/>
