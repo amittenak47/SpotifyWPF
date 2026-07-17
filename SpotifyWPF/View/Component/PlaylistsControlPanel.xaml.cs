@@ -24,8 +24,9 @@ namespace SpotifyWPF.View.Component
                 typeof(bool),
                 typeof(PlaylistsControlPanel),
                 new FrameworkPropertyMetadata(
-                    false,
-                    FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+                    true,
+                    FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
+                    OnIsExpandedChanged));
 
         public static readonly DependencyProperty ExpandedHeightProperty =
             DependencyProperty.Register(
@@ -57,7 +58,16 @@ namespace SpotifyWPF.View.Component
             Opacity = PeekDimOpacity;
             Loaded += (_, __) =>
             {
-                if (!_isOpen && !_isResizing)
+                if (_isResizing)
+                    return;
+
+                if (IsExpanded)
+                {
+                    ApplyOpenImmediate();
+                    return;
+                }
+
+                if (!_isOpen)
                 {
                     Height = PeekHeight;
                     Opacity = IsMouseOver ? PeekFullOpacity : PeekDimOpacity;
@@ -95,6 +105,29 @@ namespace SpotifyWPF.View.Component
         {
             if (d is PlaylistsControlPanel panel && panel._isOpen && !panel._isResizing)
                 panel.Height = ClampExpandedHeight(panel.ExpandedHeight);
+        }
+
+        private static void OnIsExpandedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (!(d is PlaylistsControlPanel panel) || panel._isResizing)
+                return;
+
+            var expanded = (bool)e.NewValue;
+            if (expanded && !panel._isOpen)
+                panel.ApplyOpenImmediate();
+            else if (!expanded && panel._isOpen)
+                panel.SlideClosed();
+        }
+
+        private void ApplyOpenImmediate()
+        {
+            _isOpen = true;
+            BeginAnimation(HeightProperty, null);
+            BeginAnimation(OpacityProperty, null);
+            Height = ClampExpandedHeight(ExpandedHeight);
+            Opacity = PeekFullOpacity;
+            if (!IsExpanded)
+                IsExpanded = true;
         }
 
         private void Root_MouseEnter(object sender, MouseEventArgs e)

@@ -168,11 +168,14 @@ namespace SpotifyWPF.ViewModel.Page
                 () => HasCurrentTrack() && !IsAnalyzing);
             AnalyzeInputCommand = new RelayCommand(async () => await AnalyzeFromInputAsync(), CanAnalyzeInput);
             PlayFromInputCommand = new RelayCommand(async () => await PlayFromInputAsync(), CanPlayFromInput);
-            AnalyzeSessionTrackCommand = new RelayCommand(async () => await AnalyzeSessionTrackAsync(),
-                () => SelectedSessionTrack != null && !IsAnalyzing);
+            AnalyzeSessionTrackCommand = new RelayCommand<LoopLabSessionTrack>(
+                async track => await AnalyzeSessionTrackAsync(track),
+                track => (track ?? SelectedSessionTrack) != null && !IsAnalyzing);
             PreviousSessionTrackCommand = new RelayCommand(() => NavigateSessionTrack(-1), () => CanNavigateSessionTrack(-1));
             NextSessionTrackCommand = new RelayCommand(() => NavigateSessionTrack(1), () => CanNavigateSessionTrack(1));
-            PlaySessionTrackCommand = new RelayCommand(async () => await PlaySessionTrackAsync(), CanPlaySessionTrack);
+            PlaySessionTrackCommand = new RelayCommand<LoopLabSessionTrack>(
+                async track => await PlaySessionTrackAsync(track),
+                track => (track ?? SelectedSessionTrack) != null && CanPlayTransport());
             AbortSessionWorkCommand = new RelayCommand(async () => await AbortSessionWorkAsync(), CanAbortSessionWork);
             RemoveSessionTrackCommand = new RelayCommand(RemoveSelectedSessionTrack,
                 () => SelectedSessionTrack != null);
@@ -502,16 +505,11 @@ namespace SpotifyWPF.ViewModel.Page
             set
             {
                 if (Set(ref _selectedBranchPreset, value))
-                {
-                    if (value != null && !string.IsNullOrWhiteSpace(value.Name))
-                        BranchPresetName = value.Name;
-
                     LoadBranchPresetCommand.RaiseCanExecuteChanged();
-                }
             }
         }
 
-        private bool _isBottomPanelExpanded;
+        private bool _isBottomPanelExpanded = true;
 
         public bool IsBottomPanelExpanded
         {
@@ -539,7 +537,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         public bool IsFullLayout => !IsMiniPlayerMode;
 
-        private double _bottomPanelHeight = 220;
+        private double _bottomPanelHeight = 400;
 
         public double BottomPanelHeight
         {
@@ -1584,13 +1582,13 @@ namespace SpotifyWPF.ViewModel.Page
 
         public RelayCommand PlayFromInputCommand { get; }
 
-        public RelayCommand AnalyzeSessionTrackCommand { get; }
+        public RelayCommand<LoopLabSessionTrack> AnalyzeSessionTrackCommand { get; }
 
         public RelayCommand PreviousSessionTrackCommand { get; }
 
         public RelayCommand NextSessionTrackCommand { get; }
 
-        public RelayCommand PlaySessionTrackCommand { get; }
+        public RelayCommand<LoopLabSessionTrack> PlaySessionTrackCommand { get; }
 
         public RelayCommand AbortSessionWorkCommand { get; }
 
@@ -1687,6 +1685,93 @@ namespace SpotifyWPF.ViewModel.Page
         private bool CanPlaySessionTrack()
         {
             return SelectedSessionTrack != null && CanPlayTransport();
+        }
+
+        private async Task AnalyzeSessionTrackAsync(LoopLabSessionTrack track = null)
+        {
+            track = track ?? SelectedSessionTrack;
+
+            if (track == null)
+                return;
+
+            if (!ReferenceEquals(SelectedSessionTrack, track))
+                SelectedSessionTrack = track;
+
+            await AnalyzeTrackByIdAsync(track.TrackId, track.DisplayName);
+        }
+
+        private async Task PlaySessionTrackAsync(LoopLabSessionTrack track = null)
+        {
+            track = track ?? SelectedSessionTrack;
+
+            if (track == null || !CanPlayTransport())
+                return;
+
+            if (!ReferenceEquals(SelectedSessionTrack, track))
+                SelectedSessionTrack = track;
+
+            // Pause only when this track is actively playing on the current transport.
+            // After a Local WAV / Spotify switch we clear play state and must PlayTrackAsync,
+            // not Resume (stale transport).
+            var isCurrent = string.Equals(track.TrackId, ActivePlaybackTrackId, StringComparison.Ordinal);
+            if (isCurrent && !IsPaused && _currentPlay != null)
+            {
+                _transport.Pause();
+                return;
+            }
+
+            TrackInput = track.TrackId;
+            await PlayTrackAsync(track.TrackId, "session-track");
+        }
+
+        private async Task AbortSessionWorkAsync()
+        {
+            if (!CanAbortSessionWork())
+                return;
+
+            var captureTrackId = _captureInProgress ? _analyzingTrackId : null;
+            var wasAnalyzing = IsAnalyzing;
+
+            if (wasAnalyzing)
+                _analysisCancellation?.Cancel();
+
+            if (CanStopPlayback() || wasAnalyzing || _captureInProgress)
+                await StopPlaybackInternalAsync().ConfigureAwait(true);
+
+            // Discard incomplete capture/analysis left by cancel or stop-during-capture.
+            var purged = WavCaptureValidator.PurgeIncompleteArtifacts();
+
+            if (!string.IsNullOrEmpty(captureTrackId) &&
+                !WavCaptureValidator.HasCompleteCapture(captureTrackId))
+            {
+                WavCaptureValidator.TryDeleteCapture(captureTrackId);
+            }
+
+            if (!string.IsNullOrEmpty(captureTrackId) || !string.IsNullOrEmpty(_analyzingTrackId))
+            {
+                var id = captureTrackId ?? _analyzingTrackId;
+                var analysis = AnalysisCache.Load(id);
+
+                if (analysis?.Beats == null || analysis.Beats.Count == 0)
+                    AnalysisCache.Delete(id);
+
+                UpdateSessionTrackAnalysisStatus(id, SessionAnalysisStatus.Pending);
+            }
+
+            if (wasAnalyzing || !string.IsNullOrEmpty(captureTrackId))
+            {
+                Log(purged > 0
+                    ? $"Aborted — discarded incomplete capture/analysis ({purged} artifact(s))."
+                    : "Aborted — incomplete capture/analysis discarded.");
+                Status = "Aborted.";
+            }
+            else
+            {
+                Status = "Stopped.";
+            }
+
+            AbortSessionWorkCommand?.RaiseCanExecuteChanged();
+            NotifyTransportStateChanged();
         }
 
         private bool CanDeleteSessionCache()
@@ -3167,87 +3252,6 @@ namespace SpotifyWPF.ViewModel.Page
             RefreshSessionTracks();
         }
 
-        private async Task AnalyzeSessionTrackAsync()
-        {
-            var track = SelectedSessionTrack;
-
-            if (track == null)
-                return;
-
-            await AnalyzeTrackByIdAsync(track.TrackId, track.DisplayName);
-        }
-
-        private async Task PlaySessionTrackAsync()
-        {
-            var track = SelectedSessionTrack;
-
-            if (track == null || !CanPlayTransport())
-                return;
-
-            // Pause only when this track is actively playing on the current transport.
-            // After a Local WAV / Spotify switch we clear play state and must PlayTrackAsync,
-            // not Resume (stale transport).
-            var isCurrent = string.Equals(track.TrackId, ActivePlaybackTrackId, StringComparison.Ordinal);
-            if (isCurrent && !IsPaused && _currentPlay != null)
-            {
-                _transport.Pause();
-                return;
-            }
-
-            TrackInput = track.TrackId;
-            await PlayTrackAsync(track.TrackId, "session-track");
-        }
-
-        private async Task AbortSessionWorkAsync()
-        {
-            if (!CanAbortSessionWork())
-                return;
-
-            var captureTrackId = _captureInProgress ? _analyzingTrackId : null;
-            var wasAnalyzing = IsAnalyzing;
-
-            if (wasAnalyzing)
-                _analysisCancellation?.Cancel();
-
-            if (CanStopPlayback() || wasAnalyzing || _captureInProgress)
-                await StopPlaybackInternalAsync().ConfigureAwait(true);
-
-            // Discard incomplete capture/analysis left by cancel or stop-during-capture.
-            var purged = WavCaptureValidator.PurgeIncompleteArtifacts();
-
-            if (!string.IsNullOrEmpty(captureTrackId) &&
-                !WavCaptureValidator.HasCompleteCapture(captureTrackId))
-            {
-                WavCaptureValidator.TryDeleteCapture(captureTrackId);
-            }
-
-            if (!string.IsNullOrEmpty(captureTrackId) || !string.IsNullOrEmpty(_analyzingTrackId))
-            {
-                var id = captureTrackId ?? _analyzingTrackId;
-                var analysis = AnalysisCache.Load(id);
-
-                if (analysis?.Beats == null || analysis.Beats.Count == 0)
-                    AnalysisCache.Delete(id);
-
-                UpdateSessionTrackAnalysisStatus(id, SessionAnalysisStatus.Pending);
-            }
-
-            if (wasAnalyzing || !string.IsNullOrEmpty(captureTrackId))
-            {
-                Log(purged > 0
-                    ? $"Aborted — discarded incomplete capture/analysis ({purged} artifact(s))."
-                    : "Aborted — incomplete capture/analysis discarded.");
-                Status = "Aborted.";
-            }
-            else
-            {
-                Status = "Stopped.";
-            }
-
-            AbortSessionWorkCommand?.RaiseCanExecuteChanged();
-            NotifyTransportStateChanged();
-        }
-
         private void ReloadSessionTracks(bool silent = false)
         {
             WavCaptureValidator.PurgeIncompleteArtifacts();
@@ -3419,6 +3423,20 @@ namespace SpotifyWPF.ViewModel.Page
                 IsAnalyzing = true;
                 AnalysisProgressPercent = double.NaN;
                 UpdateSessionTrackAnalysisStatus(trackId, SessionAnalysisStatus.Analyzing);
+
+                // Clear previous track's ring immediately so analyze doesn't show stale visuals.
+                _ringGraphBuildGeneration++;
+                RingGraph = null;
+                RingSectionStartsSec = Array.Empty<double>();
+                RingStackedFeatures = null;
+                RingBeatFeatures = null;
+                RingPlannedFromBeat = -1;
+                RingPlannedToBeat = -1;
+                RingInspectBeat = -1;
+                RingResetPlaysToken++;
+                RingSegmentCountText = "Analyzing…";
+                _visualEnergy.Clear();
+                RefreshTrackStatusHud();
 
                 if (needsCapture)
                 {

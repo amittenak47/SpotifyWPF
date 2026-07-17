@@ -42,7 +42,7 @@ namespace SpotifyWPF.Model
 
         public string DeletionStatusName => DeletionStatus.ToString();
 
-        public string MarkStatus => IsMarkedForDeletion ? "Marked" : "Queued";
+        public string MarkStatus => "Queued";
 
         public bool ResultsAcknowledged { get; set; }
     }

@@ -39,11 +39,6 @@ namespace SpotifyWPF.View.Component
         /// <summary>Inner radius of the beat-bar band as a fraction of the outer radius.</summary>
         private const double BarBandInnerRatio = 0.62;
 
-        /// <summary>
-        /// Thin speed-dial band between the scrubber/section rim and the equalizer (px at canvas scale).
-        /// </summary>
-        private const double SpeedDialBand = 11.0;
-
         /// <summary>Equalizer inner edge as a fraction of canvas outer radius.</summary>
         private const double SpectrumInnerRatio = 0.78;
 
@@ -76,16 +71,6 @@ namespace SpotifyWPF.View.Component
         private double _positionStampMs;
 
         private bool _isRingScrubbing;
-
-        private bool _speedDialActive;
-
-        /// <summary>0 = idle, 1 = pressed (dial track highlight).</summary>
-        private double _centerPressAmount;
-
-        /// <summary>Current Local WAV playback rate (0.5–2.5). Dial sits between scrubber and EQ.</summary>
-        private double _playbackRate = 1.0;
-
-        private double _speedDialLastAngle;
 
         /// <summary>True while dragging along hop arrows to build a multi-hop chain (not scrubbing).</summary>
         private bool _suppressInspectCallback;
@@ -144,6 +129,10 @@ namespace SpotifyWPF.View.Component
                 new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender,
                     OnPositionChanged));
 
+        public static readonly DependencyProperty IsAnalyzingProperty =
+            DependencyProperty.Register(nameof(IsAnalyzing), typeof(bool), typeof(JukeboxRingCanvas),
+                new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
         public static readonly DependencyProperty GraphProperty =
             DependencyProperty.Register(nameof(Graph), typeof(BeatGraph), typeof(JukeboxRingCanvas),
                 new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender,
@@ -182,10 +171,6 @@ namespace SpotifyWPF.View.Component
 
         public static readonly DependencyProperty EndScrubCommandProperty =
             DependencyProperty.Register(nameof(EndScrubCommand), typeof(ICommand), typeof(JukeboxRingCanvas),
-                new FrameworkPropertyMetadata(null));
-
-        public static readonly DependencyProperty PlaybackRateCommandProperty =
-            DependencyProperty.Register(nameof(PlaybackRateCommand), typeof(ICommand), typeof(JukeboxRingCanvas),
                 new FrameworkPropertyMetadata(null));
 
         public static readonly DependencyProperty ResetPlaysTokenProperty =
@@ -257,6 +242,12 @@ namespace SpotifyWPF.View.Component
             set => SetValue(IsPausedProperty, value);
         }
 
+        public bool IsAnalyzing
+        {
+            get => (bool)GetValue(IsAnalyzingProperty);
+            set => SetValue(IsAnalyzingProperty, value);
+        }
+
         public BeatGraph Graph
         {
             get => (BeatGraph)GetValue(GraphProperty);
@@ -312,13 +303,6 @@ namespace SpotifyWPF.View.Component
         {
             get => (ICommand)GetValue(EndScrubCommandProperty);
             set => SetValue(EndScrubCommandProperty, value);
-        }
-
-        /// <summary>Executed with a playback rate (0.5–2.5) from the center speed dial.</summary>
-        public ICommand PlaybackRateCommand
-        {
-            get => (ICommand)GetValue(PlaybackRateCommandProperty);
-            set => SetValue(PlaybackRateCommandProperty, value);
         }
 
         /// <summary>Increment to clear play-coverage bars (the "Reset plays" action).</summary>
@@ -872,12 +856,6 @@ namespace SpotifyWPF.View.Component
                 return;
             }
 
-            if (_speedDialActive && e.LeftButton == MouseButtonState.Pressed)
-            {
-                UpdateSpeedDial(point);
-                return;
-            }
-
             if (MiniPlayerMode && !MiniPlayerHopMode)
                 return;
 
@@ -888,7 +866,7 @@ namespace SpotifyWPF.View.Component
                 ClearChain(_hoverChain);
                 _hoverBeatIndex = -1;
                 _hoverToBeatIndex = -1;
-                Cursor = IsInSpeedDialZone(point) ? Cursors.ScrollAll : Cursors.Arrow;
+                Cursor = Cursors.Arrow;
                 InvalidateVisual();
                 return;
             }
@@ -963,10 +941,7 @@ namespace SpotifyWPF.View.Component
             PublishInspectBeat();
             SyncHudText();
 
-            if (IsInSpeedDialZone(point))
-                Cursor = Cursors.ScrollAll;
-            else
-                Cursor = hit >= 0 || _hoverToBeatIndex >= 0 ? Cursors.Hand : Cursors.Arrow;
+            Cursor = hit >= 0 || _hoverToBeatIndex >= 0 ? Cursors.Hand : Cursors.Arrow;
 
             InvalidateVisual();
         }
@@ -978,11 +953,10 @@ namespace SpotifyWPF.View.Component
             if (_isRingScrubbing)
                 EndRingScrub();
 
-            // Keep dial / branch-drag alive while mouse is captured outside the element.
-            if ((_speedDialActive || _branchDragActive) && IsMouseCaptured)
+            // Keep branch-drag alive while mouse is captured outside the element.
+            if (_branchDragActive && IsMouseCaptured)
                 return;
 
-            EndSpeedDial();
             EndBranchDrag(commit: false);
 
             _hoverBeatIndex = -1;
@@ -1001,7 +975,7 @@ namespace SpotifyWPF.View.Component
             var graph = Graph;
             var point = e.GetPosition(this);
 
-            // Double-click a locked branch to unlock/remove it; double-click dial resets 1×.
+            // Double-click a locked branch to unlock/remove it.
             if (e.ClickCount > 1)
             {
                 if (graph != null && TryHitLockedBranch(point, graph, out var from, out var to) &&
@@ -1016,24 +990,8 @@ namespace SpotifyWPF.View.Component
                     }
 
                     e.Handled = true;
-                    return;
                 }
 
-                if (IsInSpeedDialZone(point))
-                {
-                    _playbackRate = 1.0;
-                    PublishPlaybackRate();
-                    InvalidateVisual();
-                    e.Handled = true;
-                }
-
-                return;
-            }
-
-            // Thin ring between scrubber and equalizer — press + rotate for Local WAV rate.
-            if (TryBeginSpeedDial(point))
-            {
-                e.Handled = true;
                 return;
             }
 
@@ -1069,12 +1027,6 @@ namespace SpotifyWPF.View.Component
         {
             base.OnMouseLeftButtonUp(e);
 
-            if (_speedDialActive)
-            {
-                EndSpeedDial();
-                e.Handled = true;
-            }
-
             if (_branchDragActive)
             {
                 EndBranchDrag(commit: true);
@@ -1083,97 +1035,6 @@ namespace SpotifyWPF.View.Component
 
             if (_isRingScrubbing)
                 EndRingScrub();
-        }
-
-        /// <summary>
-        /// Thin annulus just outside the scrubber/section rim and just inside the equalizer.
-        /// </summary>
-        private bool IsInSpeedDialZone(Point point)
-        {
-            GetRingLayout(out var center, out _, out _, out _, out _, out var dialInner, out var dialOuter);
-            var dist = (point - center).Length;
-            return dist >= dialInner && dist <= dialOuter;
-        }
-
-        private bool TryBeginSpeedDial(Point point)
-        {
-            if (!IsInSpeedDialZone(point))
-                return false;
-
-            GetChordLayout(out var center, out _, out _);
-            _speedDialActive = true;
-            _centerPressAmount = 1;
-            _speedDialLastAngle = Math.Atan2(point.Y - center.Y, point.X - center.X);
-            CaptureMouse();
-            Cursor = Cursors.ScrollAll;
-            InvalidateVisual();
-            return true;
-        }
-
-        private void UpdateSpeedDial(Point point)
-        {
-            GetChordLayout(out var center, out _, out _);
-            var angle = Math.Atan2(point.Y - center.Y, point.X - center.X);
-            var delta = angle - _speedDialLastAngle;
-
-            // Unwrap to shortest signed turn.
-            while (delta > Math.PI)
-                delta -= Math.PI * 2;
-            while (delta < -Math.PI)
-                delta += Math.PI * 2;
-
-            _speedDialLastAngle = angle;
-
-            // One full clockwise turn ≈ +1.0× rate.
-            var next = _playbackRate + delta / (Math.PI * 2);
-            next = Math.Max(0.5, Math.Min(2.5, next));
-
-            // Magnetic snap to 1.00× so returning to normal is easy.
-            if (Math.Abs(next - 1.0) < 0.09)
-                next = 1.0;
-
-            if (Math.Abs(next - _playbackRate) < 0.001)
-                return;
-
-            _playbackRate = next;
-            PublishPlaybackRate();
-            InvalidateVisual();
-        }
-
-        private void EndSpeedDial()
-        {
-            if (!_speedDialActive)
-                return;
-
-            // Final snap to 1.00× if still in the magnetic zone.
-            if (Math.Abs(_playbackRate - 1.0) < 0.09)
-            {
-                _playbackRate = 1.0;
-                PublishPlaybackRate();
-            }
-
-            _speedDialActive = false;
-            _centerPressAmount = 0;
-
-            if (IsMouseCaptured && !_branchDragActive && !_isRingScrubbing)
-                ReleaseMouseCapture();
-
-            Cursor = Cursors.Arrow;
-            InvalidateVisual();
-        }
-
-        private void PublishPlaybackRate()
-        {
-            var rate = Math.Round(_playbackRate * 20.0) / 20.0; // 0.05 steps
-
-            if (Math.Abs(rate - 1.0) < 0.06)
-            {
-                rate = 1.0;
-                _playbackRate = 1.0;
-            }
-
-            if (PlaybackRateCommand != null && PlaybackRateCommand.CanExecute(rate))
-                PlaybackRateCommand.Execute(rate);
         }
 
         /// <summary>
@@ -1271,7 +1132,7 @@ namespace SpotifyWPF.View.Component
             _branchDragActive = false;
             _branchDragOrigin = -1;
 
-            if (IsMouseCaptured && !_speedDialActive && !_isRingScrubbing)
+            if (IsMouseCaptured && !_isRingScrubbing)
                 ReleaseMouseCapture();
 
             Cursor = Cursors.Arrow;
@@ -1400,8 +1261,7 @@ namespace SpotifyWPF.View.Component
         }
 
         /// <summary>
-        /// Shared ring radii. Layers outward: center → coverage/scrubber (≤ rim) → speed dial
-        /// (dialInner..dialOuter) → equalizer (spectrumInner..spectrumOuter).
+        /// Shared ring radii. Layers outward: center → coverage/scrubber (≤ rim) → equalizer.
         /// </summary>
         private void GetRingLayout(out Point center, out double canvasOuter,
             out double spectrumInner, out double spectrumOuter,
@@ -1411,9 +1271,10 @@ namespace SpotifyWPF.View.Component
             canvasOuter = Math.Min(ActualWidth, ActualHeight) / 2 - 2;
             spectrumOuter = canvasOuter;
             spectrumInner = canvasOuter * SpectrumInnerRatio;
+            // Keep dial outs for call-site compatibility; no visual speed-dial gap.
             dialOuter = spectrumInner - 1;
-            dialInner = Math.Max(spectrumInner - SpeedDialBand, spectrumInner * 0.92);
-            rim = dialInner - 1;
+            dialInner = dialOuter;
+            rim = spectrumInner - 2;
         }
 
         /// <summary>
@@ -2202,7 +2063,7 @@ namespace SpotifyWPF.View.Component
                 return;
 
             GetRingLayout(out var center, out _, out var spectrumInner, out var spectrumOuter,
-                out var rim, out var dialInner, out var dialOuter);
+                out var rim, out _, out _);
             var rIn = rim * BarBandInnerRatio;
 
             // Shade only the inner hole so Mandelbrot shows in the beat annulus + spectrum band.
@@ -2211,10 +2072,6 @@ namespace SpotifyWPF.View.Component
 
             // Cascading Winamp bars live on the outer ring layer (outside beat coverage bars).
             _equalizer.Render(dc, EnergyProvider, center, spectrumInner, spectrumOuter, EqualizerPreset);
-
-            // Quiet speed dial between scrubber/section rim and the equalizer floor.
-            if (!MiniPlayerMode)
-                DrawSpeedDialBand(dc, center, dialInner, dialOuter);
 
             dc.DrawEllipse(null, MakePen(RimColor, 1), center, rim, rim);
 
@@ -2230,9 +2087,17 @@ namespace SpotifyWPF.View.Component
             DrawAnalysisTooltip(dc, graph);
         }
 
-        /// <summary>No beat graph yet: plain progress ring plus a hint.</summary>
+        /// <summary>No beat graph yet: analyzing pulse, or plain progress ring plus a hint.</summary>
         private void RenderFallback(DrawingContext dc, Point center, double outer)
         {
+            if (IsAnalyzing)
+            {
+                DrawAnalyzingPulse(dc, center, outer);
+                DrawCenteredText(dc, center, 8, "Analyzing…",
+                    14, AccentColor, FontWeights.SemiBold);
+                return;
+            }
+
             var duration = DurationMs;
 
             if (duration > 0)
@@ -2288,8 +2153,12 @@ namespace SpotifyWPF.View.Component
                 var t = _playCounts.Length == beats.Count ? _playCounts[i] / (double)maxPlay : 0;
                 var length = minLen + t * ext;
                 var angle = BeatAngle(beats[i], total);
+                var color = BeatColor(beats[i], sectionColors);
+                // Soft glow under the coverage bar.
                 DrawRadialLine(dc, center, rIn, rIn + length, angle,
-                    MakePen(BeatColor(beats[i], sectionColors), barWidth));
+                    MakePen(MakeColor(color, 0.28), barWidth * 2.4));
+                DrawRadialLine(dc, center, rIn, rIn + length, angle,
+                    MakePen(color, barWidth));
             }
 
             // Fading trail of recently played beats.
@@ -2436,24 +2305,6 @@ namespace SpotifyWPF.View.Component
                 center, rIn, rIn);
         }
 
-        /// <summary>
-        /// Quiet track between scrubber and equalizer. Press + drag to change Local WAV rate.
-        /// </summary>
-        private void DrawSpeedDialBand(DrawingContext dc, Point center, double inner, double outer)
-        {
-            var press = Math.Max(0, Math.Min(1, _centerPressAmount));
-            var modified = Math.Abs(_playbackRate - 1.0) > 0.001;
-            var mid = (inner + outer) * 0.5;
-            var thickness = Math.Max(2.0, outer - inner - 0.5);
-
-            var border = ThemeColor("AppBorderBrush", Color.FromRgb(0x3A, 0x3A, 0x42));
-            var accent = ThemeColor("AppAccentBrush", Color.FromRgb(0x1D, 0xB9, 0x54));
-
-            var alpha = press > 0.05 ? 0.5 : modified ? 0.36 : 0.2;
-            var color = press > 0.05 || modified ? accent : border;
-            dc.DrawEllipse(null, MakePen(color, thickness, alpha), center, mid, mid);
-        }
-
         private Color ThemeColor(string resourceKey, Color fallback)
         {
             try
@@ -2578,9 +2429,42 @@ namespace SpotifyWPF.View.Component
                 if (a2 <= a1)
                     continue;
 
+                // Outer bloom then crisp section rim.
                 DrawArc(dc, center, radius, a1, a2,
-                    MakePen(MakeColor(sectionColors[i], 0.42), 1.15, roundCaps: true));
+                    MakePen(MakeColor(sectionColors[i], 0.18), 4.5, roundCaps: true));
+                DrawArc(dc, center, radius, a1, a2,
+                    MakePen(MakeColor(sectionColors[i], 0.55), 1.35, roundCaps: true));
             }
+        }
+
+        /// <summary>
+        /// Pulsating green analyze animation: inner ring phase clockwise, outer counterclockwise.
+        /// </summary>
+        private void DrawAnalyzingPulse(DrawingContext dc, Point center, double outer)
+        {
+            var now = Clock.Elapsed.TotalMilliseconds;
+            var pulse = 0.45 + 0.35 * (0.5 + 0.5 * Math.Sin(now / 420.0));
+            var green = AccentColor;
+            var innerR = outer * BarBandInnerRatio;
+            var outerR = outer - 6;
+
+            // Traveling arc segments in opposite directions.
+            var innerPhase = (now / 900.0) % 1.0 * Math.PI * 2;
+            var outerPhase = -((now / 1100.0) % 1.0) * Math.PI * 2;
+            const double sweep = Math.PI * 0.55;
+
+            DrawArc(dc, center, innerR, innerPhase, innerPhase + sweep,
+                MakePen(MakeColor(green, pulse * 0.35), 6.0, roundCaps: true));
+            DrawArc(dc, center, innerR, innerPhase, innerPhase + sweep,
+                MakePen(MakeColor(green, pulse), 2.2, roundCaps: true));
+
+            DrawArc(dc, center, outerR, outerPhase, outerPhase + sweep,
+                MakePen(MakeColor(green, pulse * 0.3), 7.0, roundCaps: true));
+            DrawArc(dc, center, outerR, outerPhase, outerPhase + sweep,
+                MakePen(MakeColor(green, pulse * 0.95), 2.4, roundCaps: true));
+
+            dc.DrawEllipse(null, MakePen(MakeColor(green, pulse * 0.25), 1.5), center, innerR, innerR);
+            dc.DrawEllipse(null, MakePen(MakeColor(green, pulse * 0.2), 1.5), center, outerR, outerR);
         }
 
         private static double BeatAngle(BeatNode beat, long totalMs)

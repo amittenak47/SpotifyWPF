@@ -8,7 +8,7 @@ namespace SpotifyWPF.Service
     {
         private readonly SemaphoreSlim _requestSpacing = new SemaphoreSlim(1, 1);
 
-        private int _spacingMilliseconds = 150;
+        private int _spacingMilliseconds = 500;
 
         public int SpacingMilliseconds
         {

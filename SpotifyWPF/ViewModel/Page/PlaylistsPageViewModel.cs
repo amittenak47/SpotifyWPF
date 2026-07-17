@@ -111,6 +111,8 @@ namespace SpotifyWPF.ViewModel.Page
             UnmarkForDeletionCommand = new RelayCommand<IList>(UnmarkForDeletion, CanUnmarkForDeletion);
             ToggleMarkCommand = new RelayCommand<IList>(ToggleMark);
             DeletePlaylistsCommand = new RelayCommand(async () => await DeletePlaylistsAsync(), CanDeleteMarkedPlaylists);
+            ToggleDeleteQueueCommand = new RelayCommand<IList>(ToggleDeleteQueue);
+            DeleteAllToQueueCommand = new RelayCommand(DeleteAllToQueue, CanDeleteAllToQueue);
             RefreshDeletionResultsCommand = new RelayCommand(RefreshDeletionResults);
             RefreshCombinedCommand = new RelayCommand<IList>(RefreshCombined);
             ExportToJsonCommand = new RelayCommand(ExportToJson);
@@ -166,7 +168,7 @@ namespace SpotifyWPF.ViewModel.Page
             set => Set(ref _selectedPlaylist, value);
         }
 
-        private bool _isControlsPanelExpanded;
+        private bool _isControlsPanelExpanded = true;
 
         public bool IsControlsPanelExpanded
         {
@@ -331,6 +333,10 @@ namespace SpotifyWPF.ViewModel.Page
         }
 
         public RelayCommand DeletePlaylistsCommand { get; }
+
+        public RelayCommand<IList> ToggleDeleteQueueCommand { get; }
+
+        public RelayCommand DeleteAllToQueueCommand { get; }
 
         public RelayCommand<IList> MarkForDeletionCommand { get; }
 
@@ -815,6 +821,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             var availablePlaylists = _localStore.LoadAvailablePlaylists();
             var deletionQueue = _localStore.LoadDeletionQueue();
+            var stagedIds = new List<string>();
 
             foreach (var playlist in playlists)
             {
@@ -822,14 +829,30 @@ namespace SpotifyWPF.ViewModel.Page
 
                 availablePlaylists.Remove(playlist.Id);
 
-                if (!deletionQueue.ContainsKey(playlist.Id))
-                    deletionQueue[playlist.Id] = new DeletionQueueItem(playlist);
+                if (!deletionQueue.TryGetValue(playlist.Id, out var queued))
+                {
+                    queued = new DeletionQueueItem(playlist);
+                    deletionQueue[playlist.Id] = queued;
+                }
+                else
+                {
+                    queued.Playlist = playlist;
+                }
+
+                queued.IsMarkedForDeletion = true;
+                if (queued.DeletionStatus == DeletionStatus.Deleted)
+                    queued.DeletionStatus = DeletionStatus.Pending;
+
+                stagedIds.Add(playlist.Id);
             }
 
             _localStore.SaveAvailablePlaylists(availablePlaylists);
             _localStore.SaveDeletionQueue(deletionQueue);
             RefreshGridFromLocalFiles();
             RaiseDeletionCommandStates();
+
+            if (stagedIds.Count > 0)
+                EnqueueDeleteForIds(stagedIds);
         }
 
         private void UnstagePlaylists(IList items)
@@ -840,6 +863,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             var availablePlaylists = _localStore.LoadAvailablePlaylists();
             var deletionQueue = _localStore.LoadDeletionQueue();
+            var removedIds = new List<string>();
 
             foreach (var stagedPlaylist in playlists)
             {
@@ -849,27 +873,61 @@ namespace SpotifyWPF.ViewModel.Page
                     availablePlaylists[stagedPlaylist.Playlist.Id] = stagedPlaylist.Playlist;
 
                 deletionQueue.Remove(stagedPlaylist.Playlist.Id);
+                removedIds.Add(stagedPlaylist.Playlist.Id);
             }
 
             _localStore.SaveAvailablePlaylists(availablePlaylists);
             _localStore.SaveDeletionQueue(deletionQueue);
             RefreshGridFromLocalFiles();
             RaiseDeletionCommandStates();
+            RemovePlaylistIdsFromQueuedDeletes(removedIds);
         }
 
         private void ToggleStage(IList items)
         {
+            ToggleDeleteQueue(items);
+        }
+
+        /// <summary>
+        /// Toggle selection in/out of the deletion queue. If every selected row is already queued,
+        /// remove them; otherwise enqueue the ones that are not yet queued.
+        /// </summary>
+        private void ToggleDeleteQueue(IList items)
+        {
             var rows = ExtractGridItems(items);
             if (rows.Count == 0)
+            {
+                Log("Select one or more playlists to toggle in the deletion queue.");
                 return;
+            }
+
+            if (rows.All(r => r.IsStaged))
+            {
+                UnstagePlaylists(rows.Where(r => r.DeletionItem != null).Select(r => r.DeletionItem).ToList());
+                return;
+            }
 
             var toStage = rows.Where(r => r.IsLoaded && r.Playlist != null).Select(r => r.Playlist).ToList();
-            var toUnstage = rows.Where(r => r.IsStaged && r.DeletionItem != null).Select(r => r.DeletionItem).ToList();
-
             if (toStage.Count > 0)
                 StagePlaylists(toStage);
-            if (toUnstage.Count > 0)
-                UnstagePlaylists(toUnstage);
+        }
+
+        private void DeleteAllToQueue()
+        {
+            var available = _localStore.LoadAvailablePlaylists().Values.ToList();
+            if (available.Count == 0)
+            {
+                Log("No loaded playlists to enqueue for deletion.");
+                return;
+            }
+
+            StagePlaylists(available);
+            Log($"Enqueued {available.Count} playlist(s) for deletion.");
+        }
+
+        private bool CanDeleteAllToQueue()
+        {
+            return Playlists.Count > 0 || _localStore.LoadAvailablePlaylists().Count > 0;
         }
 
         private void ToggleMark(IList items)
@@ -915,7 +973,7 @@ namespace SpotifyWPF.ViewModel.Page
                         if (stagedPlaylist.ResultsAcknowledged)
                         {
                             stagedPlaylist.DeletionStatus = DeletionStatus.Pending;
-                            stagedPlaylist.IsMarkedForDeletion = false;
+                            stagedPlaylist.IsMarkedForDeletion = true;
                             stagedPlaylist.ResultsAcknowledged = false;
                         }
                         else
@@ -1209,6 +1267,7 @@ namespace SpotifyWPF.ViewModel.Page
             MarkForDeletionCommand.RaiseCanExecuteChanged();
             UnmarkForDeletionCommand.RaiseCanExecuteChanged();
             DeletePlaylistsCommand.RaiseCanExecuteChanged();
+            DeleteAllToQueueCommand.RaiseCanExecuteChanged();
             RaiseActionQueueStates();
         }
 
@@ -1265,7 +1324,47 @@ namespace SpotifyWPF.ViewModel.Page
 
             if (!selectedItems.Any())
             {
-                Log("Select one or more marked staged playlists to enqueue delete.");
+                Log("Select one or more queued playlists to enqueue delete.");
+                return;
+            }
+
+            EnqueueDeleteForIds(selectedItems.Select(item => item.Playlist.Id).ToList());
+        }
+
+        private void EnqueueDeleteForIds(IReadOnlyList<string> playlistIds)
+        {
+            var ids = playlistIds?
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList() ?? new List<string>();
+
+            if (ids.Count == 0) return;
+
+            // Merge into an existing pending DeleteSelection action when possible.
+            var existing = QueuedActions.FirstOrDefault(a => a.ActionType == PlaylistActionType.DeleteSelection);
+            if (existing != null)
+            {
+                var added = 0;
+                foreach (var id in ids)
+                {
+                    if (existing.PlaylistIds.Contains(id)) continue;
+
+                    existing.PlaylistIds.Add(id);
+                    var name = StagedForDeletion.FirstOrDefault(i => i.Playlist?.Id == id)?.Playlist?.Name;
+                    if (string.IsNullOrWhiteSpace(name) &&
+                        _localStore.LoadDeletionQueue().TryGetValue(id, out var queuedItem))
+                        name = queuedItem.Playlist?.Name;
+                    existing.DetailItems.Add(new QueuedActionDetailItem(name ?? id, id));
+                    added++;
+                }
+
+                if (added > 0)
+                {
+                    existing.RefreshDisplayName();
+                    RaiseActionQueueStates();
+                    Log($"Enqueued delete for {added} playlist(s).");
+                }
+
                 return;
             }
 
@@ -1274,14 +1373,46 @@ namespace SpotifyWPF.ViewModel.Page
                 ActionType = PlaylistActionType.DeleteSelection
             };
 
-            foreach (var item in selectedItems)
+            var deletionQueue = _localStore.LoadDeletionQueue();
+            foreach (var id in ids)
             {
-                action.PlaylistIds.Add(item.Playlist.Id);
-                action.DetailItems.Add(new QueuedActionDetailItem(item.Playlist?.Name ?? item.Playlist?.Id, item.Playlist?.Id));
+                action.PlaylistIds.Add(id);
+                var name = deletionQueue.TryGetValue(id, out var item)
+                    ? item.Playlist?.Name ?? id
+                    : id;
+                action.DetailItems.Add(new QueuedActionDetailItem(name, id));
             }
 
             action.RefreshDisplayName();
             _actionQueue.Enqueue(action);
+            Log($"Enqueued delete for {ids.Count} playlist(s).");
+        }
+
+        private void RemovePlaylistIdsFromQueuedDeletes(IReadOnlyList<string> playlistIds)
+        {
+            if (playlistIds == null || playlistIds.Count == 0) return;
+
+            var idSet = new HashSet<string>(playlistIds.Where(id => !string.IsNullOrWhiteSpace(id)), StringComparer.Ordinal);
+            if (idSet.Count == 0) return;
+
+            foreach (var action in QueuedActions.Where(a => a.ActionType == PlaylistActionType.DeleteSelection).ToList())
+            {
+                var detailsToRemove = action.DetailItems
+                    .Where(d => !string.IsNullOrWhiteSpace(d.PlaylistId) && idSet.Contains(d.PlaylistId))
+                    .ToList();
+
+                foreach (var detail in detailsToRemove)
+                    _actionQueue.RemoveDetail(action, detail);
+
+                action.PlaylistIds.RemoveAll(id => idSet.Contains(id));
+
+                if (action.PlaylistIds.Count == 0)
+                    _actionQueue.Remove(action);
+                else
+                    action.RefreshDisplayName();
+            }
+
+            RaiseActionQueueStates();
         }
 
         public void RemoveQueuedAction(QueuedPlaylistAction action)
@@ -1386,7 +1517,23 @@ namespace SpotifyWPF.ViewModel.Page
                 .Where(playlist => MatchesPlaylistFilter(playlist, combinedFilter))
                 .OrderBy(playlist => playlist.Name)
                 .ToList();
-            var deletionQueue = _localStore.LoadDeletionQueue().Values
+
+            var deletionQueueDict = _localStore.LoadDeletionQueue();
+            var coerced = false;
+            foreach (var item in deletionQueueDict.Values)
+            {
+                if (item == null) continue;
+                if (item.DeletionStatus == DeletionStatus.Deleted) continue;
+                if (item.IsMarkedForDeletion) continue;
+
+                item.IsMarkedForDeletion = true;
+                coerced = true;
+            }
+
+            if (coerced)
+                _localStore.SaveDeletionQueue(deletionQueueDict);
+
+            var deletionQueue = deletionQueueDict.Values
                 .Where(item => MatchesPlaylistFilter(item.Playlist, combinedFilter))
                 .OrderBy(playlist => playlist.Playlist?.Name)
                 .ToList();
@@ -1409,6 +1556,7 @@ namespace SpotifyWPF.ViewModel.Page
                     ReplaceCollection(CombinedPlaylists, combined);
 
                 RaiseDeletionCommandStates();
+                DeleteAllToQueueCommand.RaiseCanExecuteChanged();
             }));
         }
 

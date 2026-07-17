@@ -36,11 +36,14 @@
                 </StatusBarItem>
                 <StatusBarItem Grid.Column="2">
                     <StackPanel Orientation="Horizontal" Margin="8,0,4,0">
-                        <Label Content="Spacing" VerticalAlignment="Center"/>
+                        <Label Content="Delay between requests"
+                               VerticalAlignment="Center"
+                               ToolTip="Milliseconds between Spotify API calls"/>
                         <TextBox Text="{Binding RequestSpacingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                  Width="48"
                                  VerticalContentAlignment="Center"
-                                 Margin="4,0,8,0"/>
+                                 Margin="4,0,8,0"
+                                 ToolTip="Milliseconds between Spotify API calls"/>
                         <Button Content="{Binding ExecuteOrPauseButtonLabel}"
                                 Command="{Binding ExecuteOrPauseCommand}"
                                 Padding="12,3"
@@ -95,64 +98,50 @@
                             <TextBox Text="{Binding PlaylistsFilterText, UpdateSourceTrigger=PropertyChanged}"
                                      Width="200"
                                      VerticalContentAlignment="Center"
-                                     Margin="0,0,8,0"
+                                     Margin="0,0,8,6"
                                      ToolTip="Filter playlists"/>
+                            <Button Content="Load"
+                                    Command="{Binding EnqueueLoadLimitCommand}"
+                                    Focusable="False"
+                                    Padding="12,6"
+                                    Margin="0,0,6,6"
+                                    ToolTip="Enqueue load for the current Limit"/>
                             <TextBlock Text="Limit"
                                        VerticalAlignment="Center"
-                                       Margin="0,0,4,0"
+                                       Margin="0,0,4,6"
                                        Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                             <TextBox Text="{Binding PlaylistLoadLimit, UpdateSourceTrigger=PropertyChanged}"
                                      Width="40"
                                      VerticalContentAlignment="Center"
-                                     Margin="0,0,8,0"/>
-                            <Button Content="Load"
-                                    Command="{Binding LoadMorePlaylistsCommand}"
-                                    Padding="10,4"
-                                    Margin="0,0,4,0"/>
+                                     Margin="0,0,6,6"/>
                             <Button Content="Load All"
-                                    Command="{Binding LoadAllPlaylistsCommand}"
-                                    Padding="10,4"
-                                    Margin="0,0,4,0"/>
-                            <Button Content="Delete"
-                                    Command="{Binding DeletePlaylistsCommand}"
-                                    Padding="10,4"
-                                    Margin="0,0,12,0"/>
-                            <Button Content="Enqueue Load"
-                                    Command="{Binding EnqueueLoadLimitCommand}"
-                                    Focusable="False"
-                                    Padding="10,4"
-                                    Margin="0,0,4,0"/>
-                            <Button Content="Enqueue All"
                                     Command="{Binding EnqueueLoadAllCommand}"
                                     Focusable="False"
-                                    Padding="10,4"
-                                    Margin="0,0,4,0"/>
-                            <Button Content="Enqueue Delete"
-                                    Command="{Binding EnqueueDeleteSelectionCommand}"
+                                    Padding="12,6"
+                                    Margin="0,0,12,6"
+                                    ToolTip="Enqueue load of all remaining playlist pages"/>
+                            <Button Content="Delete"
+                                    Command="{Binding ToggleDeleteQueueCommand}"
                                     CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
                                     Focusable="False"
-                                    Padding="10,4"
-                                    Margin="0,0,12,0"/>
-                            <Button Content="Mark / Unmark"
-                                    Command="{Binding ToggleMarkCommand}"
-                                    CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
+                                    Padding="12,6"
+                                    Margin="0,0,6,6"
+                                    ToolTip="Toggle selected playlists in/out of the deletion queue"/>
+                            <Button Content="Delete All"
+                                    Command="{Binding DeleteAllToQueueCommand}"
                                     Focusable="False"
-                                    Padding="10,4"
-                                    Margin="0,0,4,0"/>
-                            <Button Content="Stage / Unstage"
-                                    Command="{Binding ToggleStageCommand}"
-                                    CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
-                                    Focusable="False"
-                                    Padding="10,4"
-                                    Margin="0,0,4,0"/>
+                                    Padding="12,6"
+                                    Margin="0,0,12,6"
+                                    ToolTip="Enqueue all loaded playlists for deletion"/>
                             <Button Content="Refresh"
                                     Command="{Binding RefreshCombinedCommand}"
                                     CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"
-                                    Padding="10,4"
-                                    Margin="0,0,4,0"/>
+                                    Padding="12,6"
+                                    Margin="0,0,6,6"/>
                             <Button Content="Export"
                                     Command="{Binding ExportToJsonCommand}"
-                                    Padding="10,4"/>
+                                    Padding="12,6"
+                                    Margin="0,0,0,6"/>
                         </WrapPanel>
                     </StackPanel>
                 </Border>
@@ -175,7 +164,7 @@
                                       Command="{Binding LoadTracksCommand}"
                                       CommandParameter="{Binding SelectedPlaylist}"/>
                         <KeyBinding Key="Delete"
-                                    Command="{Binding ToggleStageCommand}"
+                                    Command="{Binding ToggleDeleteQueueCommand}"
                                     CommandParameter="{Binding ElementName=PlaylistsDataGrid, Path=SelectedItems}"/>
                     </DataGrid.InputBindings>
 

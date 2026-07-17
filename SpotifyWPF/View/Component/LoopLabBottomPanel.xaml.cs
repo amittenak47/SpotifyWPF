@@ -16,11 +16,11 @@ namespace SpotifyWPF.View.Component
 
         public static readonly DependencyProperty IsExpandedProperty =
             DependencyProperty.Register(nameof(IsExpanded), typeof(bool), typeof(LoopLabBottomPanel),
-                new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+                new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnIsExpandedChanged));
 
         public static readonly DependencyProperty ExpandedHeightProperty =
             DependencyProperty.Register(nameof(ExpandedHeight), typeof(double), typeof(LoopLabBottomPanel),
-                new FrameworkPropertyMetadata(220.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnExpandedHeightChanged));
+                new FrameworkPropertyMetadata(400.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnExpandedHeightChanged));
 
         private const double PeekHeight = 32;
         private const double MinExpandedHeight = 120;
@@ -45,7 +45,16 @@ namespace SpotifyWPF.View.Component
             Opacity = PeekDimOpacity;
             Loaded += (_, __) =>
             {
-                if (!_isOpen && !_isResizing)
+                if (_isResizing)
+                    return;
+
+                if (IsExpanded)
+                {
+                    ApplyOpenImmediate();
+                    return;
+                }
+
+                if (!_isOpen)
                 {
                     Height = PeekHeight;
                     Opacity = IsMouseOver ? PeekFullOpacity : PeekDimOpacity;
@@ -85,6 +94,29 @@ namespace SpotifyWPF.View.Component
                 panel.Height = ClampExpandedHeight(panel.ExpandedHeight);
         }
 
+        private static void OnIsExpandedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (!(d is LoopLabBottomPanel panel) || panel._isResizing)
+                return;
+
+            var expanded = (bool)e.NewValue;
+            if (expanded && !panel._isOpen)
+                panel.ApplyOpenImmediate();
+            else if (!expanded && panel._isOpen)
+                panel.SlideClosed();
+        }
+
+        private void ApplyOpenImmediate()
+        {
+            _isOpen = true;
+            BeginAnimation(HeightProperty, null);
+            BeginAnimation(OpacityProperty, null);
+            Height = ClampExpandedHeight(ExpandedHeight);
+            Opacity = PeekFullOpacity;
+            if (!IsExpanded)
+                IsExpanded = true;
+        }
+
         private void Root_MouseEnter(object sender, MouseEventArgs e)
         {
             if (!_isOpen && !_isResizing)
@@ -118,12 +150,30 @@ namespace SpotifyWPF.View.Component
                 source = System.Windows.Media.VisualTreeHelper.GetParent(source);
 
             if (source is ListBoxItem item && item.DataContext is Model.Prediction.LoopLabSessionTrack track)
-                vm.SelectedSessionTrack = track;
-
-            if (vm.PlaySessionTrackCommand?.CanExecute(null) == true)
+            {
+                if (vm.PlaySessionTrackCommand?.CanExecute(track) == true)
+                    vm.PlaySessionTrackCommand.Execute(track);
+            }
+            else if (vm.PlaySessionTrackCommand?.CanExecute(null) == true)
+            {
                 vm.PlaySessionTrackCommand.Execute(null);
+            }
 
             e.Handled = true;
+        }
+
+        private void BranchPresetPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!(DataContext is ViewModel.Page.PredictionPageViewModel vm))
+                return;
+
+            if (!(sender is ComboBox combo) || !(combo.SelectedItem is Model.Prediction.BranchLockPreset preset))
+                return;
+
+            if (!string.IsNullOrWhiteSpace(preset.Name))
+                vm.BranchPresetName = preset.Name;
+
+            vm.SelectedBranchPreset = preset;
         }
 
         /// <summary>

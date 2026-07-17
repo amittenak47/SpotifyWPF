@@ -37,7 +37,7 @@ namespace SpotifyWPF.Model
 
         public string LoadedText => IsLoaded ? "Loaded" : "";
 
-        public string QueueStatus => DeletionItem?.MarkStatus ?? "";
+        public string QueueStatus => IsStaged ? "Queued" : "";
 
         public string DeletionStatusName => DeletionItem?.DeletionStatusName ?? "";
     }
