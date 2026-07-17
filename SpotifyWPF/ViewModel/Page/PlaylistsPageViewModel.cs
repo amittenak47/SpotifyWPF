@@ -119,9 +119,9 @@ namespace SpotifyWPF.ViewModel.Page
             ExportToJsonCommand = new RelayCommand(ExportToJson);
             ImportFromJsonCommand = new RelayCommand(() => { }, () => false);
             CreatePlaylistCommand = new RelayCommand(async () => await CreatePlaylistAsync(), CanCreatePlaylist);
-            ApplyPlaylistsFilterCommand = new RelayCommand(RefreshGridFromLocalFiles);
+            ApplyPlaylistsFilterCommand = new RelayCommand(() => RefreshGridFromLocalFiles());
             ClearPlaylistsFilterCommand = new RelayCommand(ClearPlaylistsFilter);
-            ApplyStagedPlaylistsFilterCommand = new RelayCommand(RefreshGridFromLocalFiles);
+            ApplyStagedPlaylistsFilterCommand = new RelayCommand(() => RefreshGridFromLocalFiles());
             ClearStagedPlaylistsFilterCommand = new RelayCommand(ClearStagedPlaylistsFilter);
             EnqueueLoadLimitCommand = new RelayCommand(EnqueueLoadLimit, CanEnqueueActions);
             EnqueueLoadAllCommand = new RelayCommand(EnqueueLoadAll, CanEnqueueActions);
@@ -219,6 +219,11 @@ namespace SpotifyWPF.ViewModel.Page
         }
 
         public ObservableCollection<QueuedPlaylistAction> QueuedActions => _actionQueue.QueuedActions;
+
+        /// <summary>
+        /// Fired after the playlists grid is rebuilt so the view can re-select rows by Spotify id.
+        /// </summary>
+        public event Action<IReadOnlyList<string>> GridSelectionRestoreRequested;
 
         public string NewPlaylistName
         {
@@ -863,6 +868,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             if (playlists == null || !playlists.Any()) return;
 
+            var preserveIds = CaptureSelectionIds(items);
             var availablePlaylists = _localStore.LoadAvailablePlaylists();
             var deletionQueue = _localStore.LoadDeletionQueue();
             var stagedIds = new List<string>();
@@ -892,7 +898,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             _localStore.SaveAvailablePlaylists(availablePlaylists);
             _localStore.SaveDeletionQueue(deletionQueue);
-            RefreshGridFromLocalFiles();
+            RefreshGridFromLocalFiles(preserveIds ?? stagedIds);
             RaiseDeletionCommandStates();
 
             if (stagedIds.Count > 0)
@@ -905,6 +911,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             if (playlists == null || !playlists.Any()) return;
 
+            var preserveIds = CaptureSelectionIds(items);
             var availablePlaylists = _localStore.LoadAvailablePlaylists();
             var deletionQueue = _localStore.LoadDeletionQueue();
             var removedIds = new List<string>();
@@ -922,7 +929,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             _localStore.SaveAvailablePlaylists(availablePlaylists);
             _localStore.SaveDeletionQueue(deletionQueue);
-            RefreshGridFromLocalFiles();
+            RefreshGridFromLocalFiles(preserveIds);
             RaiseDeletionCommandStates();
             RemovePlaylistIdsFromQueuedDeletes(removedIds);
         }
@@ -1450,34 +1457,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             if (ids.Count == 0) return;
 
-            // Merge into an existing pending DeleteSelection action when possible.
-            var existing = QueuedActions.FirstOrDefault(a => a.ActionType == PlaylistActionType.DeleteSelection);
-            if (existing != null)
-            {
-                var added = 0;
-                foreach (var id in ids)
-                {
-                    if (existing.PlaylistIds.Contains(id)) continue;
-
-                    existing.PlaylistIds.Add(id);
-                    var name = StagedForDeletion.FirstOrDefault(i => i.Playlist?.Id == id)?.Playlist?.Name;
-                    if (string.IsNullOrWhiteSpace(name) &&
-                        _localStore.LoadDeletionQueue().TryGetValue(id, out var queuedItem))
-                        name = queuedItem.Playlist?.Name;
-                    existing.DetailItems.Add(new QueuedActionDetailItem(name ?? id, id));
-                    added++;
-                }
-
-                if (added > 0)
-                {
-                    existing.RefreshDisplayName();
-                    RaiseActionQueueStates();
-                    Log($"Enqueued delete for {added} playlist(s).");
-                }
-
-                return;
-            }
-
+            // Each stage operation is its own atomic queue item (do not merge into prior deletes).
             var action = new QueuedPlaylistAction
             {
                 ActionType = PlaylistActionType.DeleteSelection
@@ -1489,7 +1469,7 @@ namespace SpotifyWPF.ViewModel.Page
                 action.PlaylistIds.Add(id);
                 var name = deletionQueue.TryGetValue(id, out var item)
                     ? item.Playlist?.Name ?? id
-                    : id;
+                    : StagedForDeletion.FirstOrDefault(i => i.Playlist?.Id == id)?.Playlist?.Name ?? id;
                 action.DetailItems.Add(new QueuedActionDetailItem(name, id));
             }
 
@@ -1527,12 +1507,31 @@ namespace SpotifyWPF.ViewModel.Page
 
         public void RemoveQueuedAction(QueuedPlaylistAction action)
         {
+            if (action == null)
+                return;
+
+            var deleteIds = action.ActionType == PlaylistActionType.DeleteSelection
+                ? action.PlaylistIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToList()
+                : null;
+
             _actionQueue.Remove(action);
+
+            if (deleteIds != null && deleteIds.Count > 0)
+                UnstagePlaylistsByIds(deleteIds, preserveSelection: true);
         }
 
         public void RemoveQueuedActionDetail(QueuedPlaylistAction action, QueuedActionDetailItem detail)
         {
+            if (action == null || detail == null)
+                return;
+
+            var playlistId = detail.PlaylistId;
+            var isDelete = action.ActionType == PlaylistActionType.DeleteSelection;
+
             _actionQueue.RemoveDetail(action, detail);
+
+            if (isDelete && !string.IsNullOrWhiteSpace(playlistId))
+                UnstagePlaylistsByIds(new[] { playlistId }, preserveSelection: true);
         }
 
         public QueuedPlaylistAction FindQueuedActionForDetail(QueuedActionDetailItem detail)
@@ -1616,7 +1615,62 @@ namespace SpotifyWPF.ViewModel.Page
                 .ToList();
         }
 
-        private void RefreshGridFromLocalFiles()
+        private void UnstagePlaylistsByIds(IReadOnlyList<string> playlistIds, bool preserveSelection)
+        {
+            if (playlistIds == null || playlistIds.Count == 0)
+                return;
+
+            var idSet = new HashSet<string>(playlistIds.Where(id => !string.IsNullOrWhiteSpace(id)), StringComparer.Ordinal);
+            if (idSet.Count == 0)
+                return;
+
+            var preserveIds = preserveSelection
+                ? (CaptureSelectionIds(SelectedPlaylistItems as IList) ?? idSet.ToList())
+                : null;
+
+            var availablePlaylists = _localStore.LoadAvailablePlaylists();
+            var deletionQueue = _localStore.LoadDeletionQueue();
+            var removedIds = new List<string>();
+
+            foreach (var id in idSet)
+            {
+                if (!deletionQueue.TryGetValue(id, out var staged))
+                    continue;
+
+                if (staged.DeletionStatus != DeletionStatus.Deleted && staged.Playlist != null)
+                    availablePlaylists[id] = staged.Playlist;
+
+                deletionQueue.Remove(id);
+                removedIds.Add(id);
+            }
+
+            if (removedIds.Count == 0)
+                return;
+
+            _localStore.SaveAvailablePlaylists(availablePlaylists);
+            _localStore.SaveDeletionQueue(deletionQueue);
+            RefreshGridFromLocalFiles(preserveIds);
+            RaiseDeletionCommandStates();
+            // Details were already removed from the action tree; strip any remaining copies.
+            RemovePlaylistIdsFromQueuedDeletes(removedIds);
+        }
+
+        private List<string> CaptureSelectionIds(IList items)
+        {
+            var source = items ?? SelectedPlaylistItems as IList;
+            if (source == null || source.Count == 0)
+                return null;
+
+            var ids = ExtractGridItems(source)
+                .Select(r => r.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            return ids.Count > 0 ? ids : null;
+        }
+
+        private void RefreshGridFromLocalFiles(IReadOnlyList<string> preserveSelectionIds = null)
         {
             var playlistsFilter = PlaylistsFilterText?.Trim();
             var stagedFilter = StagedPlaylistsFilterText?.Trim();
@@ -1654,6 +1708,8 @@ namespace SpotifyWPF.ViewModel.Page
                 .OrderBy(r => r.Name)
                 .ToList();
 
+            var restoreIds = preserveSelectionIds?.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToList();
+
             Application.Current.Dispatcher.BeginInvoke((Action) (() =>
             {
                 if (!PlaylistCollectionsMatch(Playlists, availablePlaylists))
@@ -1667,6 +1723,9 @@ namespace SpotifyWPF.ViewModel.Page
 
                 RaiseDeletionCommandStates();
                 DeleteAllToQueueCommand.RaiseCanExecuteChanged();
+
+                if (restoreIds != null && restoreIds.Count > 0)
+                    GridSelectionRestoreRequested?.Invoke(restoreIds);
             }));
         }
 

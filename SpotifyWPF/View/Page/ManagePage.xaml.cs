@@ -24,11 +24,7 @@ namespace SpotifyWPF.View.Page
 
             var playlists = ServiceLocator.Current.GetInstance<PlaylistsPageViewModel>();
             if (playlists != null)
-            {
-                playlists.PropertyChanged -= PlaylistsVm_PropertyChanged;
-                playlists.PropertyChanged += PlaylistsVm_PropertyChanged;
                 await playlists.OnNavigatedToAsync();
-            }
         }
 
         private void WireViewModel()
@@ -50,13 +46,6 @@ namespace SpotifyWPF.View.Page
             {
                 ApplySectionLayout();
             }
-        }
-
-        private void PlaylistsVm_PropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            // Only react to controls expand/collapse — not FillControlsPanel (that is set by us).
-            if (e.PropertyName == nameof(PlaylistsPageViewModel.IsControlsPanelExpanded))
-                ApplySectionLayout();
         }
 
         private void PlaylistsHeader_Click(object sender, RoutedEventArgs e)
@@ -84,8 +73,7 @@ namespace SpotifyWPF.View.Page
         }
 
         /// <summary>
-        /// Exclusive accordion: one star-sized open section (or none). Content stays in the tree;
-        /// closed sections are Collapsed (not unloaded) so toggling is cheap and stable.
+        /// Exclusive accordion: one star-sized open section (or none). Content stays Collapsed, not unloaded.
         /// </summary>
         private void ApplySectionLayout()
         {
@@ -98,17 +86,11 @@ namespace SpotifyWPF.View.Page
             _applyingLayout = true;
             try
             {
-                var playlistsVm = ServiceLocator.Current.GetInstance<PlaylistsPageViewModel>();
-                var controlsOpen = playlistsVm?.IsControlsPanelExpanded == true;
-                var noSectionOpen = manage.ActiveSection == ManageSection.None;
-
                 PlaylistsChevron.Text = manage.IsPlaylistsOpen ? "▼" : "▲";
                 AlbumsChevron.Text = manage.IsAlbumsOpen ? "▼" : "▲";
                 ArtistsChevron.Text = manage.IsArtistsOpen ? "▼" : "▲";
                 SearchChevron.Text = manage.IsSearchOpen ? "▼" : "▲";
 
-                // Drive visibility in code: child pages set their own DataContext, so
-                // {Binding IsXOpen} on the page element would bind to the wrong VM.
                 SetContentVisible(PlaylistsContent, manage.IsPlaylistsOpen);
                 SetContentVisible(AlbumsContent, manage.IsAlbumsOpen);
                 SetContentVisible(ArtistsContent, manage.IsArtistsOpen);
@@ -123,24 +105,6 @@ namespace SpotifyWPF.View.Page
                 SetSectionBorder(AlbumsSectionBorder, manage.IsAlbumsOpen);
                 SetSectionBorder(ArtistsSectionBorder, manage.IsArtistsOpen);
                 SetSectionBorder(SearchSectionBorder, manage.IsSearchOpen);
-
-                if (playlistsVm != null)
-                    playlistsVm.IsPlaylistsSectionExpanded = !noSectionOpen;
-
-                if (noSectionOpen && controlsOpen)
-                {
-                    SetRowHeight(SectionsRow, GridLength.Auto);
-                    SetRowHeight(ControlsRow, new GridLength(1, GridUnitType.Star));
-                    if (ControlsPanel != null)
-                        ControlsPanel.FillRemainingSpace = true;
-                }
-                else
-                {
-                    SetRowHeight(SectionsRow, new GridLength(1, GridUnitType.Star));
-                    SetRowHeight(ControlsRow, GridLength.Auto);
-                    if (ControlsPanel != null)
-                        ControlsPanel.FillRemainingSpace = false;
-                }
             }
             finally
             {
@@ -160,15 +124,12 @@ namespace SpotifyWPF.View.Page
 
         private static void SetSectionRow(RowDefinition row, bool open)
         {
-            SetRowHeight(row, open
-                ? new GridLength(1, GridUnitType.Star)
-                : GridLength.Auto);
-        }
-
-        private static void SetRowHeight(RowDefinition row, GridLength height)
-        {
             if (row == null)
                 return;
+
+            var height = open
+                ? new GridLength(1, GridUnitType.Star)
+                : GridLength.Auto;
 
             if (row.Height.GridUnitType == height.GridUnitType &&
                 row.Height.Value == height.Value)

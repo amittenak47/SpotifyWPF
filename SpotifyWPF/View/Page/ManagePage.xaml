@@ -2,7 +2,6 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:page="clr-namespace:SpotifyWPF.View.Page"
-             xmlns:component="clr-namespace:SpotifyWPF.View.Component"
              DataContext="{Binding ManagePage, Source={StaticResource Locator}}">
 
     <UserControl.Resources>
@@ -34,152 +33,136 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="8" Background="{DynamicResource AppBackgroundBrush}" ClipToBounds="False">
+    <!-- No shared Control Panel: each section owns its controls (Playlists embeds its own). -->
+    <Grid Margin="8" Background="{DynamicResource AppBackgroundBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition x:Name="SectionsRow" Height="*"/>
-            <RowDefinition x:Name="ControlsRow" Height="Auto"/>
+            <RowDefinition x:Name="PlaylistsSectionRow" Height="*"/>
+            <RowDefinition x:Name="AlbumsSectionRow" Height="Auto"/>
+            <RowDefinition x:Name="ArtistsSectionRow" Height="Auto"/>
+            <RowDefinition x:Name="SearchSectionRow" Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Grid x:Name="SectionsGrid" Grid.Row="0">
-            <Grid.RowDefinitions>
-                <RowDefinition x:Name="PlaylistsSectionRow" Height="*"/>
-                <RowDefinition x:Name="AlbumsSectionRow" Height="Auto"/>
-                <RowDefinition x:Name="ArtistsSectionRow" Height="Auto"/>
-                <RowDefinition x:Name="SearchSectionRow" Height="Auto"/>
-            </Grid.RowDefinitions>
+        <!-- Playlists -->
+        <Border x:Name="PlaylistsSectionBorder"
+                Grid.Row="0"
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Margin="0,0,0,6"
+                ClipToBounds="True"
+                VerticalAlignment="Stretch">
+            <DockPanel LastChildFill="True">
+                <Button Style="{StaticResource ManageSectionHeaderStyle}"
+                        DockPanel.Dock="Top"
+                        Click="PlaylistsHeader_Click"
+                        ToolTip="Collapse / expand Playlists">
+                    <DockPanel LastChildFill="False">
+                        <TextBlock Text="Playlists"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AppForegroundBrush}"/>
+                        <TextBlock x:Name="PlaylistsChevron"
+                                   DockPanel.Dock="Right"
+                                   Margin="8,0,0,0"
+                                   FontFamily="Segoe UI Symbol"
+                                   Text="▼"
+                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                    </DockPanel>
+                </Button>
+                <page:PlaylistsPage x:Name="PlaylistsContent"/>
+            </DockPanel>
+        </Border>
 
-            <!-- Playlists -->
-            <Border x:Name="PlaylistsSectionBorder"
-                    Grid.Row="0"
-                    Background="{DynamicResource AppSurfaceBrush}"
-                    BorderBrush="{DynamicResource AppBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="4"
-                    Margin="0,0,0,6"
-                    ClipToBounds="True"
-                    VerticalAlignment="Stretch">
-                <DockPanel LastChildFill="True">
-                    <Button Style="{StaticResource ManageSectionHeaderStyle}"
-                            DockPanel.Dock="Top"
-                            Click="PlaylistsHeader_Click"
-                            ToolTip="Collapse / expand Playlists">
-                        <DockPanel LastChildFill="False">
-                            <TextBlock Text="Playlists"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource AppForegroundBrush}"/>
-                            <TextBlock x:Name="PlaylistsChevron"
-                                       DockPanel.Dock="Right"
-                                       Margin="8,0,0,0"
-                                       FontFamily="Segoe UI Symbol"
-                                       Text="▼"
-                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                        </DockPanel>
-                    </Button>
-                    <page:PlaylistsPage x:Name="PlaylistsContent"/>
-                </DockPanel>
-            </Border>
+        <!-- Albums -->
+        <Border x:Name="AlbumsSectionBorder"
+                Grid.Row="1"
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Margin="0,0,0,6"
+                ClipToBounds="True"
+                VerticalAlignment="Top">
+            <DockPanel LastChildFill="True">
+                <Button Style="{StaticResource ManageSectionHeaderStyle}"
+                        DockPanel.Dock="Top"
+                        Click="AlbumsHeader_Click"
+                        ToolTip="Collapse / expand Albums">
+                    <DockPanel LastChildFill="False">
+                        <TextBlock Text="Albums"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AppForegroundBrush}"/>
+                        <TextBlock x:Name="AlbumsChevron"
+                                   DockPanel.Dock="Right"
+                                   Margin="8,0,0,0"
+                                   FontFamily="Segoe UI Symbol"
+                                   Text="▲"
+                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                    </DockPanel>
+                </Button>
+                <page:AlbumsPage x:Name="AlbumsContent" Margin="0" Visibility="Collapsed"/>
+            </DockPanel>
+        </Border>
 
-            <!-- Albums -->
-            <Border x:Name="AlbumsSectionBorder"
-                    Grid.Row="1"
-                    Background="{DynamicResource AppSurfaceBrush}"
-                    BorderBrush="{DynamicResource AppBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="4"
-                    Margin="0,0,0,6"
-                    ClipToBounds="True"
-                    VerticalAlignment="Top">
-                <DockPanel LastChildFill="True">
-                    <Button Style="{StaticResource ManageSectionHeaderStyle}"
-                            DockPanel.Dock="Top"
-                            Click="AlbumsHeader_Click"
-                            ToolTip="Collapse / expand Albums">
-                        <DockPanel LastChildFill="False">
-                            <TextBlock Text="Albums"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource AppForegroundBrush}"/>
-                            <TextBlock x:Name="AlbumsChevron"
-                                       DockPanel.Dock="Right"
-                                       Margin="8,0,0,0"
-                                       FontFamily="Segoe UI Symbol"
-                                       Text="▲"
-                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                        </DockPanel>
-                    </Button>
-                    <page:AlbumsPage x:Name="AlbumsContent" Margin="0" Visibility="Collapsed"/>
-                </DockPanel>
-            </Border>
+        <!-- Artists -->
+        <Border x:Name="ArtistsSectionBorder"
+                Grid.Row="2"
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Margin="0,0,0,6"
+                ClipToBounds="True"
+                VerticalAlignment="Top">
+            <DockPanel LastChildFill="True">
+                <Button Style="{StaticResource ManageSectionHeaderStyle}"
+                        DockPanel.Dock="Top"
+                        Click="ArtistsHeader_Click"
+                        ToolTip="Collapse / expand Artists">
+                    <DockPanel LastChildFill="False">
+                        <TextBlock Text="Artists"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AppForegroundBrush}"/>
+                        <TextBlock x:Name="ArtistsChevron"
+                                   DockPanel.Dock="Right"
+                                   Margin="8,0,0,0"
+                                   FontFamily="Segoe UI Symbol"
+                                   Text="▲"
+                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                    </DockPanel>
+                </Button>
+                <page:ArtistsPage x:Name="ArtistsContent" Margin="0" Visibility="Collapsed"/>
+            </DockPanel>
+        </Border>
 
-            <!-- Artists -->
-            <Border x:Name="ArtistsSectionBorder"
-                    Grid.Row="2"
-                    Background="{DynamicResource AppSurfaceBrush}"
-                    BorderBrush="{DynamicResource AppBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="4"
-                    Margin="0,0,0,6"
-                    ClipToBounds="True"
-                    VerticalAlignment="Top">
-                <DockPanel LastChildFill="True">
-                    <Button Style="{StaticResource ManageSectionHeaderStyle}"
-                            DockPanel.Dock="Top"
-                            Click="ArtistsHeader_Click"
-                            ToolTip="Collapse / expand Artists">
-                        <DockPanel LastChildFill="False">
-                            <TextBlock Text="Artists"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource AppForegroundBrush}"/>
-                            <TextBlock x:Name="ArtistsChevron"
-                                       DockPanel.Dock="Right"
-                                       Margin="8,0,0,0"
-                                       FontFamily="Segoe UI Symbol"
-                                       Text="▲"
-                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                        </DockPanel>
-                    </Button>
-                    <page:ArtistsPage x:Name="ArtistsContent" Margin="0" Visibility="Collapsed"/>
-                </DockPanel>
-            </Border>
-
-            <!-- Search -->
-            <Border x:Name="SearchSectionBorder"
-                    Grid.Row="3"
-                    Background="{DynamicResource AppSurfaceBrush}"
-                    BorderBrush="{DynamicResource AppBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="4"
-                    Margin="0,0,0,0"
-                    ClipToBounds="True"
-                    VerticalAlignment="Top">
-                <DockPanel LastChildFill="True">
-                    <Button Style="{StaticResource ManageSectionHeaderStyle}"
-                            DockPanel.Dock="Top"
-                            Click="SearchHeader_Click"
-                            ToolTip="Collapse / expand Search">
-                        <DockPanel LastChildFill="False">
-                            <TextBlock Text="Search"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource AppForegroundBrush}"/>
-                            <TextBlock x:Name="SearchChevron"
-                                       DockPanel.Dock="Right"
-                                       Margin="8,0,0,0"
-                                       FontFamily="Segoe UI Symbol"
-                                       Text="▲"
-                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                        </DockPanel>
-                    </Button>
-                    <page:SearchPage x:Name="SearchContent" Margin="0" Visibility="Collapsed"/>
-                </DockPanel>
-            </Border>
-        </Grid>
-
-        <!-- Playlist Controls: always reserved at bottom; peek on hover when collapsed -->
-        <component:PlaylistsControlPanel x:Name="ControlsPanel"
-                                         Grid.Row="1"
-                                         DataContext="{Binding PlaylistsPage, Source={StaticResource Locator}}"
-                                         ActivityLog="{Binding ActivityLog}"
-                                         IsExpanded="{Binding IsControlsPanelExpanded, Mode=TwoWay}"
-                                         ExpandedHeight="{Binding ControlsPanelHeight, Mode=TwoWay}"
-                                         VerticalAlignment="Stretch"/>
+        <!-- Search -->
+        <Border x:Name="SearchSectionBorder"
+                Grid.Row="3"
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                ClipToBounds="True"
+                VerticalAlignment="Top">
+            <DockPanel LastChildFill="True">
+                <Button Style="{StaticResource ManageSectionHeaderStyle}"
+                        DockPanel.Dock="Top"
+                        Click="SearchHeader_Click"
+                        ToolTip="Collapse / expand Search">
+                    <DockPanel LastChildFill="False">
+                        <TextBlock Text="Search"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AppForegroundBrush}"/>
+                        <TextBlock x:Name="SearchChevron"
+                                   DockPanel.Dock="Right"
+                                   Margin="8,0,0,0"
+                                   FontFamily="Segoe UI Symbol"
+                                   Text="▲"
+                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                    </DockPanel>
+                </Button>
+                <page:SearchPage x:Name="SearchContent" Margin="0" Visibility="Collapsed"/>
+            </DockPanel>
+        </Border>
     </Grid>
 </UserControl>

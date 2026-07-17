@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
+using SpotifyWPF.Model;
 using SpotifyWPF.Service;
 using SpotifyWPF.ViewModel.Page;
 
@@ -18,10 +20,26 @@ namespace SpotifyWPF.View.Page
         {
             InitializeComponent();
             Loaded += PlaylistsPage_Loaded;
+            DataContextChanged += PlaylistsPage_DataContextChanged;
+        }
+
+        private void PlaylistsPage_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (e.OldValue is PlaylistsPageViewModel oldVm)
+                oldVm.GridSelectionRestoreRequested -= OnGridSelectionRestoreRequested;
+
+            if (e.NewValue is PlaylistsPageViewModel newVm)
+                newVm.GridSelectionRestoreRequested += OnGridSelectionRestoreRequested;
         }
 
         private void PlaylistsPage_Loaded(object sender, RoutedEventArgs e)
         {
+            if (DataContext is PlaylistsPageViewModel vm)
+            {
+                vm.GridSelectionRestoreRequested -= OnGridSelectionRestoreRequested;
+                vm.GridSelectionRestoreRequested += OnGridSelectionRestoreRequested;
+            }
+
             ApplyColumnVisibility();
             AttachColumnHeaderContextMenu();
 
@@ -30,6 +48,26 @@ namespace SpotifyWPF.View.Page
             {
                 EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
             });
+        }
+
+        private void OnGridSelectionRestoreRequested(IReadOnlyList<string> playlistIds)
+        {
+            if (playlistIds == null || playlistIds.Count == 0 || PlaylistsDataGrid == null)
+                return;
+
+            var idSet = new HashSet<string>(playlistIds.Where(id => !string.IsNullOrWhiteSpace(id)), StringComparer.Ordinal);
+            if (idSet.Count == 0)
+                return;
+
+            PlaylistsDataGrid.SelectedItems.Clear();
+            foreach (var row in PlaylistsDataGrid.Items.OfType<PlaylistGridItem>())
+            {
+                if (row?.Id != null && idSet.Contains(row.Id))
+                    PlaylistsDataGrid.SelectedItems.Add(row);
+            }
+
+            if (DataContext is PlaylistsPageViewModel vm)
+                vm.SetSelectedPlaylistItems(PlaylistsDataGrid.SelectedItems);
         }
 
         private void PlaylistsDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -53,6 +91,33 @@ namespace SpotifyWPF.View.Page
             if (vm.EnqueueDeleteKeyCommand?.CanExecute(selected) == true)
             {
                 vm.EnqueueDeleteKeyCommand.Execute(selected);
+                e.Handled = true;
+            }
+        }
+
+        private void QueuedActionsTreeView_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Delete)
+                return;
+
+            if (!(DataContext is PlaylistsPageViewModel viewModel))
+                return;
+
+            if (QueuedActionsTreeView.SelectedItem is QueuedActionDetailItem detail)
+            {
+                var parentAction = viewModel.FindQueuedActionForDetail(detail);
+                if (parentAction != null)
+                {
+                    viewModel.RemoveQueuedActionDetail(parentAction, detail);
+                    e.Handled = true;
+                }
+
+                return;
+            }
+
+            if (QueuedActionsTreeView.SelectedItem is QueuedPlaylistAction action)
+            {
+                viewModel.RemoveQueuedAction(action);
                 e.Handled = true;
             }
         }

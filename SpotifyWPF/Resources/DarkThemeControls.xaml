@@ -837,7 +837,9 @@
             </ToggleButton>
             <ContentPresenter x:Name="ExpandSite"
                               Visibility="Collapsed"
-                              Margin="4,6,4,4"/>
+                              Margin="4,6,4,4"
+                              VerticalAlignment="Stretch"
+                              HorizontalAlignment="Stretch"/>
           </DockPanel>
           <ControlTemplate.Triggers>
             <Trigger Property="IsExpanded" Value="True">
