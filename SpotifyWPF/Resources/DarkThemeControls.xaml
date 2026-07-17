@@ -601,6 +601,8 @@
     <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="Height" Value="22"/>
+    <!-- Jump thumb to click position instead of stepping by LargeChange. -->
+    <Setter Property="IsMoveToPointEnabled" Value="True"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type Slider}">
@@ -659,6 +661,10 @@
       </Setter.Value>
     </Setter>
   </Style>
+
+  <!-- Default all app sliders to the media look + click-to-value behavior. -->
+  <Style TargetType="{x:Type Slider}" BasedOn="{StaticResource DarkMediaSliderStyle}"/>
+
 
   <Style TargetType="{x:Type TextBox}">
     <Setter Property="Background" Value="{DynamicResource AppSurfaceAltBrush}"/>
