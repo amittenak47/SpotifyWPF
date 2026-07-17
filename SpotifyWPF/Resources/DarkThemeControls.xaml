@@ -741,39 +741,29 @@
   </Style>
 
   <Style x:Key="ControlPanelTabControlStyle" TargetType="{x:Type TabControl}">
-    <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+    <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Padding" Value="0"/>
     <Setter Property="ItemContainerStyle" Value="{StaticResource ControlPanelTabItemStyle}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type TabControl}">
-          <Grid KeyboardNavigation.TabNavigation="Local">
-            <Border Margin="8,4,8,8"
-                    BorderBrush="{DynamicResource AppBorderBrush}"
-                    BorderThickness="1"
-                    Background="{DynamicResource AppSurfaceBrush}">
-              <Grid>
-                <Grid.RowDefinitions>
-                  <RowDefinition Height="Auto"/>
-                  <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <TabPanel IsItemsHost="True"
-                          Grid.Row="0"
-                          Background="Transparent"
-                          Margin="4,4,4,0"
-                          KeyboardNavigation.TabIndex="1"/>
-                <Border Grid.Row="1"
-                        BorderBrush="{DynamicResource AppBorderBrush}"
-                        BorderThickness="0,1,0,0"
-                        Padding="8"
-                        Background="{DynamicResource AppSurfaceBrush}">
-                  <ContentPresenter ContentSource="SelectedContent"
-                                    VerticalAlignment="Stretch"
-                                    HorizontalAlignment="Stretch"/>
-                </Border>
-              </Grid>
-            </Border>
+          <!-- Flat: one Controls shell only — no nested content box around tabs. -->
+          <Grid KeyboardNavigation.TabNavigation="Local" Background="Transparent">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <TabPanel IsItemsHost="True"
+                      Grid.Row="0"
+                      Background="Transparent"
+                      Margin="8,4,8,0"
+                      KeyboardNavigation.TabIndex="1"/>
+            <ContentPresenter Grid.Row="1"
+                              Margin="8,6,8,8"
+                              ContentSource="SelectedContent"
+                              VerticalAlignment="Stretch"
+                              HorizontalAlignment="Stretch"/>
           </Grid>
         </ControlTemplate>
       </Setter.Value>
@@ -788,6 +778,75 @@
     <Setter Property="VerticalAlignment" Value="Stretch"/>
     <Setter Property="HorizontalAlignment" Value="Stretch"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
+  </Style>
+
+  <!-- File/menu-style collapsible section headers for Manage Controls (no tabs). -->
+  <Style x:Key="ControlPanelMenuExpanderStyle" TargetType="{x:Type Expander}">
+    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0,0,0,4"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type Expander}">
+          <DockPanel LastChildFill="True">
+            <ToggleButton x:Name="HeaderSite"
+                          DockPanel.Dock="Top"
+                          IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                          Cursor="Hand"
+                          Focusable="False"
+                          HorizontalContentAlignment="Stretch"
+                          Background="{DynamicResource AppSurfaceAltBrush}"
+                          BorderBrush="{DynamicResource AppBorderBrush}"
+                          BorderThickness="0,0,0,1"
+                          Padding="10,6">
+              <ToggleButton.Template>
+                <ControlTemplate TargetType="ToggleButton">
+                  <Border x:Name="Hdr"
+                          Background="{TemplateBinding Background}"
+                          BorderBrush="{TemplateBinding BorderBrush}"
+                          BorderThickness="{TemplateBinding BorderThickness}"
+                          Padding="{TemplateBinding Padding}">
+                    <DockPanel LastChildFill="True">
+                      <TextBlock x:Name="Arrow"
+                                 DockPanel.Dock="Left"
+                                 Text="▶"
+                                 FontSize="10"
+                                 Width="16"
+                                 VerticalAlignment="Center"
+                                 Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                      <ContentPresenter VerticalAlignment="Center"
+                                        RecognizesAccessKey="True"/>
+                    </DockPanel>
+                  </Border>
+                  <ControlTemplate.Triggers>
+                    <Trigger Property="IsChecked" Value="True">
+                      <Setter TargetName="Arrow" Property="Text" Value="▼"/>
+                    </Trigger>
+                    <Trigger Property="IsMouseOver" Value="True">
+                      <Setter TargetName="Hdr" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
+                    </Trigger>
+                  </ControlTemplate.Triggers>
+                </ControlTemplate>
+              </ToggleButton.Template>
+              <ContentPresenter ContentSource="Header"
+                                RecognizesAccessKey="True"
+                                TextElement.FontWeight="SemiBold"
+                                TextElement.Foreground="{DynamicResource AppForegroundBrush}"/>
+            </ToggleButton>
+            <ContentPresenter x:Name="ExpandSite"
+                              Visibility="Collapsed"
+                              Margin="4,6,4,4"/>
+          </DockPanel>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsExpanded" Value="True">
+              <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
   </Style>
 
   <Style x:Key="ControlPanelToolbarStyle" TargetType="{x:Type StackPanel}">

@@ -42,6 +42,9 @@ namespace SpotifyWPF.View.Component
                 typeof(PlaylistsControlPanel),
                 new PropertyMetadata(false, OnFillRemainingSpaceChanged));
 
+        /// <summary>Collapsed, not hovered: tiny hit-strip so content fills the window.</summary>
+        private const double PeekHitHeight = 10;
+        /// <summary>Collapsed, hovered: header peek; content slides up to make room.</summary>
         private const double PeekHeight = 32;
         private const double MinExpandedHeight = 120;
         private const double MaxExpandedHeight = 720;
@@ -61,8 +64,10 @@ namespace SpotifyWPF.View.Component
         public PlaylistsControlPanel()
         {
             InitializeComponent();
-            Height = PeekHeight;
-            Opacity = PeekDimOpacity;
+            Height = PeekHitHeight;
+            Opacity = PeekFullOpacity;
+            if (PeekVisual != null)
+                PeekVisual.Opacity = PeekDimOpacity;
             Loaded += (_, __) =>
             {
                 if (_isResizing)
@@ -75,10 +80,7 @@ namespace SpotifyWPF.View.Component
                 }
 
                 if (!_isOpen)
-                {
-                    Height = PeekHeight;
-                    Opacity = IsMouseOver ? PeekFullOpacity : PeekDimOpacity;
-                }
+                    ApplyCollapsedPeek(IsMouseOver);
             };
             SizeChanged += (_, __) =>
             {
@@ -149,7 +151,7 @@ namespace SpotifyWPF.View.Component
                 return;
 
             BeginAnimation(HeightProperty, null);
-            BeginAnimation(OpacityProperty, null);
+            AnimatePeekOpacity(PeekFullOpacity, immediate: true);
             Opacity = PeekFullOpacity;
 
             if (FillRemainingSpace)
@@ -176,10 +178,23 @@ namespace SpotifyWPF.View.Component
             ApplyLayoutMode();
         }
 
+        private void ApplyCollapsedPeek(bool hovered)
+        {
+            VerticalAlignment = VerticalAlignment.Bottom;
+            Opacity = PeekFullOpacity;
+            var targetHeight = hovered ? PeekHeight : PeekHitHeight;
+            BeginAnimation(HeightProperty, null);
+            Height = targetHeight;
+            AnimatePeekOpacity(hovered ? PeekFullOpacity : PeekDimOpacity, immediate: true);
+        }
+
         private void Root_MouseEnter(object sender, MouseEventArgs e)
         {
-            if (!_isOpen && !_isResizing)
-                AnimatePeekOpacity(PeekFullOpacity);
+            if (_isOpen || _isResizing)
+                return;
+
+            AnimateHeight(PeekHeight);
+            AnimatePeekOpacity(PeekFullOpacity);
         }
 
         private void Root_MouseLeave(object sender, MouseEventArgs e)
@@ -187,6 +202,7 @@ namespace SpotifyWPF.View.Component
             if (_isOpen || _isResizing)
                 return;
 
+            AnimateHeight(PeekHitHeight);
             AnimatePeekOpacity(PeekDimOpacity);
         }
 
@@ -223,14 +239,25 @@ namespace SpotifyWPF.View.Component
             // Restore a concrete height before peek animation when leaving fill mode.
             if (double.IsNaN(Height))
                 Height = ClampExpandedHeight(ExpandedHeight);
-            AnimateHeight(PeekHeight);
-            AnimatePeekOpacity(IsMouseOver ? PeekFullOpacity : PeekDimOpacity);
+
+            var hovered = IsMouseOver;
+            AnimateHeight(hovered ? PeekHeight : PeekHitHeight);
+            AnimatePeekOpacity(hovered ? PeekFullOpacity : PeekDimOpacity);
         }
 
-        private void AnimatePeekOpacity(double to)
+        private void AnimatePeekOpacity(double to, bool immediate = false)
         {
-            BeginAnimation(OpacityProperty, null);
-            BeginAnimation(
+            if (PeekVisual == null)
+                return;
+
+            PeekVisual.BeginAnimation(OpacityProperty, null);
+            if (immediate)
+            {
+                PeekVisual.Opacity = to;
+                return;
+            }
+
+            PeekVisual.BeginAnimation(
                 OpacityProperty,
                 new DoubleAnimation(to, TimeSpan.FromMilliseconds(PeekFadeMs))
                 {

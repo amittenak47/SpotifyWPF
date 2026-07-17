@@ -3,167 +3,97 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:component="clr-namespace:SpotifyWPF.View.Component"
              mc:Ignorable="d"
              DataContext="{Binding PlaylistsPage, Source={StaticResource Locator}}"
-             d:DesignHeight="450" d:DesignWidth="800"
-             MinWidth="720" MinHeight="400"
-             SizeChanged="PlaylistsPage_SizeChanged">
+             d:DesignHeight="450" d:DesignWidth="800">
 
-    <Grid x:Name="RootGrid" Background="{DynamicResource AppBackgroundBrush}" ClipToBounds="False" Margin="8">
+    <Grid Margin="10">
         <Grid.RowDefinitions>
-            <RowDefinition x:Name="PlaylistsRow" Height="*"/>
-            <RowDefinition x:Name="ControlsRow" Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Collapsible Playlists: long search + table -->
-        <Border Grid.Row="0"
-                Background="{DynamicResource AppSurfaceBrush}"
-                BorderBrush="{DynamicResource AppBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="4"
-                Margin="0,0,0,8"
-                ClipToBounds="True">
-            <DockPanel>
-                <Button x:Name="PlaylistsExpandToggle"
-                        DockPanel.Dock="Top"
-                        Cursor="Hand"
-                        Focusable="False"
-                        Padding="10,8"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        HorizontalContentAlignment="Stretch"
-                        Click="PlaylistsExpandToggle_Click"
-                        ToolTip="Collapse / expand Playlists">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="HeaderBorder"
-                                    Background="{TemplateBinding Background}"
-                                    Padding="{TemplateBinding Padding}"
-                                    BorderBrush="{DynamicResource AppBorderBrush}"
-                                    BorderThickness="0,0,0,1">
-                                <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource AppHoverBrush}"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                    <DockPanel LastChildFill="False">
-                        <TextBlock Text="Playlists"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource AppForegroundBrush}"/>
-                        <TextBlock x:Name="PlaylistsChevron"
-                                   DockPanel.Dock="Right"
-                                   Margin="8,0,0,0"
-                                   FontFamily="Segoe UI Symbol"
-                                   Text="▼"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                    </DockPanel>
-                </Button>
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <TextBox x:Name="PlaylistsSearchBox"
+                     Text="{Binding PlaylistsFilterText, UpdateSourceTrigger=PropertyChanged}"
+                     MinHeight="32"
+                     VerticalContentAlignment="Center"
+                     Padding="10,6"
+                     HorizontalAlignment="Stretch"
+                     ToolTip="Filter playlists"/>
+            <TextBlock Text="Search"
+                       Margin="12,0,0,0"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False"
+                       Foreground="{DynamicResource AppMutedForegroundBrush}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Text, ElementName=PlaylistsSearchBox}" Value="">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Text, ElementName=PlaylistsSearchBox}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Grid>
 
-                <Grid x:Name="PlaylistsContent" Margin="10,10,10,10">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+        <DataGrid x:Name="PlaylistsDataGrid"
+                  Grid.Row="1"
+                  ItemsSource="{Binding CombinedPlaylists}"
+                  SelectedItem="{Binding SelectedPlaylistRow, Mode=TwoWay}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  IsReadOnly="True"
+                  CanUserSortColumns="True"
+                  SelectionMode="Extended"
+                  SelectionUnit="FullRow"
+                  HeadersVisibility="Column"
+                  Background="Transparent"
+                  BorderBrush="{DynamicResource AppBorderBrush}"
+                  BorderThickness="1"
+                  SelectionChanged="PlaylistsDataGrid_SelectionChanged"
+                  PreviewKeyDown="PlaylistsDataGrid_PreviewKeyDown">
+            <DataGrid.InputBindings>
+                <MouseBinding Gesture="LeftDoubleClick"
+                              Command="{Binding LoadTracksCommand}"
+                              CommandParameter="{Binding SelectedPlaylist}"/>
+            </DataGrid.InputBindings>
 
-                    <Grid Grid.Row="0" Margin="0,0,0,10">
-                        <TextBox x:Name="PlaylistsSearchBox"
-                                 Text="{Binding PlaylistsFilterText, UpdateSourceTrigger=PropertyChanged}"
-                                 MinHeight="32"
-                                 VerticalContentAlignment="Center"
-                                 Padding="10,6"
-                                 HorizontalAlignment="Stretch"
-                                 ToolTip="Filter playlists"/>
-                        <TextBlock Text="Search"
-                                   Margin="12,0,0,0"
-                                   VerticalAlignment="Center"
-                                   IsHitTestVisible="False"
-                                   Foreground="{DynamicResource AppMutedForegroundBrush}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Text, ElementName=PlaylistsSearchBox}" Value="">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding Text, ElementName=PlaylistsSearchBox}" Value="{x:Null}">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </Grid>
+            <DataGrid.ContextMenu>
+                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                    <MenuItem Header="Open in Loop Lab"
+                              Command="{Binding OpenInLoopLabCommand}"
+                              CommandParameter="{Binding SelectedPlaylist}"/>
+                </ContextMenu>
+            </DataGrid.ContextMenu>
 
-                    <DataGrid x:Name="PlaylistsDataGrid"
-                              Grid.Row="1"
-                              ItemsSource="{Binding CombinedPlaylists}"
-                              SelectedItem="{Binding SelectedPlaylistRow, Mode=TwoWay}"
-                              AutoGenerateColumns="False"
-                              CanUserAddRows="False"
-                              IsReadOnly="True"
-                              CanUserSortColumns="True"
-                              SelectionMode="Extended"
-                              SelectionUnit="FullRow"
-                              HeadersVisibility="Column"
-                              Background="Transparent"
-                              BorderBrush="{DynamicResource AppBorderBrush}"
-                              BorderThickness="1"
-                              SelectionChanged="PlaylistsDataGrid_SelectionChanged"
-                              PreviewKeyDown="PlaylistsDataGrid_PreviewKeyDown">
-                        <DataGrid.InputBindings>
-                            <MouseBinding Gesture="LeftDoubleClick"
-                                          Command="{Binding LoadTracksCommand}"
-                                          CommandParameter="{Binding SelectedPlaylist}"/>
-                        </DataGrid.InputBindings>
+            <DataGrid.RowStyle>
+                <Style TargetType="{x:Type DataGridRow}" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding DeletionStatusName}" Value="Deleted">
+                            <Setter Property="Background" Value="#8B2E2E"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding DeletionStatusName}" Value="Failed">
+                            <Setter Property="Background" Value="#8A6D1D"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
 
-                        <DataGrid.ContextMenu>
-                            <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                <MenuItem Header="Open in Loop Lab"
-                                          Command="{Binding OpenInLoopLabCommand}"
-                                          CommandParameter="{Binding SelectedPlaylist}"/>
-                            </ContextMenu>
-                        </DataGrid.ContextMenu>
-
-                        <DataGrid.RowStyle>
-                            <Style TargetType="{x:Type DataGridRow}" BasedOn="{StaticResource {x:Type DataGridRow}}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding DeletionStatusName}" Value="Deleted">
-                                        <Setter Property="Background" Value="#8B2E2E"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding DeletionStatusName}" Value="Failed">
-                                        <Setter Property="Background" Value="#8A6D1D"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </DataGrid.RowStyle>
-
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="Name" Width="*"/>
-                            <DataGridTextColumn Header="Owner" Binding="{Binding OwnerDisplayName}" SortMemberPath="OwnerDisplayName" Width="*"/>
-                            <DataGridTextColumn Header="# Tracks" Binding="{Binding TracksTotal}" SortMemberPath="TracksTotal" Width="Auto"/>
-                            <DataGridTextColumn Header="Loaded" Binding="{Binding LoadedText}" SortMemberPath="LoadedText" Width="Auto"/>
-                            <DataGridTextColumn Header="Queue" Binding="{Binding QueueStatus}" SortMemberPath="QueueStatus" Width="Auto"/>
-                            <DataGridTextColumn Header="Delete Status" Binding="{Binding DeletionStatusName}" SortMemberPath="DeletionStatusName" Width="Auto"/>
-                            <DataGridTextColumn Header="Spotify ID" Binding="{Binding Id}" SortMemberPath="Id" Width="*"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </Grid>
-            </DockPanel>
-        </Border>
-
-        <component:PlaylistsControlPanel x:Name="ControlsPanel"
-                                         Grid.Row="1"
-                                         ActivityLog="{Binding ActivityLog}"
-                                         IsExpanded="{Binding IsControlsPanelExpanded, Mode=TwoWay}"
-                                         ExpandedHeight="{Binding ControlsPanelHeight, Mode=TwoWay}"
-                                         FillRemainingSpace="{Binding FillControlsPanel, Mode=OneWay}"
-                                         VerticalAlignment="Stretch"/>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="Name" Width="*"/>
+                <DataGridTextColumn Header="Owner" Binding="{Binding OwnerDisplayName}" SortMemberPath="OwnerDisplayName" Width="*"/>
+                <DataGridTextColumn Header="# Tracks" Binding="{Binding TracksTotal}" SortMemberPath="TracksTotal" Width="Auto"/>
+                <DataGridTextColumn Header="Loaded" Binding="{Binding LoadedText}" SortMemberPath="LoadedText" Width="Auto"/>
+                <DataGridTextColumn Header="Queue" Binding="{Binding QueueStatus}" SortMemberPath="QueueStatus" Width="Auto"/>
+                <DataGridTextColumn Header="Delete Status" Binding="{Binding DeletionStatusName}" SortMemberPath="DeletionStatusName" Width="Auto"/>
+                <DataGridTextColumn Header="Spotify ID" Binding="{Binding Id}" SortMemberPath="Id" Width="*"/>
+            </DataGrid.Columns>
+        </DataGrid>
     </Grid>
 </UserControl>

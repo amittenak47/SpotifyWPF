@@ -10,97 +10,26 @@ using SpotifyWPF.ViewModel.Page;
 
 namespace SpotifyWPF.View.Page
 {
-    /// <summary>
-    /// Interaction logic for PlaylistsPage.xaml
-    /// </summary>
     public partial class PlaylistsPage
     {
         private Dictionary<string, bool> _columnVisibility;
-        private bool _playlistsExpanded = true;
 
         public PlaylistsPage()
         {
             InitializeComponent();
             Loaded += PlaylistsPage_Loaded;
-            DataContextChanged += (_, __) => WireViewModel();
         }
 
         private void PlaylistsPage_Loaded(object sender, RoutedEventArgs e)
         {
-            WireViewModel();
             ApplyColumnVisibility();
             AttachColumnHeaderContextMenu();
-            ApplySectionLayout(animate: false);
 
             Opacity = 0;
             BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(450))
             {
                 EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
             });
-        }
-
-        private void WireViewModel()
-        {
-            if (DataContext is PlaylistsPageViewModel vm)
-            {
-                _playlistsExpanded = vm.IsPlaylistsSectionExpanded;
-                vm.PropertyChanged -= ViewModel_PropertyChanged;
-                vm.PropertyChanged += ViewModel_PropertyChanged;
-            }
-        }
-
-        private void ViewModel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == nameof(PlaylistsPageViewModel.IsControlsPanelExpanded) ||
-                e.PropertyName == nameof(PlaylistsPageViewModel.IsPlaylistsSectionExpanded) ||
-                e.PropertyName == nameof(PlaylistsPageViewModel.FillControlsPanel))
-            {
-                ApplySectionLayout(animate: true);
-            }
-        }
-
-        private void PlaylistsPage_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            // Keep fill-mode controls stretched when the page resizes.
-            if (DataContext is PlaylistsPageViewModel vm && vm.FillControlsPanel)
-                ApplySectionLayout(animate: false);
-        }
-
-        private void PlaylistsExpandToggle_Click(object sender, RoutedEventArgs e)
-        {
-            if (!(DataContext is PlaylistsPageViewModel vm))
-                return;
-
-            vm.IsPlaylistsSectionExpanded = !vm.IsPlaylistsSectionExpanded;
-        }
-
-        private void ApplySectionLayout(bool animate)
-        {
-            if (!(DataContext is PlaylistsPageViewModel vm))
-                return;
-
-            _playlistsExpanded = vm.IsPlaylistsSectionExpanded;
-            PlaylistsChevron.Text = _playlistsExpanded ? "▼" : "▲";
-            PlaylistsContent.Visibility = _playlistsExpanded ? Visibility.Visible : Visibility.Collapsed;
-
-            if (vm.FillControlsPanel)
-            {
-                // Playlists collapsed + Controls open → Controls fills remaining space.
-                PlaylistsRow.Height = GridLength.Auto;
-                ControlsRow.Height = new GridLength(1, GridUnitType.Star);
-            }
-            else if (!vm.IsControlsPanelExpanded)
-            {
-                // Controls peeking → Playlists take the rest.
-                PlaylistsRow.Height = new GridLength(1, GridUnitType.Star);
-                ControlsRow.Height = GridLength.Auto;
-            }
-            else
-            {
-                // Both open → Playlists flex, Controls at ExpandedHeight.
-                PlaylistsRow.Height = new GridLength(1, GridUnitType.Star);
-                ControlsRow.Height = GridLength.Auto;
-            }
         }
 
         private void PlaylistsDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)

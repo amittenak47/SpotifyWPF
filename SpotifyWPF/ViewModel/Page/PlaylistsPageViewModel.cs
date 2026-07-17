@@ -194,7 +194,8 @@ namespace SpotifyWPF.ViewModel.Page
         }
 
         /// <summary>
-        /// When Playlists is collapsed and Controls is open, Controls stretches to fill leftover space.
+        /// When no Manage section is open and Controls is expanded, Controls stretches to fill leftover space.
+        /// Managed from ManagePage layout; kept for binding compatibility.
         /// </summary>
         public bool FillControlsPanel => IsControlsPanelExpanded && !IsPlaylistsSectionExpanded;
 
