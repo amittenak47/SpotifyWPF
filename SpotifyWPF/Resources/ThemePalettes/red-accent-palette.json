@@ -1,0 +1,12 @@
+{
+  "Background": "#000000",
+  "Surface": "#141414",
+  "SurfaceAlt": "#242424",
+  "Border": "#750013",
+  "Foreground": "#FFFFFF",
+  "MutedForeground": "#8B959E",
+  "DisabledForeground": "#5A6369",
+  "Hover": "#333333",
+  "Selected": "#750013",
+  "Accent": "#FF1323"
+}
