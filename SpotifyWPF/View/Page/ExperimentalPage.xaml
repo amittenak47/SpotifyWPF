@@ -1,0 +1,19 @@
+<UserControl x:Class="SpotifyWPF.View.Page.ExperimentalPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             DataContext="{Binding ExperimentalPage, Source={StaticResource Locator}}">
+    <Grid Background="{DynamicResource AppBackgroundBrush}" Margin="24">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="480">
+            <TextBlock Text="Experimental"
+                       FontSize="22"
+                       FontWeight="SemiBold"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource AppForegroundBrush}"/>
+            <TextBlock Text="Placeholder for upcoming experiments. Infinite Jukebox now lives under its own menu."
+                       TextWrapping="Wrap"
+                       TextAlignment="Center"
+                       Margin="0,12,0,0"
+                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -8,28 +8,26 @@
              DataContext="{Binding PlaylistsPage, Source={StaticResource Locator}}"
              d:DesignHeight="600" d:DesignWidth="800">
 
-    <!-- List+Actions fills leftover space; other menus are Auto and yield space when collapsed. -->
+    <!-- List fills leftover space; Actions/Create/Info/Logs are Auto and yield when collapsed. -->
     <Grid Margin="6,4,6,8">
         <Grid.RowDefinitions>
-            <RowDefinition Height="*" MinHeight="220"/>
+            <RowDefinition Height="*" MinHeight="180"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- List + Actions (combined so Delete can use current grid selection) -->
+        <!-- List: search + playlist grid only -->
         <Expander x:Name="ListExpander"
                   Grid.Row="0"
                   Header="List"
                   Style="{StaticResource ControlPanelMenuExpanderStyle}"
                   IsExpanded="True"
                   VerticalAlignment="Stretch">
-            <Grid Margin="0,2,0,0">
+            <Grid Margin="0,2,0,0" MinHeight="160">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*" MinHeight="120"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="140" MinHeight="100" MaxHeight="160"/>
+                    <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0" Margin="0,0,0,8">
@@ -113,102 +111,112 @@
                         <DataGridTextColumn Header="Spotify ID" Binding="{Binding Id}" SortMemberPath="Id" Width="*"/>
                     </DataGrid.Columns>
                 </DataGrid>
+            </Grid>
+        </Expander>
 
-                <!-- Actions (under grid): load/delete/execute + status -->
-                <StackPanel Grid.Row="2" Margin="0,8,0,6">
-                    <TextBlock Text="Actions"
-                               FontWeight="SemiBold"
-                               Margin="0,0,0,6"
-                               Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                    <WrapPanel Margin="0,0,0,8">
-                        <TextBlock Text="Load"
+        <!-- Actions: file>menu style + Status/Abort live only here -->
+        <Expander x:Name="ActionsExpander"
+                  Grid.Row="1"
+                  Header="Actions"
+                  Style="{StaticResource ControlPanelMenuExpanderStyle}"
+                  IsExpanded="False">
+            <StackPanel Margin="0,2,0,4">
+                <DockPanel Margin="0,0,0,8" LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Right"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="12,0,0,0">
+                        <TextBlock Text="Delay between requests"
                                    VerticalAlignment="Center"
                                    Margin="0,0,6,0"
-                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
-                        <Slider Width="100"
-                                Minimum="1"
-                                Maximum="50"
-                                TickFrequency="1"
-                                IsSnapToTickEnabled="True"
-                                VerticalAlignment="Center"
-                                Margin="0,0,4,0"
-                                Value="{Binding PlaylistLoadLimit, Mode=TwoWay}"/>
-                        <TextBlock Text="{Binding PlaylistLoadLimit}"
-                                   Width="22"
-                                   TextAlignment="Right"
+                                   Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                   ToolTip="Milliseconds between Spotify API calls"/>
+                        <TextBox Text="{Binding RequestSpacingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="48"
+                                 MinHeight="26"
+                                 VerticalContentAlignment="Center"
+                                 Margin="0,0,8,0"/>
+                        <Button Content="{Binding ExecuteOrPauseButtonLabel}"
+                                Command="{Binding ExecuteOrPauseCommand}"
+                                Padding="12,4"/>
+                    </StackPanel>
+
+                    <Menu Background="Transparent" VerticalAlignment="Center">
+                        <MenuItem Header="Load" Padding="8,4">
+                            <StackPanel Margin="10,8" Width="260">
+                                <DockPanel LastChildFill="True">
+                                    <Button DockPanel.Dock="Right"
+                                            Content="Load"
+                                            MinWidth="52"
+                                            MinHeight="28"
+                                            Margin="8,0,0,0"
+                                            Padding="10,4"
+                                            Command="{Binding EnqueueLoadLimitCommand}"
+                                            ToolTip="Enqueue loading the next page of playlists"/>
+                                    <TextBlock DockPanel.Dock="Right"
+                                               Text="{Binding PlaylistLoadLimit}"
+                                               Width="28"
+                                               TextAlignment="Right"
+                                               VerticalAlignment="Center"
+                                               Margin="6,0,0,0"/>
+                                    <Slider Style="{StaticResource DarkMediaSliderStyle}"
+                                            Minimum="1"
+                                            Maximum="50"
+                                            TickFrequency="1"
+                                            IsSnapToTickEnabled="True"
+                                            VerticalAlignment="Center"
+                                            Value="{Binding PlaylistLoadLimit, Mode=TwoWay}"
+                                            ToolTip="Playlists per load page"/>
+                                </DockPanel>
+                            </StackPanel>
+                            <MenuItem Header="Load all"
+                                      Command="{Binding EnqueueLoadAllCommand}"
+                                      ToolTip="Enqueue loading all remaining playlist pages"/>
+                        </MenuItem>
+                        <MenuItem Header="Delete" Padding="8,4">
+                            <MenuItem Header="Selection"
+                                      Command="{Binding ToggleDeleteQueueCommand}"
+                                      CommandParameter="{Binding SelectedPlaylistItems}"
+                                      ToolTip="Toggle selected playlists in/out of the deletion queue"/>
+                            <MenuItem Header="All loaded"
+                                      Command="{Binding DeleteAllToQueueCommand}"
+                                      ToolTip="Enqueue all loaded playlists for deletion"/>
+                        </MenuItem>
+                        <MenuItem Header="Refresh"
+                                  Padding="8,4"
+                                  Command="{Binding RefreshDeletionResultsCommand}"
+                                  ToolTip="Acknowledge or clear delete results"/>
+                        <MenuItem Header="Export"
+                                  Padding="8,4"
+                                  Command="{Binding ExportToJsonCommand}"
+                                  ToolTip="Export playlists to JSON"/>
+                    </Menu>
+                </DockPanel>
+
+                <DockPanel Margin="0,0,0,8" LastChildFill="True">
+                    <Button DockPanel.Dock="Right"
+                            Content="Abort"
+                            Command="{Binding CancelCurrentActionCommand}"
+                            Padding="12,4"
+                            Margin="8,0,0,0"/>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Status, Converter={StaticResource StatusActionConverter}}"
                                    VerticalAlignment="Center"
-                                   Margin="0,0,6,0"/>
-                        <Button Content="Load"
-                                Command="{Binding EnqueueLoadLimitCommand}"
-                                Focusable="False"
-                                Padding="10,4"
-                                Margin="0,0,4,0"/>
-                        <Button Content="All"
-                                Command="{Binding EnqueueLoadAllCommand}"
-                                Focusable="False"
-                                Padding="10,4"
-                                Margin="0,0,10,0"/>
-                        <Button Content="Delete"
-                                Command="{Binding ToggleDeleteQueueCommand}"
-                                CommandParameter="{Binding SelectedPlaylistItems}"
-                                Focusable="False"
-                                Padding="10,4"
-                                Margin="0,0,4,0"/>
-                        <Button Content="Delete All"
-                                Command="{Binding DeleteAllToQueueCommand}"
-                                Focusable="False"
-                                Padding="10,4"
-                                Margin="0,0,10,0"/>
-                        <Button Content="Refresh"
-                                Command="{Binding RefreshDeletionResultsCommand}"
-                                Focusable="False"
-                                Padding="10,4"
-                                Margin="0,0,4,0"/>
-                        <Button Content="Export"
-                                Command="{Binding ExportToJsonCommand}"
-                                Focusable="False"
-                                Padding="10,4"/>
-                    </WrapPanel>
+                                   Margin="0,0,10,0"
+                                   Foreground="{DynamicResource AppForegroundBrush}"/>
+                        <ProgressBar Width="120"
+                                     Height="8"
+                                     VerticalAlignment="Center"
+                                     IsIndeterminate="True"
+                                     Visibility="{Binding ProgressVisibility}"/>
+                    </StackPanel>
+                </DockPanel>
 
-                    <DockPanel LastChildFill="True">
-                        <StackPanel DockPanel.Dock="Right"
-                                    Orientation="Horizontal"
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="Delay between requests"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"
-                                       Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                       ToolTip="Milliseconds between Spotify API calls"/>
-                            <TextBox Text="{Binding RequestSpacingMilliseconds, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="48"
-                                     MinHeight="26"
-                                     VerticalContentAlignment="Center"
-                                     Margin="0,0,8,0"/>
-                            <Button Content="{Binding ExecuteOrPauseButtonLabel}"
-                                    Command="{Binding ExecuteOrPauseCommand}"
-                                    Padding="12,4"
-                                    Margin="0,0,6,0"/>
-                            <Button Content="Abort"
-                                    Command="{Binding CancelCurrentActionCommand}"
-                                    Padding="12,4"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Status, Converter={StaticResource StatusActionConverter}}"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,10,0"
-                                       Foreground="{DynamicResource AppForegroundBrush}"/>
-                            <ProgressBar Width="120"
-                                         Height="8"
-                                         VerticalAlignment="Center"
-                                         IsIndeterminate="True"
-                                         Visibility="{Binding ProgressVisibility}"/>
-                        </StackPanel>
-                    </DockPanel>
-                </StackPanel>
-
-                <ScrollViewer Grid.Row="3"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Height="140"
+                              MinHeight="100"
+                              MaxHeight="160">
                     <TreeView x:Name="QueuedActionsTreeView"
                               ItemsSource="{Binding QueuedActions}"
                               FontFamily="Consolas"
@@ -228,59 +236,72 @@
                         </TreeView.ItemTemplate>
                     </TreeView>
                 </ScrollViewer>
-            </Grid>
-        </Expander>
-
-        <!-- Create playlist -->
-        <Expander x:Name="CreateExpander"
-                  Grid.Row="1"
-                  Header="Create playlist"
-                  Style="{StaticResource ControlPanelMenuExpanderStyle}"
-                  IsExpanded="False">
-            <StackPanel Margin="4,2,4,6" MaxWidth="480" HorizontalAlignment="Left">
-                <TextBox Text="{Binding NewPlaylistName, UpdateSourceTrigger=PropertyChanged}"
-                         MinHeight="28"
-                         Margin="0,0,0,6"
-                         VerticalContentAlignment="Center"
-                         ToolTip="Playlist name"/>
-                <TextBox Text="{Binding NewPlaylistDescription, UpdateSourceTrigger=PropertyChanged}"
-                         MinHeight="28"
-                         Margin="0,0,0,6"
-                         VerticalContentAlignment="Center"
-                         ToolTip="Description"/>
-                <StackPanel Orientation="Horizontal">
-                    <CheckBox Content="Public"
-                              IsChecked="{Binding NewPlaylistIsPublic}"
-                              VerticalAlignment="Center"
-                              Margin="0,0,12,0"/>
-                    <CheckBox Content="Collab"
-                              IsChecked="{Binding NewPlaylistIsCollaborative}"
-                              VerticalAlignment="Center"
-                              Margin="0,0,12,0"/>
-                    <Button Content="Create"
-                            Command="{Binding CreatePlaylistCommand}"
-                            Padding="12,4"/>
-                </StackPanel>
             </StackPanel>
         </Expander>
 
-        <!-- Playlist Info -->
-        <Expander x:Name="PlaylistInfoExpander"
+        <!-- Create / Playlist Info (shared submenu) -->
+        <Expander x:Name="CreateInfoExpander"
                   Grid.Row="2"
-                  Header="Playlist Info"
+                  Header="Create / Playlist Info"
                   Style="{StaticResource ControlPanelMenuExpanderStyle}"
                   IsExpanded="False">
-            <StackPanel>
+            <StackPanel Margin="4,2,4,6">
+                <TextBlock Text="Create playlist"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,6"
+                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                <DockPanel Margin="0,0,0,12" LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Right"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="8,0,0,0">
+                        <CheckBox Content="Public"
+                                  IsChecked="{Binding NewPlaylistIsPublic}"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,10,0"/>
+                        <CheckBox Content="Collab"
+                                  IsChecked="{Binding NewPlaylistIsCollaborative}"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,10,0"/>
+                        <Button Content="Create"
+                                Command="{Binding CreatePlaylistCommand}"
+                                MinWidth="52"
+                                MinHeight="28"
+                                Padding="10,4"
+                                VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="3*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding NewPlaylistName, UpdateSourceTrigger=PropertyChanged}"
+                                 MinHeight="28"
+                                 Margin="0,0,8,0"
+                                 VerticalContentAlignment="Center"
+                                 ToolTip="Playlist name"/>
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding NewPlaylistDescription, UpdateSourceTrigger=PropertyChanged}"
+                                 MinHeight="28"
+                                 VerticalContentAlignment="Center"
+                                 ToolTip="Description"/>
+                    </Grid>
+                </DockPanel>
+
                 <DockPanel Margin="0,0,0,6" LastChildFill="True">
                     <Button DockPanel.Dock="Right"
                             Content="Load Tracks"
                             Command="{Binding LoadTracksCommand}"
                             CommandParameter="{Binding SelectedPlaylist}"
                             Focusable="False"
-                            Padding="12,4"
+                            MinWidth="88"
+                            MinHeight="28"
+                            Padding="10,4"
                             Margin="8,0,0,0"/>
                     <TextBlock Text="{Binding TracksPlaylistTitle}"
                                VerticalAlignment="Center"
+                               FontWeight="SemiBold"
                                Foreground="{DynamicResource AppMutedForegroundBrush}"/>
                 </DockPanel>
 
@@ -312,7 +333,7 @@
             </StackPanel>
         </Expander>
 
-        <!-- Logs (fixed body height) -->
+        <!-- Logs -->
         <Expander x:Name="LogsExpander"
                   Grid.Row="3"
                   Header="Logs"

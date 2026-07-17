@@ -10,25 +10,6 @@
              d:DesignHeight="450" d:DesignWidth="800">
 
     <DockPanel Background="{DynamicResource AppBackgroundBrush}">
-        <StatusBar DockPanel.Dock="Bottom">
-            <StatusBar.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                    </Grid>
-                </ItemsPanelTemplate>
-            </StatusBar.ItemsPanel>
-            <StatusBarItem>
-                <Label Content="{Binding Status, Converter={StaticResource StatusActionConverter}}"/>
-            </StatusBarItem>
-            <StatusBarItem Grid.Column="1" HorizontalContentAlignment="Stretch">
-                <ProgressBar IsIndeterminate="True" Height="10" Visibility="{Binding ProgressVisibility}"/>
-            </StatusBarItem>
-        </StatusBar>
-
         <GroupBox DockPanel.Dock="Top" Header="Search Filters">
             <WrapPanel>
                 <Label Content="Search keyword(s):"/>

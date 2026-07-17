@@ -60,6 +60,7 @@ namespace SpotifyWPF.ViewModel
             SimpleIoc.Default.Register<SearchPageViewModel>();
             SimpleIoc.Default.Register<PredictionPageViewModel>();
             SimpleIoc.Default.Register<ManagePageViewModel>();
+            SimpleIoc.Default.Register<ExperimentalPageViewModel>();
         }
 
         public MainViewModel Main => ServiceLocator.Current.GetInstance<MainViewModel>();
@@ -77,6 +78,8 @@ namespace SpotifyWPF.ViewModel
         public PredictionPageViewModel PredictionPage => ServiceLocator.Current.GetInstance<PredictionPageViewModel>();
 
         public ManagePageViewModel ManagePage => ServiceLocator.Current.GetInstance<ManagePageViewModel>();
+
+        public ExperimentalPageViewModel ExperimentalPage => ServiceLocator.Current.GetInstance<ExperimentalPageViewModel>();
 
         // Intentionally empty: everything registered above is an app-lifetime
         // singleton, torn down with the process. Views are recreated per

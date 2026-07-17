@@ -1,0 +1,105 @@
+<UserControl x:Class="SpotifyWPF.View.Component.ThemeColorPicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <TextBox x:Name="HexBox"
+                 Grid.Column="0"
+                 MaxLength="7"
+                 VerticalContentAlignment="Center"
+                 Margin="0,0,8,0"
+                 FontFamily="Consolas"
+                 Text="{Binding Hex, ElementName=Root, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                 ToolTip="Six-digit hex color"/>
+
+        <Button x:Name="SwatchButton"
+                Grid.Column="1"
+                Width="36"
+                Height="28"
+                Padding="0"
+                Cursor="Hand"
+                ToolTip="Open color picker"
+                Click="SwatchButton_Click">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{Binding SwatchBrush, ElementName=Root}"
+                            BorderBrush="{DynamicResource AppBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="3"
+                            SnapsToDevicePixels="True"/>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+
+        <Popup x:Name="PickerPopup"
+               PlacementTarget="{Binding ElementName=SwatchButton}"
+               Placement="Bottom"
+               StaysOpen="False"
+               AllowsTransparency="True"
+               PopupAnimation="Fade">
+            <Border Background="{DynamicResource AppSurfaceBrush}"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
+                    BorderThickness="1"
+                    Padding="12"
+                    Width="280"
+                    CornerRadius="4">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.55" Color="Black"/>
+                </Border.Effect>
+                <StackPanel>
+                    <Border Height="56"
+                            CornerRadius="4"
+                            Margin="0,0,0,12"
+                            BorderBrush="{DynamicResource AppBorderBrush}"
+                            BorderThickness="1"
+                            Background="{Binding SwatchBrush, ElementName=Root}"/>
+
+                    <TextBlock Text="Red" Margin="0,0,0,2" Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                    <Slider x:Name="RedSlider"
+                            Style="{StaticResource DarkMediaSliderStyle}"
+                            Minimum="0" Maximum="255" IsSnapToTickEnabled="True" TickFrequency="1"
+                            Margin="0,0,0,8"
+                            ValueChanged="ChannelSlider_ValueChanged"/>
+
+                    <TextBlock Text="Green" Margin="0,0,0,2" Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                    <Slider x:Name="GreenSlider"
+                            Style="{StaticResource DarkMediaSliderStyle}"
+                            Minimum="0" Maximum="255" IsSnapToTickEnabled="True" TickFrequency="1"
+                            Margin="0,0,0,8"
+                            ValueChanged="ChannelSlider_ValueChanged"/>
+
+                    <TextBlock Text="Blue" Margin="0,0,0,2" Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                    <Slider x:Name="BlueSlider"
+                            Style="{StaticResource DarkMediaSliderStyle}"
+                            Minimum="0" Maximum="255" IsSnapToTickEnabled="True" TickFrequency="1"
+                            Margin="0,0,0,10"
+                            ValueChanged="ChannelSlider_ValueChanged"/>
+
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                   Text="Hex"/>
+                        <TextBox x:Name="PopupHexBox"
+                                 Margin="10,0,0,0"
+                                 MaxLength="7"
+                                 FontFamily="Consolas"
+                                 VerticalContentAlignment="Center"
+                                 TextChanged="PopupHexBox_TextChanged"/>
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

@@ -1,31 +1,25 @@
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 using SpotifyWPF.Model;
 using SpotifyWPF.Service.Theme;
-using SpotifyWPF.Service.Visual;
+using SpotifyWPF.View.Component;
 
 namespace SpotifyWPF.View
 {
     public partial class PreferencesWindow
     {
         private readonly IAppThemeStore _themeStore;
-        private readonly IVisualEffectsStore _visualEffectsStore;
         private readonly AppThemePalette _workingPalette;
         private readonly List<ColorFieldBinding> _bindings = new List<ColorFieldBinding>();
 
-        public PreferencesWindow(IAppThemeStore themeStore, IVisualEffectsStore visualEffectsStore)
+        public PreferencesWindow(IAppThemeStore themeStore)
         {
             _themeStore = themeStore;
-            _visualEffectsStore = visualEffectsStore;
             _workingPalette = _themeStore.Get();
             InitializeComponent();
             BuildColorFields();
             LoadPaletteIntoFields();
-            FractalBackgroundCheckBox.IsChecked = _visualEffectsStore.Get().FractalBackgroundEnabled;
-            EqualizerPresetCombo.ItemsSource = new[] { "Cascading bars", "Wave ring" };
-            EqualizerPresetCombo.SelectedItem = EqualizerPresetToLabel(_visualEffectsStore.Get().EqualizerPreset);
         }
 
         private void BuildColorFields()
@@ -33,45 +27,28 @@ namespace SpotifyWPF.View
             var row = 0;
             foreach (var definition in AppThemePalette.Definitions)
             {
+                ColorFieldsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
                 var label = new TextBlock
                 {
                     Text = definition.Label,
                     VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(0, 0, 8, 0)
+                    Margin = new Thickness(0, 0, 8, 8)
                 };
                 Grid.SetRow(label, row);
                 Grid.SetColumn(label, 0);
-                ColorFieldsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 ColorFieldsGrid.Children.Add(label);
 
-                var hexBox = new TextBox
+                var picker = new ThemeColorPicker
                 {
-                    MaxLength = 7,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(0, 0, 8, 6),
-                    FontFamily = new FontFamily("Consolas")
+                    Margin = new Thickness(0, 0, 0, 8),
+                    VerticalAlignment = VerticalAlignment.Center
                 };
-                Grid.SetRow(hexBox, row);
-                Grid.SetColumn(hexBox, 1);
-                ColorFieldsGrid.Children.Add(hexBox);
+                Grid.SetRow(picker, row);
+                Grid.SetColumn(picker, 1);
+                ColorFieldsGrid.Children.Add(picker);
 
-                var swatch = new Border
-                {
-                    Width = 28,
-                    Height = 22,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(0, 0, 0, 6),
-                    BorderBrush = new SolidColorBrush(Colors.Gray),
-                    BorderThickness = new Thickness(1),
-                    CornerRadius = new CornerRadius(2)
-                };
-                Grid.SetRow(swatch, row);
-                Grid.SetColumn(swatch, 2);
-                ColorFieldsGrid.Children.Add(swatch);
-
-                var binding = new ColorFieldBinding(definition, hexBox, swatch);
-                hexBox.TextChanged += (_, __) => UpdateSwatch(binding);
-                _bindings.Add(binding);
+                _bindings.Add(new ColorFieldBinding(definition, picker));
                 row++;
             }
         }
@@ -79,26 +56,9 @@ namespace SpotifyWPF.View
         private void LoadPaletteIntoFields()
         {
             foreach (var binding in _bindings)
-            {
-                binding.HexBox.Text = binding.Definition.Get(_workingPalette);
-                UpdateSwatch(binding);
-            }
+                binding.Picker.Hex = binding.Definition.Get(_workingPalette);
 
             ValidationMessage.Visibility = Visibility.Collapsed;
-        }
-
-        private static void UpdateSwatch(ColorFieldBinding binding)
-        {
-            var hex = binding.HexBox.Text;
-            if (AppThemeManager.TryNormalizeHex(hex, out var normalized))
-            {
-                binding.Swatch.Background = new SolidColorBrush(
-                    AppThemeManager.ParseColorOrDefault(normalized, binding.Definition.DefaultHex));
-                return;
-            }
-
-            binding.Swatch.Background = new SolidColorBrush(
-                AppThemeManager.ParseColorOrDefault(binding.Definition.DefaultHex, binding.Definition.DefaultHex));
         }
 
         private bool TryReadPaletteFromFields(out AppThemePalette palette, out string errorMessage)
@@ -108,7 +68,7 @@ namespace SpotifyWPF.View
 
             foreach (var binding in _bindings)
             {
-                if (!AppThemeManager.TryNormalizeHex(binding.HexBox.Text, out var normalized))
+                if (!AppThemeManager.TryNormalizeHex(binding.Picker.Hex, out var normalized))
                 {
                     errorMessage = $"\"{binding.Definition.Label}\" must be a six-digit hex color (for example, #750013).";
                     return false;
@@ -140,54 +100,21 @@ namespace SpotifyWPF.View
 
             _themeStore.Save(palette);
             AppThemeManager.Apply(palette);
-
-            var effects = _visualEffectsStore.Get();
-            var fractal = FractalBackgroundCheckBox.IsChecked == true;
-            var eqPreset = LabelToEqualizerPreset(EqualizerPresetCombo.SelectedItem as string);
-            var changed = effects.FractalBackgroundEnabled != fractal ||
-                          !string.Equals(effects.EqualizerPreset, eqPreset, System.StringComparison.OrdinalIgnoreCase);
-
-            if (changed)
-            {
-                effects.FractalBackgroundEnabled = fractal;
-                effects.EqualizerPreset = eqPreset;
-                _visualEffectsStore.Save(effects);
-            }
-
             DialogResult = true;
             Close();
         }
 
-        private static string EqualizerPresetToLabel(string mode)
-        {
-            if (string.Equals(mode, "wave-ring", System.StringComparison.OrdinalIgnoreCase))
-                return "Wave ring";
-
-            return "Cascading bars";
-        }
-
-        private static string LabelToEqualizerPreset(string label)
-        {
-            if (string.Equals(label, "Wave ring", System.StringComparison.OrdinalIgnoreCase))
-                return "wave-ring";
-
-            return "bars";
-        }
-
         private sealed class ColorFieldBinding
         {
-            public ColorFieldBinding(ThemeColorDefinition definition, TextBox hexBox, Border swatch)
+            public ColorFieldBinding(ThemeColorDefinition definition, ThemeColorPicker picker)
             {
                 Definition = definition;
-                HexBox = hexBox;
-                Swatch = swatch;
+                Picker = picker;
             }
 
             public ThemeColorDefinition Definition { get; }
 
-            public TextBox HexBox { get; }
-
-            public Border Swatch { get; }
+            public ThemeColorPicker Picker { get; }
         }
     }
 }
