@@ -32,7 +32,11 @@ namespace SpotifyWPF.Service
 
         public bool HasReachedSpotifyPlaylistEnd()
         {
-            return _lastKnownPlaylistTotal.HasValue && _spotifyFetchOffset >= _lastKnownPlaylistTotal.Value;
+            // Total 0 is not a valid "finished" signal — an empty/failed response
+            // used to poison LastKnownTotal and permanently block further fetches.
+            return _lastKnownPlaylistTotal.HasValue
+                && _lastKnownPlaylistTotal.Value > 0
+                && _spotifyFetchOffset >= _lastKnownPlaylistTotal.Value;
         }
 
         public void LoadPaginationState()
@@ -49,11 +53,34 @@ namespace SpotifyWPF.Service
             _lastKnownPlaylistTotal = state.LastKnownTotal;
 
             var knownCount = _localStore.GetKnownPlaylistCount();
-            if (knownCount > _spotifyFetchOffset)
+            var stateChanged = false;
+
+            // Heal poisoned state: Total 0/null must not keep a huge offset that
+            // skips the real starting page and trips the end-of-list check.
+            if (!_lastKnownPlaylistTotal.HasValue || _lastKnownPlaylistTotal.Value <= 0)
+            {
+                if (_lastKnownPlaylistTotal.HasValue)
+                {
+                    Log($"Clearing invalid LastKnownTotal ({_lastKnownPlaylistTotal}) from pagination state.");
+                    _lastKnownPlaylistTotal = null;
+                    stateChanged = true;
+                }
+
+                if (_spotifyFetchOffset > knownCount)
+                {
+                    Log($"Resetting Spotify fetch offset from {_spotifyFetchOffset} to {knownCount} because playlist total is unknown.");
+                    _spotifyFetchOffset = knownCount;
+                    stateChanged = true;
+                }
+            }
+            else if (knownCount > _spotifyFetchOffset)
             {
                 _spotifyFetchOffset = knownCount;
-                SavePaginationState();
+                stateChanged = true;
             }
+
+            if (stateChanged)
+                SavePaginationState();
         }
 
         public async Task<int> FetchPageAtOffsetAsync(int offset, int limit, CancellationToken cancellationToken, bool useDefaultRequestFallback = false)
@@ -140,7 +167,9 @@ namespace SpotifyWPF.Service
             var total = page?.Total?.ToString() ?? "unknown";
             var hasNextPage = page?.Next != null;
 
-            if (page?.Total != null)
+            // Only trust a positive total. Total 0 from an empty page at a bad
+            // offset must not permanently mark paging as finished.
+            if (page?.Total != null && page.Total > 0)
                 _lastKnownPlaylistTotal = page.Total;
 
             SavePaginationState();
