@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using GalaSoft.MvvmLight;
 
 namespace SpotifyWPF.Model
@@ -17,6 +18,9 @@ namespace SpotifyWPF.Model
         {
             DeletionItem = deletionItem;
             Playlist = deletionItem?.Playlist;
+
+            if (DeletionItem != null)
+                DeletionItem.PropertyChanged += OnDeletionItemPropertyChanged;
         }
 
         public PlaylistCacheItem Playlist { get; }
@@ -40,5 +44,18 @@ namespace SpotifyWPF.Model
         public string QueueStatus => IsStaged ? "Queued" : "";
 
         public string DeletionStatusName => DeletionItem?.DeletionStatusName ?? "";
+
+        private void OnDeletionItemPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(DeletionQueueItem.DeletionStatus) ||
+                e.PropertyName == nameof(DeletionQueueItem.DeletionStatusName) ||
+                e.PropertyName == nameof(DeletionQueueItem.IsMarkedForDeletion) ||
+                e.PropertyName == nameof(DeletionQueueItem.MarkStatus) ||
+                string.IsNullOrEmpty(e.PropertyName))
+            {
+                RaisePropertyChanged(nameof(DeletionStatusName));
+                RaisePropertyChanged(nameof(QueueStatus));
+            }
+        }
     }
 }

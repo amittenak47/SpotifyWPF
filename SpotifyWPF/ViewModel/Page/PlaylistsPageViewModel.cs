@@ -55,6 +55,10 @@ namespace SpotifyWPF.ViewModel.Page
 
         private bool _isActionRunning;
 
+        private QueuedPlaylistAction _selectedQueuedAction;
+
+        private QueuedActionDetailItem _selectedQueuedDetail;
+
         private string _newPlaylistName;
 
         private string _newPlaylistDescription;
@@ -103,6 +107,7 @@ namespace SpotifyWPF.ViewModel.Page
             OpenInLoopLabCommand = new RelayCommand<PlaylistCacheItem>(OpenInLoopLab);
             RefreshSelectedPlaylistsCommand = new RelayCommand<IList>(async playlists => await RefreshSelectedPlaylistsAsync(playlists));
             CancelCurrentActionCommand = new RelayCommand(CancelCurrentAction, CanCancelCurrentAction);
+            AbortQueuedActionCommand = new RelayCommand(AbortQueuedAction, CanAbortQueuedAction);
             ExecuteOrPauseCommand = new RelayCommand(async () => await ExecuteOrPauseAsync(), CanExecuteOrPause);
             StagePlaylistsCommand = new RelayCommand<IList>(StagePlaylists);
             UnstagePlaylistsCommand = new RelayCommand<IList>(UnstagePlaylists);
@@ -126,7 +131,7 @@ namespace SpotifyWPF.ViewModel.Page
             EnqueueLoadLimitCommand = new RelayCommand(EnqueueLoadLimit, CanEnqueueActions);
             EnqueueLoadAllCommand = new RelayCommand(EnqueueLoadAll, CanEnqueueActions);
             EnqueueDeleteSelectionCommand = new RelayCommand<IList>(EnqueueDeleteSelection, CanEnqueueDeleteSelection);
-            ClearActionQueueCommand = new RelayCommand(() => _actionQueue.Clear(), () => QueuedActions.Any());
+            ClearActionQueueCommand = new RelayCommand(ClearActionQueue, () => QueuedActions.Any());
             RemoveSelectedQueuedActionsCommand = new RelayCommand<IList>(RemoveSelectedQueuedActions);
 
             _playlistGridRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
@@ -316,6 +321,7 @@ namespace SpotifyWPF.ViewModel.Page
                 if (Set(ref _isActionRunning, value))
                 {
                     CancelCurrentActionCommand?.RaiseCanExecuteChanged();
+                    AbortQueuedActionCommand?.RaiseCanExecuteChanged();
                     RaiseActionQueueStates();
                     CreatePlaylistCommand?.RaiseCanExecuteChanged();
                     LoadMorePlaylistsCommand?.RaiseCanExecuteChanged();
@@ -362,6 +368,8 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand<IList> RefreshSelectedPlaylistsCommand { get; }
 
         public RelayCommand CancelCurrentActionCommand { get; }
+
+        public RelayCommand AbortQueuedActionCommand { get; }
 
         public RelayCommand ExecuteOrPauseCommand { get; }
 
@@ -475,7 +483,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             if (_actionQueue.IsExecuting)
             {
-                _actionQueue.Clear();
+                ClearActionQueue();
                 Log("Aborted queued action execution and cleared the action queue.");
             }
 
@@ -487,6 +495,62 @@ namespace SpotifyWPF.ViewModel.Page
         private bool CanCancelCurrentAction()
         {
             return IsActionRunning && _currentActionCancellationTokenSource?.IsCancellationRequested != true;
+        }
+
+        /// <summary>
+        /// Abort the selected queued action/detail (reverts delete staging in the
+        /// playlists table). With no selection while work is running, cancels
+        /// execution like the old Abort button.
+        /// </summary>
+        private void AbortQueuedAction()
+        {
+            if (_selectedQueuedDetail != null)
+            {
+                var parent = _selectedQueuedAction ?? FindQueuedActionForDetail(_selectedQueuedDetail);
+                if (parent != null)
+                {
+                    RemoveQueuedActionDetail(parent, _selectedQueuedDetail);
+                    ClearQueuedActionSelection();
+                    Log("Aborted selected playlist from the action queue.");
+                    return;
+                }
+            }
+
+            if (_selectedQueuedAction != null)
+            {
+                RemoveQueuedAction(_selectedQueuedAction);
+                ClearQueuedActionSelection();
+                Log("Aborted selected queued action.");
+                return;
+            }
+
+            CancelCurrentAction();
+        }
+
+        private bool CanAbortQueuedAction()
+        {
+            if (_selectedQueuedAction != null || _selectedQueuedDetail != null)
+                return true;
+
+            return CanCancelCurrentAction();
+        }
+
+        public void SetSelectedQueuedActionItem(object selectedItem)
+        {
+            _selectedQueuedAction = selectedItem as QueuedPlaylistAction;
+            _selectedQueuedDetail = selectedItem as QueuedActionDetailItem;
+
+            if (_selectedQueuedDetail != null && _selectedQueuedAction == null)
+                _selectedQueuedAction = FindQueuedActionForDetail(_selectedQueuedDetail);
+
+            AbortQueuedActionCommand?.RaiseCanExecuteChanged();
+        }
+
+        private void ClearQueuedActionSelection()
+        {
+            _selectedQueuedAction = null;
+            _selectedQueuedDetail = null;
+            AbortQueuedActionCommand?.RaiseCanExecuteChanged();
         }
 
         private bool CanExecuteOrPause()
@@ -616,7 +680,13 @@ namespace SpotifyWPF.ViewModel.Page
                         ? $"Cancelled staged deletion. Deleted {deletedCount} of {playlists.Count} staged playlist(s); failed or skipped {failedCount}."
                     : $"Deleted {deletedCount} of {playlists.Count} staged playlist(s); failed {failedCount}.");
 
+                // Only successful Spotify unfollows shrink Spotify's list; walk the
+                // fetch cursor back by that count (3 pass + 1 fail + 5 pass => -8).
+                if (deletedCount > 0)
+                    _paging.RetreatForSuccessfulDeletes(deletedCount);
+
                 PersistStagedDeletionGridToStore();
+                RefreshGridFromLocalFiles();
                 RaiseDeletionCommandStates();
             }
             catch (OperationCanceledException)
@@ -631,6 +701,7 @@ namespace SpotifyWPF.ViewModel.Page
                 }
 
                 PersistStagedDeletionGridToStore();
+                RefreshGridFromLocalFiles();
                 Log("Cancelled staged deletion. Pending items were marked as failed for review.");
                 throw;
             }
@@ -1391,11 +1462,20 @@ namespace SpotifyWPF.ViewModel.Page
         private void RaiseActionQueueStates()
         {
             ExecuteOrPauseCommand.RaiseCanExecuteChanged();
+            AbortQueuedActionCommand?.RaiseCanExecuteChanged();
             EnqueueLoadLimitCommand.RaiseCanExecuteChanged();
             EnqueueLoadAllCommand.RaiseCanExecuteChanged();
             EnqueueDeleteSelectionCommand.RaiseCanExecuteChanged();
             ClearActionQueueCommand.RaiseCanExecuteChanged();
             RaisePropertyChanged(nameof(ExecuteOrPauseButtonLabel));
+        }
+
+        private void ClearActionQueue()
+        {
+            foreach (var action in QueuedActions.ToList())
+                RemoveQueuedAction(action);
+
+            ClearQueuedActionSelection();
         }
 
         private bool CanEnqueueActions()
@@ -1541,10 +1621,13 @@ namespace SpotifyWPF.ViewModel.Page
 
         private void RemoveSelectedQueuedActions(IList items)
         {
-            var selectedActions = items?.Cast<QueuedPlaylistAction>().ToList();
+            var selectedActions = items?.OfType<QueuedPlaylistAction>().ToList();
             if (selectedActions == null || !selectedActions.Any()) return;
 
-            _actionQueue.RemoveRange(selectedActions);
+            foreach (var action in selectedActions)
+                RemoveQueuedAction(action);
+
+            ClearQueuedActionSelection();
         }
 
         private async Task ExecuteActionQueueAsync()

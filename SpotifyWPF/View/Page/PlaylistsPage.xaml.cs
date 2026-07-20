@@ -130,6 +130,12 @@ namespace SpotifyWPF.View.Page
             }
         }
 
+        private void QueuedActionsTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (DataContext is PlaylistsPageViewModel viewModel)
+                viewModel.SetSelectedQueuedActionItem(e.NewValue);
+        }
+
         private void ApplyColumnVisibility()
         {
             _columnVisibility = PlaylistGridColumnSettingsStore.Load();

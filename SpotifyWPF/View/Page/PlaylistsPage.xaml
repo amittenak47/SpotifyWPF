@@ -91,11 +91,13 @@
                     <DataGrid.RowStyle>
                         <Style TargetType="{x:Type DataGridRow}" BasedOn="{StaticResource {x:Type DataGridRow}}">
                             <Style.Triggers>
+                                <!-- Successful unfollow: green until Refresh clears the row -->
                                 <DataTrigger Binding="{Binding DeletionStatusName}" Value="Deleted">
-                                    <Setter Property="Background" Value="#8B2E2E"/>
+                                    <Setter Property="Background" Value="#1B5E3B"/>
                                 </DataTrigger>
+                                <!-- Failed unfollow: red until Refresh restores to the list -->
                                 <DataTrigger Binding="{Binding DeletionStatusName}" Value="Failed">
-                                    <Setter Property="Background" Value="#8A6D1D"/>
+                                    <Setter Property="Background" Value="#8B2E2E"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -206,9 +208,10 @@
                 <DockPanel Margin="0,0,0,8" LastChildFill="True">
                     <Button DockPanel.Dock="Right"
                             Content="Abort"
-                            Command="{Binding CancelCurrentActionCommand}"
+                            Command="{Binding AbortQueuedActionCommand}"
                             Padding="12,4"
-                            Margin="8,0,0,0"/>
+                            Margin="8,0,0,0"
+                            ToolTip="Abort the selected queued action (reverts delete staging). With no selection while running, cancels execution."/>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Status, Converter={StaticResource StatusActionConverter}}"
                                    VerticalAlignment="Center"
@@ -233,6 +236,7 @@
                               FontSize="11"
                               Background="Transparent"
                               BorderThickness="0"
+                              SelectedItemChanged="QueuedActionsTreeView_SelectedItemChanged"
                               PreviewKeyDown="QueuedActionsTreeView_PreviewKeyDown">
                         <TreeView.ItemTemplate>
                             <HierarchicalDataTemplate ItemsSource="{Binding DetailItems}">

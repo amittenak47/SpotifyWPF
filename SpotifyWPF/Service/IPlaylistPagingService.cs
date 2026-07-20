@@ -32,5 +32,13 @@ namespace SpotifyWPF.Service
         /// persisted) past pages that contained nothing new.
         /// </summary>
         Task<int> FetchPageAtOffsetAsync(int offset, int limit, CancellationToken cancellationToken, bool useDefaultRequestFallback = false);
+
+        /// <summary>
+        /// After successful Spotify unfollows, walk the fetch cursor back so
+        /// offset/total stay aligned with Spotify's shortened list. Failed
+        /// deletes must not call this. Local unstage (no Spotify call) must not
+        /// call this either.
+        /// </summary>
+        void RetreatForSuccessfulDeletes(int deletedCount);
     }
 }

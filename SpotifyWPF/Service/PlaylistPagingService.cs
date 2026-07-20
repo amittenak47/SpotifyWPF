@@ -118,6 +118,28 @@ namespace SpotifyWPF.Service
             return addedCount;
         }
 
+        public void RetreatForSuccessfulDeletes(int deletedCount)
+        {
+            if (deletedCount <= 0)
+                return;
+
+            var offsetBefore = _spotifyFetchOffset;
+            var totalBefore = _lastKnownPlaylistTotal;
+
+            _spotifyFetchOffset = Math.Max(0, _spotifyFetchOffset - deletedCount);
+
+            if (_lastKnownPlaylistTotal.HasValue)
+            {
+                var retreatedTotal = _lastKnownPlaylistTotal.Value - deletedCount;
+                // Keep null rather than 0 so we do not re-poison the stop condition.
+                _lastKnownPlaylistTotal = retreatedTotal > 0 ? retreatedTotal : (int?)null;
+            }
+
+            SavePaginationState();
+
+            Log($"Walked fetch cursor back by {deletedCount} after successful Spotify delete(s). Offset {offsetBefore} -> {_spotifyFetchOffset}; total {(totalBefore?.ToString() ?? "unknown")} -> {(_lastKnownPlaylistTotal?.ToString() ?? "unknown")}.");
+        }
+
         private int ResolveSpotifyFetchOffset(int requestedOffset)
         {
             var knownCount = _localStore.GetKnownPlaylistCount();
