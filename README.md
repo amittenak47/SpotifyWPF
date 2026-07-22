@@ -20,6 +20,12 @@ Refactoring parts of the codebase to reduce single-file bloat and abstract/restr
 
 **Infinite Jukebox** under **Experimental** — now merged from `algo-overhaul` into `master`. Beat-aware infinite looping with an **Enhanced** similarity pipeline (z-scored stacked features, continuation scoring, kNN + percentile graph, softmax navigation), ring mini player, session track list, Local WAV transport, and cached AppData analyses. Builds are **x64** today; an **x86** build may be added later.
 
+**Lyrics + Local WAV branch modifiers (in progress)**
+
+- Synced lyrics via **LRCLIB** (not Spotify) shown on the Infinite Jukebox stage; hops update the highlight from transport position.
+- Softmax **lyric phrase bias** prefers hops at line boundaries when lyrics are mapped to beats.
+- **Branch modifiers** (supercharge / turbocharge EQ+drive) are **Local WAV only** — Ctrl-drag a locked chord outward; Alt+double-click cycles tiers. Spotify streaming never runs the DSP chain.
+
 **Release packaging**
 
 Building a release zip and MSIX installer with an Azure-signed app certificate.

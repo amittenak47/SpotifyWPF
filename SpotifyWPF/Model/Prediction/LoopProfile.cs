@@ -48,6 +48,10 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("lockedBranches")]
         public List<BranchLock> LockedBranches { get; set; } = new List<BranchLock>();
 
+        /// <summary>Local-WAV-only modifiers saved with this preset.</summary>
+        [JsonPropertyName("branchModifiers")]
+        public List<BranchModifier> BranchModifiers { get; set; } = new List<BranchModifier>();
+
         /// <summary>Optional snapshot of jukebox tune settings at save time.</summary>
         [JsonPropertyName("settings")]
         public JukeboxSettings SettingsSnapshot { get; set; }
@@ -65,6 +69,23 @@ namespace SpotifyWPF.Model.Prediction
         public int FromBeatIndex { get; set; }
 
         public int ToBeatIndex { get; set; }
+    }
+
+    /// <summary>
+    /// Radial stretch of a locked branch on the ring (Local WAV modifiers only).
+    /// Stretch01 is 0–1 based on how far the chord was pulled outward.
+    /// </summary>
+    public class RingModifierStretch
+    {
+        public int FromBeatIndex { get; set; }
+
+        public int ToBeatIndex { get; set; }
+
+        /// <summary>0–1 outward pull amount.</summary>
+        public double Stretch01 { get; set; }
+
+        /// <summary>When true, create turbocharge preset; otherwise supercharge.</summary>
+        public bool Turbo { get; set; }
     }
 
     /// <summary>
@@ -92,6 +113,13 @@ namespace SpotifyWPF.Model.Prediction
         /// <summary>Branches the user locked on the jukebox ring (click-to-lock).</summary>
         [JsonPropertyName("lockedBranches")]
         public List<BranchLock> LockedBranches { get; set; } = new List<BranchLock>();
+
+        /// <summary>
+        /// Local-WAV-only effect stacks stretched from locked branches.
+        /// Ignored entirely when playback source is Spotify.
+        /// </summary>
+        [JsonPropertyName("branchModifiers")]
+        public List<BranchModifier> BranchModifiers { get; set; } = new List<BranchModifier>();
 
         /// <summary>
         /// When true (default), random walk + locks at their probability.

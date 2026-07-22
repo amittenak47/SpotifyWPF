@@ -42,6 +42,9 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly BranchPreferenceStore _preferences;
 
+        /// <summary>Beat indices that start a lyric line (phrase boundaries). Empty when no lyrics.</summary>
+        private readonly HashSet<int> _lyricPhraseBeats;
+
         private readonly string _trackId;
 
         private double _currentBranchChance;
@@ -86,12 +89,16 @@ namespace SpotifyWPF.Service.Prediction
         public bool IsIdleWithoutLocks => !_randomBranches && _lockedBranches.Count == 0;
 
         public BeatNavigator(BeatGraph graph, JukeboxSettings settings, LoopProfile profile = null,
-            int? randomSeed = null, BranchPreferenceStore preferences = null)
+            int? randomSeed = null, BranchPreferenceStore preferences = null,
+            IEnumerable<int> lyricPhraseBeats = null)
         {
             Graph = graph ?? throw new ArgumentNullException(nameof(graph));
             _settings = settings ?? JukeboxSettings.CreateDefaults();
             _trackId = graph.TrackId;
             _preferences = preferences;
+            _lyricPhraseBeats = lyricPhraseBeats != null
+                ? new HashSet<int>(lyricPhraseBeats)
+                : new HashSet<int>();
             _currentBranchChance = ClampProbability(_settings.BranchProbabilityMin);
             _random = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
 
@@ -476,7 +483,8 @@ namespace SpotifyWPF.Service.Prediction
                 var pref = wPref != 0 && _preferences != null
                     ? _preferences.Score(_trackId, fromBeatIndex, edge.DestinationIndex)
                     : 0;
-                var score = (-edge.Distance / tau) - (lambda * visits) + (wPref * pref);
+                var lyricBias = LyricPhraseBias(fromBeatIndex, edge.DestinationIndex);
+                var score = (-edge.Distance / tau) - (lambda * visits) + (wPref * pref) + lyricBias;
                 scores[i] = score;
 
                 if (score > maxScore)
@@ -522,6 +530,29 @@ namespace SpotifyWPF.Service.Prediction
             }
 
             return total;
+        }
+
+        /// <summary>
+        /// Prefer hops that leave or land on a lyric phrase boundary so splices feel like
+        /// verse/line cuts rather than mid-word jumps.
+        /// </summary>
+        private double LyricPhraseBias(int fromBeatIndex, int toBeatIndex)
+        {
+            var weight = _settings.LyricPhraseWeight;
+            if (weight <= 0 || _lyricPhraseBeats.Count == 0)
+                return 0;
+
+            var bonus = 0.0;
+            if (_lyricPhraseBeats.Contains(fromBeatIndex))
+                bonus += 0.5;
+            if (_lyricPhraseBeats.Contains(toBeatIndex))
+                bonus += 1.0;
+
+            // Mild penalty for landing one beat after a phrase start (often mid-word).
+            if (_lyricPhraseBeats.Contains(toBeatIndex - 1) && !_lyricPhraseBeats.Contains(toBeatIndex))
+                bonus -= 0.35;
+
+            return weight * bonus;
         }
 
         private List<BeatEdge> FilterEdges(int fromBeatIndex, IReadOnlyList<BeatEdge> edges,

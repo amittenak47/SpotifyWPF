@@ -51,6 +51,12 @@ namespace SpotifyWPF.Service.Prediction
         void ClearBranchPreferences();
 
         /// <summary>
+        /// Supply lyric phrase-boundary beat indices for Softmax bias (empty/null clears).
+        /// Takes effect on the next jukebox rearm.
+        /// </summary>
+        void SetLyricPhraseBeats(IEnumerable<int> beatIndices);
+
+        /// <summary>
         /// Returns the (cached) beat graph for a track, building it from the cached analysis when
         /// needed. Null when no analysis exists yet. Used by the ring UI — the graph itself stays
         /// service-side.
@@ -79,6 +85,9 @@ namespace SpotifyWPF.Service.Prediction
         private readonly BeatGraphBuilder _graphBuilder = new BeatGraphBuilder();
 
         private readonly BranchPreferenceStore _preferences = new BranchPreferenceStore();
+
+        /// <summary>Lyric phrase-boundary beats for Softmax bias; refreshed when lyrics load.</summary>
+        private HashSet<int> _lyricPhraseBeats = new HashSet<int>();
 
         /// <summary>Beat graphs are pure functions of the cached analysis; keep them per track.</summary>
         private readonly Dictionary<string, BeatGraph> _graphCache = new Dictionary<string, BeatGraph>();
@@ -223,7 +232,7 @@ namespace SpotifyWPF.Service.Prediction
             var priorCounts = _navigator?.ExportVisitCounts();
             var priorDwell = _navigator?.ExportBeatsSinceJump() ?? int.MaxValue / 4;
             _navigator = new BeatNavigator(graph, _jukeboxSettings.Get(), ActiveProfile,
-                preferences: _preferences);
+                preferences: _preferences, lyricPhraseBeats: _lyricPhraseBeats);
             _navigator.ImportVisitMemory(priorVisits);
             _navigator.ImportVisitCounts(priorCounts);
             _navigator.ImportBeatsSinceJump(priorDwell);
@@ -408,6 +417,16 @@ namespace SpotifyWPF.Service.Prediction
         {
             _preferences.ClearAll();
             LoopEvent?.Invoke(this, "Jukebox: cleared branch preference memory.");
+        }
+
+        public void SetLyricPhraseBeats(IEnumerable<int> beatIndices)
+        {
+            _lyricPhraseBeats = beatIndices != null
+                ? new HashSet<int>(beatIndices)
+                : new HashSet<int>();
+
+            if (IsLoopActive && ActiveProfile?.Mode == LoopModes.Jukebox)
+                RearmJukebox();
         }
 
         private void OnJukeboxActionFired(ArmedActionFiredEventArgs e)

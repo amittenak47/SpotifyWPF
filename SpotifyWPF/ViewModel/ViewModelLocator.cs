@@ -8,6 +8,7 @@ using SpotifyWPF.Service.MessageBoxes;
 using SpotifyWPF.Service.Playback;
 using SpotifyWPF.Service.Theme;
 using SpotifyWPF.Service.Prediction;
+using SpotifyWPF.Service.Lyrics;
 using SpotifyWPF.Service.Visual;
 using SpotifyWPF.ViewModel.Page;
 
@@ -45,6 +46,7 @@ namespace SpotifyWPF.ViewModel
             SimpleIoc.Default.Register<IJukeboxSettingsStore, JukeboxSettingsStore>();
             SimpleIoc.Default.Register<ILoopLabSessionStore, LoopLabSessionStore>();
             SimpleIoc.Default.Register<ILoopController, LoopController>();
+            SimpleIoc.Default.Register<ILyricsService, LrclibLyricsService>();
             SimpleIoc.Default.Register<IAudioCaptureService, WasapiLoopbackCaptureService>();
             SimpleIoc.Default.Register<SpotifyAnalysisProvider>();
             SimpleIoc.Default.Register<LocalAnalysisProvider>();

@@ -551,6 +551,16 @@
                                                                Minimum="1"
                                                                Maximum="20"
                                                                Value="{Binding JukeboxPreferenceSkipWindowSeconds}"/>
+                                        <local:TuningSliderRow Label="Lyric phrase bias (prefer line-boundary hops)"
+                                                               ValueText="{Binding LyricPhraseWeightText}"
+                                                               Minimum="0"
+                                                               Maximum="2"
+                                                               Value="{Binding LyricPhraseWeight}"/>
+                                        <CheckBox Content="Show synced lyrics on stage"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
+                                                  IsChecked="{Binding ShowLyricsPanel}"
+                                                  Margin="0,0,0,8"
+                                                  ToolTip="Fetches timed lyrics from LRCLIB (not Spotify). Branch hops update the highlight automatically."/>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                             <Button Content="Clear preferences" MinWidth="120"
                                                     Command="{Binding ClearBranchPreferencesCommand}"

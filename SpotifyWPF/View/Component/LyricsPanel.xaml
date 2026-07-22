@@ -1,0 +1,39 @@
+<UserControl x:Class="SpotifyWPF.View.Component.LyricsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             IsHitTestVisible="False">
+    <Border Background="#990A0A0C"
+            CornerRadius="10"
+            Padding="16,12"
+            MaxWidth="420"
+            MinWidth="200">
+        <StackPanel>
+            <TextBlock Text="{Binding PreviousLyricText}"
+                       FontSize="12"
+                       Opacity="0.4"
+                       TextAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+            <TextBlock Text="{Binding ActiveLyricText}"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Margin="0,6"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource AppForegroundBrush}"/>
+            <TextBlock Text="{Binding NextLyricText}"
+                       FontSize="12"
+                       Opacity="0.45"
+                       TextAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+            <TextBlock Text="{Binding LyricsStatusText}"
+                       FontSize="10"
+                       Margin="0,8,0,0"
+                       Opacity="0.5"
+                       TextAlignment="Center"
+                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+        </StackPanel>
+    </Border>
+</UserControl>

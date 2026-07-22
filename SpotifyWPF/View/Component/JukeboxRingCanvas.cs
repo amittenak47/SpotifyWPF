@@ -87,6 +87,15 @@ namespace SpotifyWPF.View.Component
 
         private int _branchDragOrigin = -1;
 
+        /// <summary>Local-WAV modifier stretch: dragging a locked chord radially outward.</summary>
+        private bool _modifierStretchActive;
+
+        private int _modifierStretchFrom = -1;
+
+        private int _modifierStretchTo = -1;
+
+        private double _modifierStretchStartDist;
+
         private int _tooltipFrom = -1;
 
         private int _tooltipTo = -1;
@@ -161,8 +170,21 @@ namespace SpotifyWPF.View.Component
                 typeof(JukeboxRingCanvas),
                 new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
 
+        public static readonly DependencyProperty BranchModifiersProperty =
+            DependencyProperty.Register(nameof(BranchModifiers), typeof(IReadOnlyList<BranchModifier>),
+                typeof(JukeboxRingCanvas),
+                new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
         public static readonly DependencyProperty ToggleLockCommandProperty =
             DependencyProperty.Register(nameof(ToggleLockCommand), typeof(ICommand), typeof(JukeboxRingCanvas),
+                new FrameworkPropertyMetadata(null));
+
+        public static readonly DependencyProperty StretchModifierCommandProperty =
+            DependencyProperty.Register(nameof(StretchModifierCommand), typeof(ICommand), typeof(JukeboxRingCanvas),
+                new FrameworkPropertyMetadata(null));
+
+        public static readonly DependencyProperty CycleModifierCommandProperty =
+            DependencyProperty.Register(nameof(CycleModifierCommand), typeof(ICommand), typeof(JukeboxRingCanvas),
                 new FrameworkPropertyMetadata(null));
 
         public static readonly DependencyProperty ScrubToMsCommandProperty =
@@ -284,11 +306,32 @@ namespace SpotifyWPF.View.Component
             set => SetValue(LockedBranchesProperty, value);
         }
 
+        /// <summary>Local-WAV-only effect stacks stretched from locked branches.</summary>
+        public IReadOnlyList<BranchModifier> BranchModifiers
+        {
+            get => (IReadOnlyList<BranchModifier>)GetValue(BranchModifiersProperty);
+            set => SetValue(BranchModifiersProperty, value);
+        }
+
         /// <summary>Executed with the beat index whose best branch should be locked/unlocked.</summary>
         public ICommand ToggleLockCommand
         {
             get => (ICommand)GetValue(ToggleLockCommandProperty);
             set => SetValue(ToggleLockCommandProperty, value);
+        }
+
+        /// <summary>Local WAV: stretch a locked chord outward to create/update a branch modifier.</summary>
+        public ICommand StretchModifierCommand
+        {
+            get => (ICommand)GetValue(StretchModifierCommandProperty);
+            set => SetValue(StretchModifierCommandProperty, value);
+        }
+
+        /// <summary>Local WAV: Alt/right-click cycle supercharge → turbocharge → remove.</summary>
+        public ICommand CycleModifierCommand
+        {
+            get => (ICommand)GetValue(CycleModifierCommandProperty);
+            set => SetValue(CycleModifierCommandProperty, value);
         }
 
         /// <summary>Seek the transport scrubber to the given position in milliseconds.</summary>
@@ -885,6 +928,13 @@ namespace SpotifyWPF.View.Component
                 return;
             }
 
+            if (_modifierStretchActive)
+            {
+                Cursor = Cursors.SizeNWSE;
+                InvalidateVisual();
+                return;
+            }
+
             // Prefer coverage-bar hover so scrubbing the timeline still previews that beat's hops.
             var hit = HitTestBeat(point);
 
@@ -953,11 +1003,12 @@ namespace SpotifyWPF.View.Component
             if (_isRingScrubbing)
                 EndRingScrub();
 
-            // Keep branch-drag alive while mouse is captured outside the element.
-            if (_branchDragActive && IsMouseCaptured)
+            // Keep branch-drag / modifier-stretch alive while mouse is captured outside the element.
+            if ((_branchDragActive || _modifierStretchActive) && IsMouseCaptured)
                 return;
 
             EndBranchDrag(commit: false);
+            EndModifierStretch(commit: false);
 
             _hoverBeatIndex = -1;
             _hoverToBeatIndex = -1;
@@ -976,20 +1027,34 @@ namespace SpotifyWPF.View.Component
             var point = e.GetPosition(this);
 
             // Double-click a locked branch to unlock/remove it.
+            // Alt+double-click cycles Local WAV supercharge → turbocharge → remove.
             if (e.ClickCount > 1)
             {
-                if (graph != null && TryHitLockedBranch(point, graph, out var from, out var to) &&
-                    ToggleLockCommand != null)
+                if (graph != null && TryHitLockedBranch(point, graph, out var from, out var to))
                 {
-                    var click = new RingBranchClick { FromBeatIndex = from, ToBeatIndex = to };
-
-                    if (ToggleLockCommand.CanExecute(click))
+                    if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt &&
+                        CycleModifierCommand != null)
                     {
-                        ToggleLockCommand.Execute(click);
+                        var click = new RingBranchClick { FromBeatIndex = from, ToBeatIndex = to };
+                        if (CycleModifierCommand.CanExecute(click))
+                            CycleModifierCommand.Execute(click);
                         InvalidateVisual();
+                        e.Handled = true;
+                        return;
                     }
 
-                    e.Handled = true;
+                    if (ToggleLockCommand != null)
+                    {
+                        var click = new RingBranchClick { FromBeatIndex = from, ToBeatIndex = to };
+
+                        if (ToggleLockCommand.CanExecute(click))
+                        {
+                            ToggleLockCommand.Execute(click);
+                            InvalidateVisual();
+                        }
+
+                        e.Handled = true;
+                    }
                 }
 
                 return;
@@ -999,6 +1064,13 @@ namespace SpotifyWPF.View.Component
             {
                 if (TryBeginRingScrub(point))
                     e.Handled = MiniPlayerMode && !MiniPlayerHopMode;
+                return;
+            }
+
+            // Drag a locked chord outward to stretch a Local WAV modifier.
+            if (TryBeginModifierStretch(point, graph))
+            {
+                e.Handled = true;
                 return;
             }
 
@@ -1027,6 +1099,12 @@ namespace SpotifyWPF.View.Component
         {
             base.OnMouseLeftButtonUp(e);
 
+            if (_modifierStretchActive)
+            {
+                EndModifierStretch(commit: true);
+                e.Handled = true;
+            }
+
             if (_branchDragActive)
             {
                 EndBranchDrag(commit: true);
@@ -1035,6 +1113,77 @@ namespace SpotifyWPF.View.Component
 
             if (_isRingScrubbing)
                 EndRingScrub();
+        }
+
+        /// <summary>
+        /// Start stretching a locked chord radially outward (Local WAV modifiers).
+        /// Requires Ctrl held so normal hop-authoring drag is unaffected.
+        /// </summary>
+        private bool TryBeginModifierStretch(Point point, BeatGraph graph)
+        {
+            if (graph == null || StretchModifierCommand == null)
+                return false;
+
+            if ((Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control)
+                return false;
+
+            if (!TryHitLockedBranch(point, graph, out var from, out var to))
+                return false;
+
+            GetChordLayout(out var center, out _, out _);
+            _modifierStretchActive = true;
+            _modifierStretchFrom = from;
+            _modifierStretchTo = to;
+            _modifierStretchStartDist = (point - center).Length;
+            CaptureMouse();
+            Cursor = Cursors.SizeNWSE;
+            InvalidateVisual();
+            return true;
+        }
+
+        private void EndModifierStretch(bool commit)
+        {
+            if (!_modifierStretchActive)
+                return;
+
+            var from = _modifierStretchFrom;
+            var to = _modifierStretchTo;
+            var startDist = _modifierStretchStartDist;
+            _modifierStretchActive = false;
+            _modifierStretchFrom = -1;
+            _modifierStretchTo = -1;
+
+            if (IsMouseCaptured && !_isRingScrubbing && !_branchDragActive)
+                ReleaseMouseCapture();
+
+            Cursor = Cursors.Arrow;
+
+            if (!commit || from < 0 || to < 0 || StretchModifierCommand == null)
+            {
+                InvalidateVisual();
+                return;
+            }
+
+            var point = Mouse.GetPosition(this);
+            GetChordLayout(out var center, out var rim, out _);
+            var dist = (point - center).Length;
+            var delta = dist - startDist;
+            // Map outward pull (~0–0.35·rim) onto stretch 0.15–1.0.
+            var stretch01 = Math.Max(0.15, Math.Min(1.0, 0.15 + delta / Math.Max(40, rim * 0.35)));
+            var turbo = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+
+            var args = new RingModifierStretch
+            {
+                FromBeatIndex = from,
+                ToBeatIndex = to,
+                Stretch01 = stretch01,
+                Turbo = turbo
+            };
+
+            if (StretchModifierCommand.CanExecute(args))
+                StretchModifierCommand.Execute(args);
+
+            InvalidateVisual();
         }
 
         /// <summary>
@@ -2277,9 +2426,11 @@ namespace SpotifyWPF.View.Component
             }
 
             // Locked branches: thin rails with a flowing glow along the chord.
+            // Local-WAV modifiers draw an outer stretched rail whose offset tracks Stretch.
             if (showHopChords && locks != null)
             {
                 var inspect = previewChain[0];
+                var modifiers = BranchModifiers;
 
                 foreach (var branchLock in locks)
                 {
@@ -2293,8 +2444,50 @@ namespace SpotifyWPF.View.Component
                     var a1 = BeatAngle(beats[branchLock.FromBeatIndex], total);
                     var a2 = BeatAngle(beats[branchLock.ToBeatIndex], total);
                     DrawLockedFlowChord(dc, center, rChord, a1, a2, now, inspect >= 0);
+
+                    var mod = modifiers?.FirstOrDefault(m =>
+                        m.Enabled &&
+                        m.FromBeatIndex == branchLock.FromBeatIndex &&
+                        m.ToBeatIndex == branchLock.ToBeatIndex);
+
+                    if (mod != null)
+                    {
+                        var stretch = Math.Max(0.1, Math.Min(1.0, mod.Stretch));
+                        var rOuter = rChord * (1.0 + 0.12 * stretch);
+                        var turbo = string.Equals(mod.Tier, ModifierTiers.Turbocharge,
+                            StringComparison.OrdinalIgnoreCase);
+                        DrawModifierStretchChord(dc, center, rOuter, a1, a2, stretch, turbo);
+                    }
+                }
+
+                // Live stretch preview while Ctrl-dragging a locked chord.
+                if (_modifierStretchActive && _modifierStretchFrom >= 0 &&
+                    _modifierStretchFrom < beats.Count && _modifierStretchTo >= 0 &&
+                    _modifierStretchTo < beats.Count)
+                {
+                    var point = Mouse.GetPosition(this);
+                    var dist = (point - center).Length;
+                    var delta = dist - _modifierStretchStartDist;
+                    var stretch01 = Math.Max(0.15, Math.Min(1.0, 0.15 + delta / Math.Max(40, rChord * 0.35)));
+                    var a1 = BeatAngle(beats[_modifierStretchFrom], total);
+                    var a2 = BeatAngle(beats[_modifierStretchTo], total);
+                    DrawModifierStretchChord(dc, center, rChord * (1.0 + 0.12 * stretch01), a1, a2,
+                        stretch01, (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift);
                 }
             }
+        }
+
+        private void DrawModifierStretchChord(DrawingContext dc, Point center, double radius,
+            double angle1, double angle2, double stretch, bool turbo)
+        {
+            var p1 = Polar(center, radius, angle1);
+            var p2 = Polar(center, radius, angle2);
+            var control = ChordControlPoint(center, angle1, angle2, p1, p2);
+            var color = turbo
+                ? Color.FromRgb(0xFF, 0x8A, 0x3D)
+                : Color.FromRgb(0x5C, 0xC8, 0xFF);
+            var alpha = 0.35 + 0.45 * Math.Max(0, Math.Min(1, stretch));
+            DrawQuadraticStroke(dc, p1, control, p2, MakePen(color, 1.4 + stretch, alpha));
         }
 
         /// <summary>Inner stage disc only — play/pause sits on top in the page chrome.</summary>

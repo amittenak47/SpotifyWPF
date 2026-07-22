@@ -222,6 +222,27 @@
                                Text="{Binding PositionText}"/>
                 </DockPanel>
 
+                <!-- Synced lyrics overlay (follows transport position; hops update automatically) -->
+                <component:LyricsPanel HorizontalAlignment="Center"
+                                       VerticalAlignment="Bottom"
+                                       Margin="24,0,24,48"
+                                       Panel.ZIndex="40">
+                    <component:LyricsPanel.Style>
+                        <Style TargetType="component:LyricsPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding ShowLyricsPanel}" Value="True"/>
+                                        <Condition Binding="{Binding IsFullLayout}" Value="True"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </component:LyricsPanel.Style>
+                </component:LyricsPanel>
+
                 <!-- Title + status + SSM stacked top-left (SSM below details, not over them) -->
                 <StackPanel HorizontalAlignment="Left"
                             VerticalAlignment="Top"

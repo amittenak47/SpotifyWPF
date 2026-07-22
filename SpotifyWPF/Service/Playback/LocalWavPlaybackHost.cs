@@ -24,6 +24,8 @@ namespace SpotifyWPF.Service.Playback
 
         private VariableRateSampleProvider _rateProvider;
 
+        private BranchModifierSampleProvider _modifierProvider;
+
         private string _trackId;
 
         private string _trackName;
@@ -97,9 +99,11 @@ namespace SpotifyWPF.Service.Playback
                 try
                 {
                     _reader = new AudioFileReader(wavPath);
+                    // Local WAV only: rate → branch-modifier EQ/drive → WaveOut.
                     _rateProvider = new VariableRateSampleProvider(_reader);
+                    _modifierProvider = new BranchModifierSampleProvider(_rateProvider);
                     _output = new WaveOutEvent();
-                    _output.Init(_rateProvider);
+                    _output.Init(_modifierProvider);
                     _output.PlaybackStopped += OnPlaybackStopped;
 
                     _trackId = trackId;
@@ -210,6 +214,41 @@ namespace SpotifyWPF.Service.Playback
             {
                 if (_rateProvider != null)
                     _rateProvider.Rate = rate;
+            }
+        }
+
+        /// <summary>
+        /// Apply a Local-WAV-only branch modifier to the live audio chain.
+        /// No-op if playback is not running; never called for Spotify transport.
+        /// </summary>
+        public void ApplyBranchModifier(Model.Prediction.BranchModifier modifier)
+        {
+            lock (_gate)
+            {
+                if (_modifierProvider == null)
+                    return;
+
+                if (modifier == null || !modifier.Enabled)
+                {
+                    _modifierProvider.Clear();
+                    return;
+                }
+
+                _modifierProvider.Apply(
+                    modifier.EqLowDb,
+                    modifier.EqMidDb,
+                    modifier.EqHighDb,
+                    modifier.GainDb,
+                    modifier.Drive,
+                    modifier.Stretch);
+            }
+        }
+
+        public void ClearBranchModifier()
+        {
+            lock (_gate)
+            {
+                _modifierProvider?.Clear();
             }
         }
 
@@ -341,6 +380,7 @@ namespace SpotifyWPF.Service.Playback
             }
 
             _rateProvider = null;
+            _modifierProvider = null;
 
             if (_reader != null)
             {

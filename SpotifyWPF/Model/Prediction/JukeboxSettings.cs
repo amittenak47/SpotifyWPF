@@ -139,6 +139,17 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("gateRegionNeighborCount")]
         public int GateRegionNeighborCount { get; set; } = 8;
 
+        /// <summary>
+        /// Softmax bonus weight for hops whose exit or landing sits on a lyric phrase boundary
+        /// (0 = off). Requires synced lyrics mapped to beats.
+        /// </summary>
+        [JsonPropertyName("lyricPhraseWeight")]
+        public double LyricPhraseWeight { get; set; } = 0.35;
+
+        /// <summary>When true, fetch/display synced lyrics in the Infinite Jukebox stage.</summary>
+        [JsonPropertyName("showLyrics")]
+        public bool ShowLyrics { get; set; } = true;
+
         public static JukeboxSettings CreateDefaults() => new JukeboxSettings();
 
         /// <summary>True when a settings change requires rebuilding the beat graph (not just re-arming).</summary>
