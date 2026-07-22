@@ -1580,6 +1580,7 @@ namespace SpotifyWPF.ViewModel.Page
             else
             {
                 _transportRouter.Source = JukeboxPlaybackSource.Spotify;
+                _transportRouter.Local.ClearBranchModifier();
 
                 if (wantLocal)
                     _jukeboxSettingsModel.PlaybackSource = "Spotify";
