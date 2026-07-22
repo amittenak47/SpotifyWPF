@@ -2493,8 +2493,8 @@ namespace SpotifyWPF.View.Component
         /// <summary>Inner stage disc only — play/pause sits on top in the page chrome.</summary>
         private void DrawCenterDisc(DrawingContext dc, Point center, double rIn)
         {
-            var fill = ThemeColor("AppSurfaceBrush", Color.FromRgb(0x14, 0x14, 0x18));
-            dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0xE8, fill.R, fill.G, fill.B)), null,
+            var fill = ThemeColor("AppBackgroundBrush", Color.FromRgb(0x00, 0x00, 0x00));
+            dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0xF2, fill.R, fill.G, fill.B)), null,
                 center, rIn, rIn);
         }
 

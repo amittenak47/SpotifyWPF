@@ -5,14 +5,14 @@ namespace SpotifyWPF.Model
 {
     public class AppThemePalette
     {
-        public const string DefaultBackground = "#121212";
-        public const string DefaultSurface = "#181818";
-        public const string DefaultSurfaceAlt = "#282828";
+        public const string DefaultBackground = "#000000";
+        public const string DefaultSurface = "#0A0A0A";
+        public const string DefaultSurfaceAlt = "#121212";
         public const string DefaultBorder = "#1DB954";
         public const string DefaultForeground = "#FFFFFF";
-        public const string DefaultMutedForeground = "#B3B3B3";
-        public const string DefaultDisabledForeground = "#535353";
-        public const string DefaultHover = "#333333";
+        public const string DefaultMutedForeground = "#A0A0A0";
+        public const string DefaultDisabledForeground = "#4A4A4A";
+        public const string DefaultHover = "#1A1A1A";
         public const string DefaultSelected = "#169C46";
         public const string DefaultAccent = "#1DB954";
 

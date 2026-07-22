@@ -186,7 +186,7 @@ namespace SpotifyWPF.ViewModel.Page
                 track => (track ?? SelectedSessionTrack) != null && !IsAnalyzing);
             PreviousSessionTrackCommand = new RelayCommand(async () => await NavigateAndPlaySessionTrackAsync(-1), () => CanNavigateSessionTrack(-1));
             NextSessionTrackCommand = new RelayCommand(async () => await NavigateAndPlaySessionTrackAsync(1), () => CanNavigateSessionTrack(1));
-            ToggleSessionRepeatCommand = new RelayCommand(() => SessionRepeatEnabled = !SessionRepeatEnabled);
+            ToggleSessionRepeatCommand = new RelayCommand(CycleSessionRepeatMode);
             ToggleLibrarySidebarCommand = new RelayCommand(() => IsLibrarySidebarOpen = !IsLibrarySidebarOpen);
             RefreshLibraryPlaylistsCommand = new RelayCommand(RefreshLibraryPlaylists);
             AddLibraryPlaylistToSessionCommand = new RelayCommand<PlaylistCacheItem>(
@@ -395,6 +395,9 @@ namespace SpotifyWPF.ViewModel.Page
             get => _lyricsStatusText;
             private set => Set(ref _lyricsStatusText, value);
         }
+
+        public ObservableCollection<LyricDisplayLine> LyricDisplayLines { get; } =
+            new ObservableCollection<LyricDisplayLine>();
 
         private string _activeLyricText = string.Empty;
 
@@ -650,23 +653,66 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
-        private bool _sessionRepeatEnabled;
+        private SessionRepeatMode _sessionRepeatMode = SessionRepeatMode.Off;
 
-        public bool SessionRepeatEnabled
+        /// <summary>Off → One (current track) → All (session wrap). Click cycles.</summary>
+        public SessionRepeatMode SessionRepeatMode
         {
-            get => _sessionRepeatEnabled;
+            get => _sessionRepeatMode;
             set
             {
-                if (Set(ref _sessionRepeatEnabled, value))
+                if (Set(ref _sessionRepeatMode, value))
                 {
+                    RaisePropertyChanged(nameof(SessionRepeatEnabled));
                     RaisePropertyChanged(nameof(SessionRepeatGlyph));
+                    RaisePropertyChanged(nameof(SessionRepeatToolTip));
+                    RaisePropertyChanged(nameof(IsSessionRepeatAccent));
                     PreviousSessionTrackCommand?.RaiseCanExecuteChanged();
                     NextSessionTrackCommand?.RaiseCanExecuteChanged();
                 }
             }
         }
 
-        public string SessionRepeatGlyph => SessionRepeatEnabled ? "🔁" : "➡";
+        /// <summary>True when repeat is One or All.</summary>
+        public bool SessionRepeatEnabled
+        {
+            get => SessionRepeatMode != SessionRepeatMode.Off;
+            set => SessionRepeatMode = value ? SessionRepeatMode.All : SessionRepeatMode.Off;
+        }
+
+        public string SessionRepeatGlyph
+        {
+            get
+            {
+                switch (SessionRepeatMode)
+                {
+                    case SessionRepeatMode.One:
+                        return "\uE8ED";
+                    case SessionRepeatMode.All:
+                        return "\uE8EE";
+                    default:
+                        return "\uE8EE";
+                }
+            }
+        }
+
+        public string SessionRepeatToolTip
+        {
+            get
+            {
+                switch (SessionRepeatMode)
+                {
+                    case SessionRepeatMode.One:
+                        return "Repeat one — replay the current session track";
+                    case SessionRepeatMode.All:
+                        return "Repeat all — wrap through the session list";
+                    default:
+                        return "Repeat off — stop at list ends (click to cycle)";
+                }
+            }
+        }
+
+        public bool IsSessionRepeatAccent => SessionRepeatMode != SessionRepeatMode.Off;
 
         private bool _isTrackSearchOpen;
 
@@ -2725,19 +2771,20 @@ namespace SpotifyWPF.ViewModel.Page
             var lyrics = CurrentLyrics;
             if (lyrics?.Lines == null || lyrics.Lines.Count == 0)
             {
-                if (_activeLyricIndex != -1)
+                if (_activeLyricIndex != -1 || LyricDisplayLines.Count > 0)
                 {
                     _activeLyricIndex = -1;
                     ActiveLyricText = string.Empty;
                     PreviousLyricText = string.Empty;
                     NextLyricText = string.Empty;
+                    LyricDisplayLines.Clear();
                 }
 
                 return;
             }
 
             var index = LyricBeatMapper.FindActiveLineIndex(lyrics, positionMs);
-            if (index == _activeLyricIndex)
+            if (index == _activeLyricIndex && LyricDisplayLines.Count > 0)
                 return;
 
             _activeLyricIndex = index;
@@ -2746,6 +2793,54 @@ namespace SpotifyWPF.ViewModel.Page
             NextLyricText = index >= 0 && index + 1 < lyrics.Lines.Count
                 ? lyrics.Lines[index + 1].Text
                 : string.Empty;
+            RaisePropertyChanged(nameof(ActiveLyricText));
+
+            // Karaoke column: small window of lines that scrolls as the active line advances.
+            const int before = 3;
+            const int after = 4;
+            var start = Math.Max(0, index - before);
+            var end = Math.Min(lyrics.Lines.Count - 1, Math.Max(index, 0) + after);
+            if (index < 0)
+            {
+                start = 0;
+                end = Math.Min(lyrics.Lines.Count - 1, after);
+            }
+
+            var needed = end - start + 1;
+            while (LyricDisplayLines.Count < needed)
+                LyricDisplayLines.Add(new LyricDisplayLine());
+            while (LyricDisplayLines.Count > needed)
+                LyricDisplayLines.RemoveAt(LyricDisplayLines.Count - 1);
+
+            for (var i = 0; i < needed; i++)
+            {
+                var lineIndex = start + i;
+                var row = LyricDisplayLines[i];
+                var dist = index < 0 ? lineIndex + 1 : Math.Abs(lineIndex - index);
+                row.Text = lyrics.Lines[lineIndex].Text ?? string.Empty;
+                row.IsActive = lineIndex == index;
+                row.IsNear = !row.IsActive && dist == 1;
+                row.FontSize = row.IsActive ? 22 : row.IsNear ? 15 : 12.5;
+                row.Opacity = row.IsActive ? 1.0 : row.IsNear ? 0.72 : Math.Max(0.22, 0.55 - dist * 0.1);
+            }
+        }
+
+        private void CycleSessionRepeatMode()
+        {
+            switch (SessionRepeatMode)
+            {
+                case SessionRepeatMode.Off:
+                    SessionRepeatMode = SessionRepeatMode.One;
+                    break;
+                case SessionRepeatMode.One:
+                    SessionRepeatMode = SessionRepeatMode.All;
+                    break;
+                default:
+                    SessionRepeatMode = SessionRepeatMode.Off;
+                    break;
+            }
+
+            Log($"Session repeat: {SessionRepeatMode}.", verbose: true);
         }
 
         /// <summary>Whether a loop mode was active (stamped on log entries).</summary>
@@ -3564,6 +3659,30 @@ namespace SpotifyWPF.ViewModel.Page
 
             await RefreshPredictionsAsync();
 
+            // Repeat one: replay the same session track when the song actually ends
+            // (usually only when End loop is off).
+            if (SessionRepeatMode == SessionRepeatMode.One &&
+                !string.IsNullOrEmpty(trackId) &&
+                !_loopController.IsLoopActive)
+            {
+                var same = SessionTracks.FirstOrDefault(t => t.TrackId == trackId)
+                           ?? SelectedSessionTrack;
+                if (same != null)
+                {
+                    Log("Repeat one — replaying current track.");
+                    await PlaySessionTrackAsync(same);
+                    return;
+                }
+            }
+
+            if (SessionRepeatMode == SessionRepeatMode.All &&
+                SessionTracks.Count > 0 &&
+                !_loopController.IsLoopActive)
+            {
+                await NavigateAndPlaySessionTrackAsync(1);
+                return;
+            }
+
             if (AutoPlayNext && !IsAnalyzing && !_loopController.IsLoopActive && Predictions.Count > 0)
             {
                 var top = Predictions[0];
@@ -3740,7 +3859,7 @@ namespace SpotifyWPF.ViewModel.Page
             if (SessionTracks.Count == 0)
                 return false;
 
-            if (SessionRepeatEnabled)
+            if (SessionRepeatMode == SessionRepeatMode.All || SessionRepeatMode == SessionRepeatMode.One)
                 return true;
 
             var index = GetSessionTrackIndex();
@@ -3762,7 +3881,12 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 targetIndex = delta > 0 ? 0 : SessionTracks.Count - 1;
             }
-            else if (SessionRepeatEnabled)
+            else if (SessionRepeatMode == SessionRepeatMode.One)
+            {
+                // Stay on / replay the current track.
+                targetIndex = index;
+            }
+            else if (SessionRepeatMode == SessionRepeatMode.All)
             {
                 targetIndex = (index + delta) % SessionTracks.Count;
                 if (targetIndex < 0)

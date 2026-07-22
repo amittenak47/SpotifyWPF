@@ -1,7 +1,10 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using SpotifyWPF.ViewModel.Page;
 
 namespace SpotifyWPF.View.Component
@@ -26,6 +29,10 @@ namespace SpotifyWPF.View.Component
                 typeof(double),
                 typeof(TuningSliderRow),
                 new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
+        public static readonly DependencyProperty InfoTipProperty =
+            DependencyProperty.Register(nameof(InfoTip), typeof(string), typeof(TuningSliderRow),
+                new PropertyMetadata(null, OnInfoTipChanged));
 
         private bool _dragActive;
 
@@ -65,14 +72,69 @@ namespace SpotifyWPF.View.Component
             set => SetValue(ValueProperty, value);
         }
 
+        /// <summary>Hover (i) shows a fading tutorial popup with design + example.</summary>
+        public string InfoTip
+        {
+            get => (string)GetValue(InfoTipProperty);
+            set => SetValue(InfoTipProperty, value);
+        }
+
+        private static void OnInfoTipChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is TuningSliderRow row)
+                row.UpdateInfoVisibility();
+        }
+
+        private void UpdateInfoVisibility()
+        {
+            if (InfoButton != null)
+                InfoButton.Visibility = string.IsNullOrWhiteSpace(InfoTip)
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+        }
+
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
+            UpdateInfoVisibility();
+
             if (ValueSlider == null)
                 return;
 
             ValueSlider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(OnDragStarted), true);
             ValueSlider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnDragCompleted), true);
             ValueSlider.LostMouseCapture += OnLostMouseCapture;
+        }
+
+        private void InfoButton_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(InfoTip) || InfoPopup == null || InfoPopupText == null)
+                return;
+
+            InfoPopupText.Text = InfoTip;
+            InfoPopup.IsOpen = true;
+            FadePopup(0, 1, 180);
+        }
+
+        private void InfoButton_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (InfoPopup == null || !InfoPopup.IsOpen)
+                return;
+
+            FadePopup(InfoPopup.Opacity, 0, 220, () => InfoPopup.IsOpen = false);
+        }
+
+        private void FadePopup(double from, double to, int ms, System.Action onComplete = null)
+        {
+            var anim = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(ms))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            if (onComplete != null)
+            {
+                anim.Completed += (_, __) => onComplete();
+            }
+
+            InfoPopup.BeginAnimation(OpacityProperty, anim);
         }
 
         private void OnDragStarted(object sender, DragStartedEventArgs e)
@@ -86,7 +148,7 @@ namespace SpotifyWPF.View.Component
             EndDragPersist();
         }
 
-        private void OnLostMouseCapture(object sender, System.Windows.Input.MouseEventArgs e)
+        private void OnLostMouseCapture(object sender, MouseEventArgs e)
         {
             EndDragPersist();
         }
@@ -116,7 +178,6 @@ namespace SpotifyWPF.View.Component
             if (child is FrameworkElement || child is FrameworkContentElement)
             {
                 var parent = VisualTreeHelper.GetParent(child);
-
                 if (parent != null)
                     return parent;
             }
