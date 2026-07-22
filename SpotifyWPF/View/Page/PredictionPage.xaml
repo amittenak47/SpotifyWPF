@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:component="clr-namespace:SpotifyWPF.View.Component"
+             xmlns:converter="clr-namespace:SpotifyWPF.Converter"
              mc:Ignorable="d"
              DataContext="{Binding PredictionPage, Source={StaticResource Locator}}"
              Loaded="PredictionPage_Loaded"
@@ -13,6 +14,7 @@
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <converter:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
     </UserControl.Resources>
 
     <Grid Margin="8" Background="{DynamicResource AppBackgroundBrush}" ClipToBounds="False">
@@ -41,6 +43,7 @@
                 Background="#000000"
                 ClipToBounds="True"
                 Panel.ZIndex="0"
+                SizeChanged="StageHost_SizeChanged"
                 PreviewMouseWheel="StageHost_PreviewMouseWheel">
             <Grid Background="#000000">
                 <component:FractalBackgroundControl IsActive="{Binding IsFractalBackgroundEnabled}"
@@ -186,11 +189,11 @@
                     </ListBox>
                 </Border>
 
-                <!-- Repeat (left) + scrubber clock (right) -->
+                <!-- Repeat (left) + compact lyric (center) + scrubber clock (right) -->
                 <DockPanel VerticalAlignment="Bottom"
                            Margin="12,0,14,10"
                            Panel.ZIndex="45"
-                           LastChildFill="False"
+                           LastChildFill="True"
                            Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Button DockPanel.Dock="Left"
                             Width="32" Height="28"
@@ -219,53 +222,109 @@
                                VerticalAlignment="Center"
                                FontSize="11"
                                Opacity="0.7"
+                               Margin="12,0,0,0"
                                Foreground="{DynamicResource AppMutedForegroundBrush}"
                                Text="{Binding PositionText}"/>
+                    <!-- Compact single-line lyrics when the stage is too narrow for the column -->
+                    <TextBlock VerticalAlignment="Center"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="NoWrap"
+                               Margin="16,0"
+                               Opacity="0.92"
+                               Foreground="{DynamicResource AppForegroundBrush}"
+                               Text="{Binding CompactLyricLineText}"
+                               ToolTip="{Binding CompactLyricLineText}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding ShowLyricsPanel}" Value="True"/>
+                                            <Condition Binding="{Binding UseCompactLyrics}" Value="True"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </DockPanel>
 
-                <!-- Karaoke lyrics column — right side, scrolls up with active line -->
+                <!-- Karaoke lyrics column — full height when the stage is wide enough -->
                 <component:LyricsPanel HorizontalAlignment="Right"
                                        VerticalAlignment="Stretch"
                                        Margin="0,40,16,36"
                                        Panel.ZIndex="40"
                                        MaxHeight="720"
-                                       MinHeight="360">
-                    <component:LyricsPanel.Style>
-                        <Style TargetType="component:LyricsPanel">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <MultiDataTrigger>
-                                    <MultiDataTrigger.Conditions>
-                                        <Condition Binding="{Binding ShowLyricsPanel}" Value="True"/>
-                                        <Condition Binding="{Binding IsFullLayout}" Value="True"/>
-                                    </MultiDataTrigger.Conditions>
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                </MultiDataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </component:LyricsPanel.Style>
-                </component:LyricsPanel>
+                                       MinHeight="360"
+                                       Visibility="{Binding UseWideLyricsColumn, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
                 <!-- Title + status + SSM stacked top-left (SSM below details, not over them) -->
-                <StackPanel HorizontalAlignment="Left"
+                <StackPanel x:Name="StageDetailsColumn"
+                            HorizontalAlignment="Left"
                             VerticalAlignment="Top"
                             Margin="12,8,0,0"
-                            MaxWidth="420"
                             Panel.ZIndex="30"
                             Visibility="{Binding IsFullLayout, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="MaxWidth" Value="420"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                    <Setter Property="MaxWidth" Value="260"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
                     <StackPanel Orientation="Horizontal" IsHitTestVisible="True">
                         <TextBlock Text="Infinite Jukebox"
-                                   FontSize="22"
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource AppForegroundBrush}"/>
+                                   Foreground="{DynamicResource AppForegroundBrush}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontSize" Value="22"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                            <Setter Property="FontSize" Value="16"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <TextBlock Text=" by "
                                    FontSize="12"
                                    Margin="6,0,0,3"
                                    VerticalAlignment="Bottom"
-                                   Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                   Foreground="{DynamicResource AppMutedForegroundBrush}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <TextBlock FontSize="12"
                                    Margin="0,0,0,3"
                                    VerticalAlignment="Bottom">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
                             <Hyperlink NavigateUri="https://musicmachinery.com/2012/11/12/the-infinite-jukebox/"
                                        Foreground="{DynamicResource AppAccentBrush}"
                                        RequestNavigate="PaulLamereLink_RequestNavigate">
@@ -277,10 +336,19 @@
                     <!-- Always-visible track title — constrained width so marquee can scroll R→L -->
                     <Grid Height="20"
                           Margin="0,6,0,0"
-                          MaxWidth="400"
                           HorizontalAlignment="Left"
                           ClipToBounds="True"
                           IsHitTestVisible="True">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="MaxWidth" Value="400"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                        <Setter Property="MaxWidth" Value="240"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
                         <TextBlock Text="{Binding Status}"
                                    FontSize="12"
                                    VerticalAlignment="Center"
@@ -290,9 +358,13 @@
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Visibility" Value="Visible"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsNowPlaying}" Value="True"/>
+                                                <Condition Binding="{Binding PreferStatusOverNowPlaying}" Value="False"/>
+                                            </MultiDataTrigger.Conditions>
                                             <Setter Property="Visibility" Value="Collapsed"/>
-                                        </DataTrigger>
+                                        </MultiDataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </TextBlock.Style>
@@ -308,19 +380,57 @@
                                 <Style TargetType="{x:Type component:MarqueeTextBlock}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsNowPlaying}" Value="True">
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsNowPlaying}" Value="True"/>
+                                                <Condition Binding="{Binding PreferStatusOverNowPlaying}" Value="False"/>
+                                            </MultiDataTrigger.Conditions>
                                             <Setter Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
+                                        </MultiDataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </component:MarqueeTextBlock.Style>
                         </component:MarqueeTextBlock>
                     </Grid>
 
+                    <!-- Always-visible busy strip (not buried in the hover HUD) -->
+                    <Border Margin="0,8,0,0"
+                            Padding="10,6"
+                            CornerRadius="4"
+                            Background="#CC0A0A0C"
+                            BorderBrush="{DynamicResource AppAccentBrush}"
+                            BorderThickness="1">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowBusyChrome}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <DockPanel LastChildFill="True">
+                            <ProgressBar DockPanel.Dock="Left"
+                                         Width="90"
+                                         Height="6"
+                                         Margin="0,0,10,0"
+                                         VerticalAlignment="Center"
+                                         Maximum="100"
+                                         Value="{Binding AnalysisProgressPercent, Mode=OneWay}"
+                                         IsIndeterminate="{Binding IsIndeterminateAnalysisProgress, Mode=OneWay}"/>
+                            <TextBlock Text="{Binding BusyChromeText}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource AppAccentBrush}"/>
+                        </DockPanel>
+                    </Border>
+
                     <!-- Optional status HUD: dim until hovered, under the title -->
                     <Border x:Name="StatusHoverZone"
                             Margin="0,8,0,0"
-                            Padding="14,12"
                             CornerRadius="4"
                             Background="#CC0A0A0C"
                             BorderBrush="#55FFFFFF"
@@ -331,9 +441,13 @@
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Visibility" Value="Collapsed"/>
+                                <Setter Property="Padding" Value="14,12"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding ShowStatusOverlay}" Value="True">
                                         <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                        <Setter Property="Padding" Value="8,6"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -369,7 +483,18 @@
                                        TextWrapping="NoWrap"
                                        TextTrimming="CharacterEllipsis"
                                        Text="{Binding ElementName=RingView, Path=Ring.HudText}"
-                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                       Foreground="{DynamicResource AppMutedForegroundBrush}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                             <DockPanel LastChildFill="True" Margin="0,0,0,6">
                                 <TextBlock DockPanel.Dock="Left"
                                            Width="72"
@@ -383,6 +508,16 @@
                                            Foreground="{DynamicResource AppForegroundBrush}"/>
                             </DockPanel>
                             <DockPanel LastChildFill="True" Margin="0,0,0,6">
+                                <DockPanel.Style>
+                                    <Style TargetType="DockPanel">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DockPanel.Style>
                                 <TextBlock DockPanel.Dock="Left"
                                            Width="72"
                                            FontSize="11"
@@ -395,6 +530,16 @@
                                            Foreground="{DynamicResource AppForegroundBrush}"/>
                             </DockPanel>
                             <DockPanel LastChildFill="True" Margin="0,0,0,8">
+                                <DockPanel.Style>
+                                    <Style TargetType="DockPanel">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DockPanel.Style>
                                 <TextBlock DockPanel.Dock="Left"
                                            Width="72"
                                            FontSize="11"
@@ -406,16 +551,26 @@
                                            Text="{Binding DeviceText}"
                                            Foreground="{DynamicResource AppForegroundBrush}"/>
                             </DockPanel>
-                            <CheckBox Content="Show similarity map (SSM)"
-                                      FontSize="11"
+                            <CheckBox FontSize="11"
                                       IsChecked="{Binding ShowSsmHeatmap}"
-                                      Foreground="{DynamicResource AppForegroundBrush}"/>
+                                      Foreground="{DynamicResource AppForegroundBrush}">
+                                <CheckBox.Style>
+                                    <Style TargetType="CheckBox">
+                                        <Setter Property="Content" Value="Show similarity map (SSM)"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                                <Setter Property="Content" Value="SSM"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </CheckBox.Style>
+                            </CheckBox>
                             <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                                 <StackPanel.Style>
                                     <Style TargetType="StackPanel">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsAnalyzing}" Value="True">
+                                            <DataTrigger Binding="{Binding ShowBusyChrome}" Value="True">
                                                 <Setter Property="Visibility" Value="Visible"/>
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -428,7 +583,7 @@
                                              Maximum="100"
                                              Value="{Binding AnalysisProgressPercent, Mode=OneWay}"
                                              IsIndeterminate="{Binding IsIndeterminateAnalysisProgress, Mode=OneWay}"/>
-                                <TextBlock Text="{Binding AnalysisStatusText}"
+                                <TextBlock Text="{Binding BusyChromeText}"
                                            FontSize="10"
                                            VerticalAlignment="Center"
                                            MaxWidth="280"
@@ -441,30 +596,74 @@
                     <!-- SSM sits in the same column, below status — not absolutely overlaid -->
                     <Border Margin="0,10,0,0"
                             Padding="8"
-                            Width="200"
-                            Height="200"
                             HorizontalAlignment="Left"
                             Background="#F00C0C0E"
                             BorderBrush="#55FFFFFF"
                             BorderThickness="1"
                             Visibility="{Binding ShowSsmHeatmap, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Width" Value="200"/>
+                                <Setter Property="Height" Value="200"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                        <Setter Property="Width" Value="120"/>
+                                        <Setter Property="Height" Value="120"/>
+                                        <Setter Property="Padding" Value="4"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top"
                                        Text="Self-similarity"
                                        FontSize="10"
                                        FontWeight="SemiBold"
                                        Margin="0,0,0,2"
-                                       Foreground="{DynamicResource AppForegroundBrush}"/>
+                                       Foreground="{DynamicResource AppForegroundBrush}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                             <TextBlock DockPanel.Dock="Top"
                                        Text="Bright = similar · stripes = repeats"
                                        FontSize="9"
                                        Margin="0,0,0,6"
-                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                       Foreground="{DynamicResource AppMutedForegroundBrush}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                             <TextBlock DockPanel.Dock="Bottom"
                                        Text="Click a row to inspect that beat"
                                        FontSize="9"
                                        Margin="0,6,0,0"
-                                       Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                       Foreground="{DynamicResource AppMutedForegroundBrush}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding UseCompactDetails}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                             <component:SelfSimilarityHeatmapControl
                                 StackedFeatures="{Binding RingStackedFeatures}"
                                 HighlightBeatIndex="{Binding RingInspectBeat, Mode=OneWay}"

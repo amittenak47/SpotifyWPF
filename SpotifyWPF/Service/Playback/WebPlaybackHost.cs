@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
@@ -67,6 +68,12 @@ namespace SpotifyWPF.Service.Playback
 
         Task EnsureInitializedAsync();
 
+        /// <summary>
+        /// Ensures WebView2 init has started and waits until the Spotify Web Playback SDK
+        /// reports ready (device id), or until timeout / init failure.
+        /// </summary>
+        Task<bool> WaitUntilReadyAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
+
         event EventHandler PlayerReady;
 
         event EventHandler<PlayerErrorEventArgs> PlayerError;
@@ -131,6 +138,55 @@ namespace SpotifyWPF.Service.Playback
                 _initializationTask = InitializeAsync();
 
             return _initializationTask;
+        }
+
+        public async Task<bool> WaitUntilReadyAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            await EnsureInitializedAsync().ConfigureAwait(true);
+
+            if (!string.IsNullOrEmpty(InitializationError))
+                return false;
+
+            if (IsReady)
+                return true;
+
+            var readyTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            void OnReady(object sender, EventArgs e) => readyTcs.TrySetResult(true);
+            void OnFailed(object sender, EventArgs e) => readyTcs.TrySetResult(false);
+
+            PlayerReady += OnReady;
+            InitializationFailed += OnFailed;
+
+            try
+            {
+                // Ready may have fired between the first check and subscription.
+                if (IsReady)
+                    return true;
+
+                if (!string.IsNullOrEmpty(InitializationError))
+                    return false;
+
+                using (cancellationToken.Register(() => readyTcs.TrySetCanceled(cancellationToken)))
+                {
+                    var delayTask = Task.Delay(timeout, cancellationToken);
+                    var completed = await Task.WhenAny(readyTcs.Task, delayTask).ConfigureAwait(true);
+
+                    if (completed == readyTcs.Task)
+                        return await readyTcs.Task.ConfigureAwait(true);
+
+                    return IsReady;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            finally
+            {
+                PlayerReady -= OnReady;
+                InitializationFailed -= OnFailed;
+            }
         }
 
         private async Task InitializeAsync()

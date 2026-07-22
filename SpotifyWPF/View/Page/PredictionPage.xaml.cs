@@ -35,7 +35,21 @@ namespace SpotifyWPF.View.Page
         {
             InitializeComponent();
             DataContextChanged += PredictionPage_DataContextChanged;
-            Loaded += (_, __) => SyncSearchPopup(animate: false);
+            Loaded += (_, __) =>
+            {
+                SyncSearchPopup(animate: false);
+                RefreshStageChrome();
+            };
+        }
+
+        private void StageHost_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            RefreshStageChrome();
+        }
+
+        private void RefreshStageChrome()
+        {
+            ViewModel?.UpdateStageChrome(StageHost?.ActualWidth ?? 0, StageHost?.ActualHeight ?? 0);
         }
 
         private PredictionPageViewModel ViewModel => DataContext as PredictionPageViewModel;

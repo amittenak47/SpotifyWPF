@@ -255,13 +255,24 @@
                                                             Margin="0,0,6,0"
                                                             Command="{Binding DataContext.AbortSessionWorkCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                             ToolTip="Stop analyze/capture or playback"/>
-                                                    <Button Content="Analyze"
-                                                            MinWidth="58" MinHeight="26" Padding="6,2"
+                                                    <Button MinWidth="58" MinHeight="26" Padding="6,2"
                                                             FontSize="11"
                                                             Focusable="False"
                                                             Command="{Binding DataContext.AnalyzeSessionTrackCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                             CommandParameter="{Binding}"
-                                                            ToolTip="Capture/analyze this track"/>
+                                                            ToolTip="Capture/analyze this track">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                                <Setter Property="Content" Value="Analyze"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding DataContext.IsAnalyzing, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
+                                                                        <Setter Property="Content" Value="…"/>
+                                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
                                                 </StackPanel>
                                                 <ToggleButton Grid.Column="2"
                                                               Margin="0,0,6,0"

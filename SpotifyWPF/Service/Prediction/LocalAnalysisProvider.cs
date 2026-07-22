@@ -142,8 +142,12 @@ namespace SpotifyWPF.Service.Prediction
         private async Task<string> CaptureTrackAsync(string trackId, IProgress<string> progress,
             CancellationToken cancellationToken)
         {
-            if (!_playbackHost.IsReady)
-                throw new InvalidOperationException("The embedded player is not ready.");
+            progress?.Report("Waiting for embedded Spotify player…");
+
+            if (!await WaitForPlayerReadyAsync(cancellationToken).ConfigureAwait(true))
+                throw new InvalidOperationException(
+                    "The embedded player is not ready. Open Infinite Jukebox / Loop Lab, wait until " +
+                    "Status says \"Player ready\", then Analyze again.");
 
             progress?.Report("Capturing one play-through — mute other apps until the track ends…");
 
@@ -280,6 +284,15 @@ namespace SpotifyWPF.Service.Prediction
                 _playbackHost.StateChanged -= onStateChanged;
                 _playbackHost.PositionUpdated -= onPositionUpdated;
             }
+        }
+
+        private async Task<bool> WaitForPlayerReadyAsync(CancellationToken cancellationToken)
+        {
+            if (_playbackHost.IsReady)
+                return true;
+
+            return await _playbackHost.WaitUntilReadyAsync(TimeSpan.FromSeconds(45), cancellationToken)
+                .ConfigureAwait(true);
         }
 
         private async Task WaitForPlaybackStartedAsync(string trackId, CancellationToken cancellationToken)

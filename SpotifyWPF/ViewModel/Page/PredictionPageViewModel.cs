@@ -250,7 +250,11 @@ namespace SpotifyWPF.ViewModel.Page
         public string Status
         {
             get => _status;
-            set => Set(ref _status, value);
+            set
+            {
+                if (Set(ref _status, value))
+                    RaisePropertyChanged(nameof(BusyChromeText));
+            }
         }
 
         private string _trackInput;
@@ -315,6 +319,8 @@ namespace SpotifyWPF.ViewModel.Page
                 // Navigator/UI only — do not rebuild the beat graph.
                 PersistJukeboxSettings();
                 RaisePropertyChanged(nameof(ShowLyricsPanel));
+                RaisePropertyChanged(nameof(UseWideLyricsColumn));
+                RaisePropertyChanged(nameof(CompactLyricLineText));
 
                 if (value && !string.IsNullOrEmpty(CurrentTrackId))
                 {
@@ -394,7 +400,11 @@ namespace SpotifyWPF.ViewModel.Page
         public string LyricsStatusText
         {
             get => _lyricsStatusText;
-            private set => Set(ref _lyricsStatusText, value);
+            private set
+            {
+                if (Set(ref _lyricsStatusText, value))
+                    RaisePropertyChanged(nameof(CompactLyricLineText));
+            }
         }
 
         public ObservableCollection<LyricDisplayLine> LyricDisplayLines { get; } =
@@ -405,7 +415,11 @@ namespace SpotifyWPF.ViewModel.Page
         public string ActiveLyricText
         {
             get => _activeLyricText;
-            private set => Set(ref _activeLyricText, value);
+            private set
+            {
+                if (Set(ref _activeLyricText, value))
+                    RaisePropertyChanged(nameof(CompactLyricLineText));
+            }
         }
 
         private string _previousLyricText = string.Empty;
@@ -794,6 +808,12 @@ namespace SpotifyWPF.ViewModel.Page
                     return;
 
                 RaisePropertyChanged(nameof(IsFullLayout));
+                if (!value)
+                {
+                    UseCompactLyrics = false;
+                    UseCompactDetails = false;
+                }
+                RaisePropertyChanged(nameof(UseWideLyricsColumn));
                 EnterMiniPlayerCommand.RaiseCanExecuteChanged();
                 ExitMiniPlayerCommand.RaiseCanExecuteChanged();
                 MessengerInstance.Send(value, MessageType.MiniPlayerModeChanged);
@@ -801,6 +821,79 @@ namespace SpotifyWPF.ViewModel.Page
         }
 
         public bool IsFullLayout => !IsMiniPlayerMode;
+
+        /// <summary>
+        /// When the stage is too narrow for the right karaoke column, show a single lyric line
+        /// at the bottom instead. Updated from PredictionPage StageHost size changes.
+        /// </summary>
+        public bool UseCompactLyrics
+        {
+            get => _useCompactLyrics;
+            private set
+            {
+                if (!Set(ref _useCompactLyrics, value))
+                    return;
+
+                RaisePropertyChanged(nameof(UseWideLyricsColumn));
+                RaisePropertyChanged(nameof(CompactLyricLineText));
+            }
+        }
+
+        private bool _useCompactLyrics;
+
+        /// <summary>Full vertical lyrics column (Show Lyrics + full layout + enough width).</summary>
+        public bool UseWideLyricsColumn =>
+            IsFullLayout && ShowLyricsPanel && !UseCompactLyrics;
+
+        /// <summary>
+        /// Compact details HUD + smaller SSM when the stage is short or narrow.
+        /// Reverts automatically when resized larger in either direction.
+        /// </summary>
+        public bool UseCompactDetails
+        {
+            get => _useCompactDetails;
+            private set => Set(ref _useCompactDetails, value);
+        }
+
+        private bool _useCompactDetails;
+
+        /// <summary>Single-line lyric / status text for compact bottom chrome.</summary>
+        public string CompactLyricLineText
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(ActiveLyricText))
+                    return ActiveLyricText;
+                if (!string.IsNullOrWhiteSpace(LyricsStatusText) &&
+                    !string.Equals(LyricsStatusText, "No lyrics loaded.", StringComparison.Ordinal))
+                    return LyricsStatusText;
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Drive compact vs wide stage chrome from the stage host size.
+        /// Uses hysteresis so resizing near the threshold does not flicker.
+        /// </summary>
+        public void UpdateStageChrome(double width, double height)
+        {
+            if (!IsFullLayout || width <= 0 || height <= 0)
+            {
+                UseCompactLyrics = false;
+                UseCompactDetails = false;
+                return;
+            }
+
+            // Lyrics column (~400px) needs room beside the ring Viewbox.
+            UseCompactLyrics = UseCompactLyrics
+                ? width < 1000
+                : width < 920;
+
+            // Details + 200px SSM need width and height headroom.
+            UseCompactDetails = UseCompactDetails
+                ? width < 840 || height < 560
+                : width < 760 || height < 480;
+        }
 
         private double _bottomPanelHeight = 400;
 
@@ -840,6 +933,10 @@ namespace SpotifyWPF.ViewModel.Page
 
         private bool _isAnalyzing;
 
+        private bool _isBusyAction;
+
+        private string _busyActionText = string.Empty;
+
         public bool IsAnalyzing
         {
             get => _isAnalyzing;
@@ -855,16 +952,55 @@ namespace SpotifyWPF.ViewModel.Page
                     NotifyTransportStateChanged();
                     RaisePropertyChanged(nameof(IsIndeterminateAnalysisProgress));
                     RaisePropertyChanged(nameof(ShowAnalysisProgress));
+                    RaisePropertyChanged(nameof(ShowBusyChrome));
+                    RaisePropertyChanged(nameof(PreferStatusOverNowPlaying));
                     RefreshTrackStatusHud();
                 }
             }
         }
 
+        /// <summary>Short-lived busy state for play/start waits that are not full analysis.</summary>
+        public bool IsBusyAction
+        {
+            get => _isBusyAction;
+            private set
+            {
+                if (Set(ref _isBusyAction, value))
+                {
+                    RaisePropertyChanged(nameof(ShowAnalysisProgress));
+                    RaisePropertyChanged(nameof(ShowBusyChrome));
+                    RaisePropertyChanged(nameof(PreferStatusOverNowPlaying));
+                    RaisePropertyChanged(nameof(IsIndeterminateAnalysisProgress));
+                }
+            }
+        }
+
+        public string BusyActionText
+        {
+            get => _busyActionText;
+            private set
+            {
+                if (Set(ref _busyActionText, value ?? string.Empty))
+                    RaisePropertyChanged(nameof(BusyChromeText));
+            }
+        }
+
         public bool CaptureInProgress => _captureInProgress;
 
-        public bool ShowAnalysisProgress => IsAnalyzing;
+        public bool ShowAnalysisProgress => IsAnalyzing || IsBusyAction;
 
-        public bool IsIndeterminateAnalysisProgress => IsAnalyzing && !_analysisProgressKnown;
+        public bool ShowBusyChrome => IsAnalyzing || IsBusyAction;
+
+        /// <summary>Keep Status visible instead of Now Playing marquee while work is in progress.</summary>
+        public bool PreferStatusOverNowPlaying => IsAnalyzing || IsBusyAction;
+
+        public bool IsIndeterminateAnalysisProgress =>
+            (IsAnalyzing && !_analysisProgressKnown) || (IsBusyAction && !IsAnalyzing);
+
+        public string BusyChromeText =>
+            IsAnalyzing
+                ? (string.IsNullOrWhiteSpace(AnalysisStatusText) ? Status : AnalysisStatusText)
+                : (string.IsNullOrWhiteSpace(BusyActionText) ? Status : BusyActionText);
 
         /// <summary>Bound to ProgressBar — never negative (WPF throws on Value &lt; Minimum).</summary>
         public double AnalysisProgressPercent
@@ -893,7 +1029,11 @@ namespace SpotifyWPF.ViewModel.Page
         public string AnalysisStatusText
         {
             get => _analysisStatusText;
-            set => Set(ref _analysisStatusText, value);
+            set
+            {
+                if (Set(ref _analysisStatusText, value))
+                    RaisePropertyChanged(nameof(BusyChromeText));
+            }
         }
 
         public double JukeboxSimilarityThresholdMax
@@ -2415,7 +2555,7 @@ namespace SpotifyWPF.ViewModel.Page
                 try
                 {
                     var session = SessionTracks.FirstOrDefault(t => t.TrackId == trackId);
-                    Status = $"Starting local playback of {trackId}…";
+                    BeginBusyAction($"Starting local playback of {trackId}…");
                     _playbackHost.Pause();
                     _playbackHost.DisarmAction();
 
@@ -2437,28 +2577,92 @@ namespace SpotifyWPF.ViewModel.Page
                     Status = $"Local playback failed: {ex.Message}";
                     Log(Status);
                 }
+                finally
+                {
+                    EndBusyAction();
+                }
 
                 return;
             }
 
-            if (!_playbackHost.IsReady)
-            {
-                Status = "Player is not ready yet.";
-                return;
-            }
+            BeginBusyAction("Waiting for embedded Spotify player…");
 
             try
             {
+                if (!await EnsurePlayerReadyForSpotifyAsync().ConfigureAwait(true))
+                    return;
+
                 _transportRouter.Local.Stop();
-                Status = $"Starting playback of {trackId}…";
+                BeginBusyAction($"Starting playback of {trackId}…");
                 await _playbackService.PlayTrackAsync(trackId, _playbackHost.DeviceId);
                 _pendingPlaySource = source;
+                Status = $"Playing {trackId}…";
             }
             catch (Exception ex)
             {
                 Status = $"Playback failed: {ex.Message}";
                 Log($"Playback failed: {ex.Message}");
             }
+            finally
+            {
+                EndBusyAction();
+            }
+        }
+
+        private async Task<bool> EnsurePlayerReadyForSpotifyAsync(CancellationToken cancellationToken = default)
+        {
+            if (_playbackHost.IsReady)
+                return true;
+
+            if (!string.IsNullOrEmpty(_playbackHost.InitializationError))
+            {
+                PlayerInitializationError = _playbackHost.InitializationError;
+                Status = "Embedded player failed to start.";
+                return false;
+            }
+
+            Status = "Waiting for embedded Spotify player…";
+            BusyActionText = Status;
+            Log(Status);
+
+            var ready = await _playbackHost.WaitUntilReadyAsync(TimeSpan.FromSeconds(45), cancellationToken)
+                .ConfigureAwait(true);
+
+            if (!ready)
+            {
+                if (!string.IsNullOrEmpty(_playbackHost.InitializationError))
+                {
+                    PlayerInitializationError = _playbackHost.InitializationError;
+                    Status = "Embedded player failed to start.";
+                }
+                else
+                {
+                    Status =
+                        "Embedded player did not become ready. Stay on Infinite Jukebox until Status says " +
+                        "\"Player ready\", then try again.";
+                }
+
+                return false;
+            }
+
+            DeviceText = $"Spotify ({_playbackHost.DeviceId})";
+            Status = "Player ready.";
+            return true;
+        }
+
+        private void BeginBusyAction(string message)
+        {
+            BusyActionText = message ?? string.Empty;
+            Status = BusyActionText;
+            IsBusyAction = true;
+            RaisePropertyChanged(nameof(BusyChromeText));
+        }
+
+        private void EndBusyAction()
+        {
+            IsBusyAction = false;
+            BusyActionText = string.Empty;
+            RaisePropertyChanged(nameof(BusyChromeText));
         }
 
         /// <summary>Entry point for "Open in Loop Lab" from the Playlists grid.</summary>
@@ -2474,8 +2678,21 @@ namespace SpotifyWPF.ViewModel.Page
             }
 
             _pendingContextUri = contextUri;
-            Status = "Player starting — playback begins once the device is ready.";
-            await _playbackHost.EnsureInitializedAsync();
+            BeginBusyAction("Player starting — playback begins once the device is ready.");
+            try
+            {
+                if (await EnsurePlayerReadyForSpotifyAsync().ConfigureAwait(true))
+                {
+                    var pending = _pendingContextUri;
+                    _pendingContextUri = null;
+                    if (pending != null)
+                        await PlayContextAsync(pending);
+                }
+            }
+            finally
+            {
+                EndBusyAction();
+            }
         }
 
         private async Task PlayContextAsync(string contextUri)
@@ -4347,8 +4564,11 @@ namespace SpotifyWPF.ViewModel.Page
                 return;
             }
 
+            BeginBusyAction($"Preparing analysis of {displayName ?? trackId}…");
+
             if (!await _playbackSessionGate.WaitAsync(0).ConfigureAwait(true))
             {
+                EndBusyAction();
                 ReportAnalysisMessage(
                     $"Player busy — analyzing {AnalyzingDisplayName}. Wait for it to finish.");
                 return;
@@ -4378,8 +4598,11 @@ namespace SpotifyWPF.ViewModel.Page
                 _analyzingTrackId = trackId;
                 _analyzingDisplayName = displayName ?? trackId;
                 RaisePropertyChanged(nameof(AnalyzingDisplayName));
-                IsAnalyzing = true;
                 AnalysisProgressPercent = double.NaN;
+                AnalysisStatusText = "Preparing analysis…";
+                Status = $"Preparing analysis of {_analyzingDisplayName}…";
+                IsAnalyzing = true;
+                EndBusyAction();
                 UpdateSessionTrackAnalysisStatus(trackId, SessionAnalysisStatus.Analyzing);
 
                 // Clear previous track's ring immediately so analyze doesn't show stale visuals.
@@ -4398,6 +4621,16 @@ namespace SpotifyWPF.ViewModel.Page
 
                 if (needsCapture)
                 {
+                    AnalysisStatusText = "Waiting for embedded Spotify player…";
+                    Status = FormatAnalysisStatusMessage(AnalysisStatusText);
+
+                    if (!await EnsurePlayerReadyForSpotifyAsync(analysisToken).ConfigureAwait(true))
+                    {
+                        ReportAnalysisError(Status);
+                        UpdateSessionTrackAnalysisStatus(trackId, SessionAnalysisStatus.Failed);
+                        return;
+                    }
+
                     _transportRouter.Local.Stop();
                     _captureInProgress = true;
                     NotifyTransportStateChanged();
@@ -4433,6 +4666,7 @@ namespace SpotifyWPF.ViewModel.Page
             }
             finally
             {
+                EndBusyAction();
                 CompleteAnalysisSession();
             }
         }
@@ -4469,6 +4703,7 @@ namespace SpotifyWPF.ViewModel.Page
                 AnalysisStatusText = message;
                 Status = FormatAnalysisStatusMessage(message);
                 Log(message, verbose: true);
+                RaisePropertyChanged(nameof(BusyChromeText));
 
                 var match = Regex.Match(message ?? string.Empty, @"(\d+)%");
 
