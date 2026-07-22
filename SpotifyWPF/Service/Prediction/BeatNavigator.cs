@@ -41,6 +41,9 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly bool _randomBranches;
 
+        /// <summary>Beats painted out via Shift+drag on the ring (dialogue outro, etc.).</summary>
+        private readonly HashSet<int> _excludedBeats = new HashSet<int>();
+
         private readonly BranchPreferenceStore _preferences;
 
         private readonly LyricFlowContext _lyricFlow;
@@ -114,6 +117,55 @@ namespace SpotifyWPF.Service.Prediction
 
             // Default true when profile is null (fresh track).
             _randomBranches = profile?.RandomBranches ?? true;
+            LoadExcludedBeats(profile);
+        }
+
+        private void LoadExcludedBeats(LoopProfile profile)
+        {
+            _excludedBeats.Clear();
+
+            if (profile?.ExcludedRanges == null || Graph.Beats.Count == 0)
+                return;
+
+            foreach (var range in profile.ExcludedRanges)
+            {
+                if (range == null)
+                    continue;
+
+                var a = Math.Max(0, Math.Min(range.StartBeatIndex, range.EndBeatIndex));
+                var b = Math.Min(Graph.Beats.Count - 1, Math.Max(range.StartBeatIndex, range.EndBeatIndex));
+
+                for (var i = a; i <= b; i++)
+                    _excludedBeats.Add(i);
+            }
+        }
+
+        /// <summary>True when this beat was Shift-excluded on the ring (no landings / no linear play).</summary>
+        public bool IsBeatExcluded(int beatIndex) =>
+            beatIndex >= 0 && _excludedBeats.Contains(beatIndex);
+
+        /// <summary>
+        /// Last beat allowed before trailing exclusions (and graph end-loop point).
+        /// Dialogue outros often sit past the last reverse edge — this pulls the wall forward.
+        /// </summary>
+        public int EffectiveLastBranchPoint
+        {
+            get
+            {
+                var graphLast = Graph.LastBranchPointIndex;
+                var maxAllowed = Graph.Beats.Count - 1;
+
+                while (maxAllowed >= 0 && IsBeatExcluded(maxAllowed))
+                    maxAllowed--;
+
+                if (maxAllowed < 0)
+                    return -1;
+
+                if (graphLast < 0)
+                    return _excludedBeats.Count > 0 ? maxAllowed : -1;
+
+                return Math.Min(graphLast, maxAllowed);
+            }
         }
 
         private static long PackBranch(int from, int to) => ((long)from << 32) | (uint)to;
@@ -138,9 +190,10 @@ namespace SpotifyWPF.Service.Prediction
 
         /// <summary>True when the graph has at least one usable branch (or end-loop can still fire).</summary>
         public bool CanJump =>
-            (_settings.EnableEndLoop && Graph.LastBranchPointIndex >= 0) ||
+            (_settings.EnableEndLoop && EffectiveLastBranchPoint >= 0) ||
             Graph.Beats.Any(b => b.Neighbors.Count > 0) ||
-            _lockedBranches.Count > 0;
+            _lockedBranches.Count > 0 ||
+            _excludedBeats.Count > 0;
 
         /// <summary>Index of the beat containing the given position (clamped to the nearest beat).</summary>
         public int FindBeatIndexAtMs(long positionMs)
@@ -171,8 +224,19 @@ namespace SpotifyWPF.Service.Prediction
                 return null;
 
             var start = Math.Max(0, Math.Min(fromBeatIndex, beats.Count - 1));
-            var lastBranch = Graph.LastBranchPointIndex;
-            var endLoopActive = _settings.EnableEndLoop && lastBranch >= 0;
+            var lastBranch = EffectiveLastBranchPoint;
+            var endLoopActive = (_settings.EnableEndLoop && lastBranch >= 0) ||
+                                (_excludedBeats.Count > 0 && lastBranch >= 0);
+
+            if (IsBeatExcluded(start))
+            {
+                var escapeFrom = start;
+
+                while (escapeFrom > 0 && IsBeatExcluded(escapeFrom))
+                    escapeFrom--;
+
+                return TryCreateEndLoopJump(escapeFrom) ?? TryCreateEndLoopJump(lastBranch);
+            }
 
             if (endLoopActive && start > lastBranch)
             {
@@ -185,6 +249,17 @@ namespace SpotifyWPF.Service.Prediction
             for (var i = start; i < beats.Count; i++)
             {
                 var beat = beats[i];
+
+                // Exclusion wall (dialogue outro, etc.): escape before entering.
+                if (IsBeatExcluded(i))
+                {
+                    var escapeFrom = Math.Max(0, i - 1);
+
+                    while (escapeFrom > 0 && IsBeatExcluded(escapeFrom))
+                        escapeFrom--;
+
+                    return TryCreateEndLoopJump(escapeFrom) ?? TryCreateEndLoopJump(lastBranch);
+                }
 
                 if (endLoopActive && i >= lastBranch)
                 {
@@ -601,6 +676,13 @@ namespace SpotifyWPF.Service.Prediction
         {
             IEnumerable<BeatEdge> query = edges;
 
+            // Never land in (or leave from) Shift-excluded dialogue / outro spans.
+            if (_excludedBeats.Count > 0)
+            {
+                query = query.Where(e =>
+                    !IsBeatExcluded(e.DestinationIndex) && !IsBeatExcluded(fromBeatIndex));
+            }
+
             if (_settings.AllowOnlyReverseBranches)
                 query = query.Where(e => e.DestinationIndex < fromBeatIndex);
 
@@ -611,23 +693,45 @@ namespace SpotifyWPF.Service.Prediction
             }
 
             // Hypermeasure lock: HARD filter on raw beat INDEX modulo N (not IndexInBar).
+            // Continuation-oriented: keep landings whose index phase matches the *next* beat
+            // (from+1), not the exit beat — Enhanced edges score stack[i+1]≈stack[j], so
+            // from%N==to%N was one beat behind Soft/Hard bar-phase and felt late on hops.
             // Independent of PhasePenaltyMode and of lyric Softmax. N=4/8/16 can empty
             // the candidate list on floating grooves / gap-split grids (e.g. Dreams).
             var phrase = _settings.PhraseAlignBeats;
             if (phrase > 1)
             {
-                var fromPhase = ((fromBeatIndex % phrase) + phrase) % phrase;
+                var expectIndex = fromBeatIndex + 1 < Graph.Beats.Count
+                    ? fromBeatIndex + 1
+                    : fromBeatIndex;
+                var expectPhase = ((expectIndex % phrase) + phrase) % phrase;
                 query = query.Where(e =>
                 {
                     var to = e.DestinationIndex;
                     var toPhase = ((to % phrase) + phrase) % phrase;
-                    return toPhase == fromPhase;
+                    return toPhase == expectPhase;
                 });
             }
 
-            if (_settings.EnableEndLoop && Graph.LastBranchPointIndex >= 0 && !exemptLongBranchFilter)
+            // Hard bar-phase: also enforce at navigation so Soft→Hard takes effect even when
+            // bridges / degree restore left a mismatched neighbor in the graph.
+            if (!string.IsNullOrEmpty(_settings.PhasePenaltyMode) &&
+                _settings.PhasePenaltyMode.Equals("hard", StringComparison.OrdinalIgnoreCase) &&
+                fromBeatIndex >= 0 && fromBeatIndex < Graph.Beats.Count)
             {
-                var last = Graph.LastBranchPointIndex;
+                var expectBar = fromBeatIndex + 1 < Graph.Beats.Count
+                    ? Graph.Beats[fromBeatIndex + 1].IndexInBar
+                    : Graph.Beats[fromBeatIndex].IndexInBar;
+                query = query.Where(e =>
+                    e.DestinationIndex >= 0 &&
+                    e.DestinationIndex < Graph.Beats.Count &&
+                    CircularBarPhaseDelta(Graph.Beats[e.DestinationIndex].IndexInBar, expectBar) == 0);
+            }
+
+            var last = EffectiveLastBranchPoint;
+            if (last >= 0 && !exemptLongBranchFilter &&
+                (_settings.EnableEndLoop || _excludedBeats.Count > 0))
+            {
                 query = query.Where(e => e.DestinationIndex <= last);
             }
 
@@ -652,7 +756,12 @@ namespace SpotifyWPF.Service.Prediction
                 StringComparison.OrdinalIgnoreCase)
                 ? 0
                 : Math.Max(0, _settings.SeekLeadMs);
-            var triggerMs = Graph.Beats[fromIndex].EndMs - seekLead;
+            // Fire on the next beat's grid tick (≈ EndMs of from) so rounding on DurationSec
+            // cannot let a few ms of from+1 play before the seek.
+            var boundaryMs = fromIndex + 1 < Graph.Beats.Count
+                ? Graph.Beats[fromIndex + 1].StartMs
+                : Graph.Beats[fromIndex].EndMs;
+            var triggerMs = boundaryMs - seekLead;
 
             if (triggerMs < Graph.Beats[fromIndex].StartMs)
                 triggerMs = Graph.Beats[fromIndex].StartMs;

@@ -389,10 +389,10 @@
                                                                Foreground="{DynamicResource AppForegroundBrush}"/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                                               Text="Bar phase penalty — graph BUILD soft/hard score from IndexInBar (mod-4). Soft prefers same bar slot; Hard strongly penalizes mismatches; Off ignores."/>
+                                                               Text="Bar phase penalty — graph BUILD soft/hard score from IndexInBar of the *next* beat vs landing (mod-4). Soft prefers same continuation slot; Hard strongly penalizes mismatches (also filters at nav); Off ignores."/>
                                                     <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"
                                                                Foreground="{DynamicResource AppMutedForegroundBrush}"
-                                                               Text="Phrase align N — navigation HARD filter: keep only hops with beatIndex % N matching. Turning it to 0 does NOT disable Bar phase. Unrelated to lyrics."/>
+                                                               Text="Phrase align N — navigation HARD filter: keep only hops with (from+1) % N == to % N (continuation phase, same as Soft/Hard). Turning it to 0 does NOT disable Bar phase. Unrelated to lyrics."/>
 
                                                     <TextBlock FontSize="13" FontWeight="SemiBold" Margin="0,0,0,4"
                                                                Text="4. Lyric flow (Softmax only)"
@@ -450,24 +450,24 @@
                                                                Maximum="64"
                                                                Value="{Binding JukeboxMinBeatsBetweenJumps}"
                                                                InfoTip="Forced linear beats after a random hop before another is considered (locks + end-loop still fire).&#x0a;&#x0a;Example: 16 ≈ one phrase of stability so you hear the landing."/>
-                                        <local:TuningSliderRow Label="Phrase align (beats; 0=off — HARD filter by beat-index % N)"
+                                        <local:TuningSliderRow Label="Phrase align (beats; 0=off — HARD filter by (from+1) % N)"
                                                                ValueText="{Binding JukeboxPhraseAlignBeatsText}"
                                                                Minimum="0"
                                                                Maximum="32"
                                                                Value="{Binding JukeboxPhraseAlignBeats}"
-                                                               InfoTip="HARD navigation filter: keep only hops where fromBeat % N == toBeat % N. Independent of Bar phase penalty and of lyrics.&#x0a;&#x0a;Example: 8/16 helps long drum grooves. On Dreams-like floating grids, leave at 0 — otherwise Softmax sees almost no candidates."/>
+                                                               InfoTip="HARD navigation filter: keep only hops where (fromBeat+1) % N == toBeat % N (continuation phase — matches Soft/Hard and Enhanced edge scoring). Independent of Bar phase penalty and of lyrics.&#x0a;&#x0a;Example: 8/16 helps long drum grooves. On Dreams-like floating grids, leave at 0 — otherwise Softmax sees almost no candidates."/>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                             <TextBlock Text="Bar phase penalty"
                                                        Width="160"
                                                        VerticalAlignment="Center"
                                                        Foreground="{DynamicResource AppForegroundBrush}"
-                                                       ToolTip="Independent of Phrase align. Soft/Hard/Off distance penalty from IndexInBar (mod-4) at GRAPH BUILD. Turning Phrase align to 0 does NOT disable this."/>
+                                                       ToolTip="Independent of Phrase align. Soft/Hard/Off distance penalty from IndexInBar of the *next* beat vs landing (mod-4) at GRAPH BUILD. Hard also filters at navigation. Turning Phrase align to 0 does NOT disable this."/>
                                             <ComboBox MinWidth="120"
                                                       MinHeight="28"
                                                       VerticalAlignment="Center"
                                                       ItemsSource="{Binding PhasePenaltyModeOptions}"
                                                       SelectedItem="{Binding SelectedPhasePenaltyMode}"
-                                                      ToolTip="Graph-build bar-phase scoring. Soft = prefer same bar slot. Hard = strong mismatch penalty. Off = ignore. Not Phrase align."/>
+                                                      ToolTip="Graph-build bar-phase scoring vs the beat that would have played next. Soft = prefer same continuation slot. Hard = strong mismatch penalty (+ nav filter). Off = ignore. Not Phrase align."/>
                                         </StackPanel>
                                         <local:TuningSliderRow Label="Softmax temperature τ (lower = greedier)"
                                                                ValueText="{Binding JukeboxSoftmaxTemperatureText}"
@@ -557,7 +557,10 @@
                                                   Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding JukeboxEnableEndLoop}"
                                                   Margin="0,0,0,4"
-                                                  ToolTip="Forces a jump back before the track ends. Also recovers if a hop lands past the last escape beat."/>
+                                                  ToolTip="Forces a jump back before the track ends (or before a Shift-excluded outro). Also recovers if a hop lands past the last escape beat."/>
+                                        <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                   Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                   Text="Shift+drag on the ring paints beats to exclude (dialogue outro). Shift+click a red arc to clear. Excluded beats are never landed on and block linear play."/>
                                         <CheckBox Content="Allow random jumps"
                                                   Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding JukeboxRandomBranches}"

@@ -226,9 +226,10 @@
                 <!-- Karaoke lyrics column — right side, scrolls up with active line -->
                 <component:LyricsPanel HorizontalAlignment="Right"
                                        VerticalAlignment="Stretch"
-                                       Margin="0,56,14,48"
+                                       Margin="0,40,16,36"
                                        Panel.ZIndex="40"
-                                       MaxHeight="420">
+                                       MaxHeight="720"
+                                       MinHeight="360">
                     <component:LyricsPanel.Style>
                         <Style TargetType="component:LyricsPanel">
                             <Setter Property="Visibility" Value="Collapsed"/>

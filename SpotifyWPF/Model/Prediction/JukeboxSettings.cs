@@ -68,7 +68,8 @@ namespace SpotifyWPF.Model.Prediction
 
         /// <summary>
         /// Require hop landings to share the same position within a hypermeasure of this many beats
-        /// (0 = off). HARD navigation filter: keeps only edges with fromIndex % N == toIndex % N.
+        /// (0 = off). HARD navigation filter: keeps only edges with (fromIndex+1) % N == toIndex % N
+        /// (continuation phase — matches Enhanced stack[i+1]≈stack[j] scoring).
         /// Independent of <see cref="PhasePenaltyMode"/> (graph-build IndexInBar soft/hard).
         /// On floating grooves (e.g. Dreams) or gap-split beat grids, N=4/8/16 can wipe almost all
         /// candidates — unrelated to lyric Softmax. See docs/lyric-flow.md.
@@ -133,7 +134,8 @@ namespace SpotifyWPF.Model.Prediction
 
         /// <summary>
         /// Slice 5: when region embeddings exist, only allow Classic hops whose region distance
-        /// is among the nearest GateRegionNeighborCount (0 = disable gating).
+        /// (continuation: embeds[i+1] vs embeds[j]) is among the nearest GateRegionNeighborCount
+        /// (0 = disable gating).
         /// </summary>
         [JsonPropertyName("essentiaRegionGate")]
         public bool EssentiaRegionGate { get; set; } = true;

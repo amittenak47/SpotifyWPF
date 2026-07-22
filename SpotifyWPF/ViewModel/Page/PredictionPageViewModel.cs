@@ -221,6 +221,7 @@ namespace SpotifyWPF.ViewModel.Page
             EnterMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = true, () => !IsMiniPlayerMode);
             ExitMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = false, () => IsMiniPlayerMode);
             ToggleRingLockCommand = new RelayCommand<RingBranchClick>(ToggleRingLock);
+            SetRingExcludedRangeCommand = new RelayCommand<RingExcludeSelection>(SetRingExcludedRange);
             StretchRingModifierCommand = new RelayCommand<RingModifierStretch>(StretchRingModifier);
             CycleRingModifierCommand = new RelayCommand<RingBranchClick>(CycleRingModifier);
             RingScrubToCommand = new RelayCommand<long>(ScrubToPositionMs, ms => DurationMs > 0 && CanPlayTransport());
@@ -1042,7 +1043,7 @@ namespace SpotifyWPF.ViewModel.Page
                 Log(_jukeboxSettingsModel.PhraseAlignBeats <= 1
                     ? "Jukebox: phrase align off (bar phase penalty unchanged — separate control)."
                     : $"Jukebox: phrase align = {_jukeboxSettingsModel.PhraseAlignBeats} beats " +
-                      "(HARD filter: hop only when beatIndex % N matches — can wipe options on floating grooves).");
+                      "(HARD filter: (from+1) % N == to % N continuation phase — can wipe options on floating grooves).");
             }
         }
 
@@ -1373,6 +1374,14 @@ namespace SpotifyWPF.ViewModel.Page
         }
 
         private IReadOnlyList<BranchModifier> _ringBranchModifiers = Array.Empty<BranchModifier>();
+
+        public IReadOnlyList<ExcludedRange> RingExcludedRanges
+        {
+            get => _ringExcludedRanges;
+            set => Set(ref _ringExcludedRanges, value);
+        }
+
+        private IReadOnlyList<ExcludedRange> _ringExcludedRanges = Array.Empty<ExcludedRange>();
 
         public string RingLockCountText
         {
@@ -1930,6 +1939,9 @@ namespace SpotifyWPF.ViewModel.Page
 
         /// <summary>Ring click: lock/unlock the clicked beat's best branch.</summary>
         public RelayCommand<RingBranchClick> ToggleRingLockCommand { get; }
+
+        /// <summary>Shift+drag / Shift+click exclusion paint on the ring.</summary>
+        public RelayCommand<RingExcludeSelection> SetRingExcludedRangeCommand { get; }
 
         /// <summary>Local WAV: stretch a locked branch outward to attach/update a modifier.</summary>
         public RelayCommand<RingModifierStretch> StretchRingModifierCommand { get; }
@@ -3109,13 +3121,108 @@ namespace SpotifyWPF.ViewModel.Page
                                  ?? (IReadOnlyList<BranchLock>)Array.Empty<BranchLock>();
             RingBranchModifiers = profile?.BranchModifiers?.ToList()
                                   ?? (IReadOnlyList<BranchModifier>)Array.Empty<BranchModifier>();
+            RingExcludedRanges = profile?.ExcludedRanges?.ToList()
+                                 ?? (IReadOnlyList<ExcludedRange>)Array.Empty<ExcludedRange>();
             RingLockCountText = RingLockedBranches.Count == 0
-                ? "no locks"
+                ? (RingExcludedRanges.Count > 0
+                    ? $"{RingExcludedRanges.Count} excluded"
+                    : "no locks")
                 : RingBranchModifiers.Count > 0
                     ? $"{RingLockedBranches.Count} locked · {RingBranchModifiers.Count} mod"
-                    : $"{RingLockedBranches.Count} locked";
+                    : RingExcludedRanges.Count > 0
+                        ? $"{RingLockedBranches.Count} locked · {RingExcludedRanges.Count} excl"
+                        : $"{RingLockedBranches.Count} locked";
             RaisePropertyChanged(nameof(RingLockCount));
             RefreshBranchPresetsForSelection();
+        }
+
+        private void SetRingExcludedRange(RingExcludeSelection selection)
+        {
+            if (selection == null)
+                return;
+
+            var trackId = SelectedSessionTrack?.TrackId ?? _loopController.CurrentTrackId;
+
+            if (string.IsNullOrEmpty(trackId))
+                return;
+
+            var profile = _loopController.GetProfileForTrack(trackId);
+
+            if (profile.ExcludedRanges == null)
+                profile.ExcludedRanges = new List<ExcludedRange>();
+
+            var a = Math.Min(selection.StartBeatIndex, selection.EndBeatIndex);
+            var b = Math.Max(selection.StartBeatIndex, selection.EndBeatIndex);
+
+            if (selection.Remove)
+            {
+                var removed = profile.ExcludedRanges.RemoveAll(r =>
+                {
+                    if (r == null)
+                        return false;
+
+                    var ra = Math.Min(r.StartBeatIndex, r.EndBeatIndex);
+                    var rb = Math.Max(r.StartBeatIndex, r.EndBeatIndex);
+                    return !(b < ra || a > rb);
+                });
+
+                if (removed == 0)
+                    return;
+
+                Log($"Jukebox: cleared excluded span overlapping beats {a}–{b}.");
+            }
+            else
+            {
+                profile.ExcludedRanges.Add(new ExcludedRange
+                {
+                    StartBeatIndex = a,
+                    EndBeatIndex = b
+                });
+                MergeExcludedRanges(profile.ExcludedRanges);
+                Log($"Jukebox: excluded beats {a}–{b} from branching and playback " +
+                    "(Shift+click the red arc to clear).");
+            }
+
+            profile.Mode = LoopModes.Jukebox;
+            profile.Enabled = true;
+            _loopController.ApplyProfile(profile);
+            RefreshRingLocks(profile);
+        }
+
+        private static void MergeExcludedRanges(List<ExcludedRange> ranges)
+        {
+            if (ranges == null || ranges.Count <= 1)
+                return;
+
+            var ordered = ranges
+                .Where(r => r != null)
+                .Select(r => (A: Math.Min(r.StartBeatIndex, r.EndBeatIndex),
+                    B: Math.Max(r.StartBeatIndex, r.EndBeatIndex)))
+                .OrderBy(t => t.A)
+                .ToList();
+
+            ranges.Clear();
+
+            if (ordered.Count == 0)
+                return;
+
+            var curA = ordered[0].A;
+            var curB = ordered[0].B;
+
+            for (var i = 1; i < ordered.Count; i++)
+            {
+                if (ordered[i].A <= curB + 1)
+                {
+                    curB = Math.Max(curB, ordered[i].B);
+                    continue;
+                }
+
+                ranges.Add(new ExcludedRange { StartBeatIndex = curA, EndBeatIndex = curB });
+                curA = ordered[i].A;
+                curB = ordered[i].B;
+            }
+
+            ranges.Add(new ExcludedRange { StartBeatIndex = curA, EndBeatIndex = curB });
         }
 
         private void RefreshBranchPresetsForSelection()

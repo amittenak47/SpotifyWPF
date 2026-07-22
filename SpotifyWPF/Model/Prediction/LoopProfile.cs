@@ -145,8 +145,36 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("lockPresets")]
         public List<BranchLockPreset> LockPresets { get; set; } = new List<BranchLockPreset>();
 
+        /// <summary>
+        /// Beat ranges excluded from jukebox branching and linear playback (e.g. dialogue outro).
+        /// Shift+drag on the ring to paint; Shift+click an excluded arc to clear it.
+        /// </summary>
+        [JsonPropertyName("excludedRanges")]
+        public List<ExcludedRange> ExcludedRanges { get; set; } = new List<ExcludedRange>();
+
         [JsonIgnore]
         public bool IsValidRegion => LoopEndMs > LoopStartMs && LoopStartMs >= 0;
+    }
+
+    /// <summary>Inclusive beat-index span skipped by Infinite Jukebox (no landings, no linear play).</summary>
+    public class ExcludedRange
+    {
+        [JsonPropertyName("startBeatIndex")]
+        public int StartBeatIndex { get; set; }
+
+        [JsonPropertyName("endBeatIndex")]
+        public int EndBeatIndex { get; set; }
+    }
+
+    /// <summary>Ring gesture: Shift+drag paints an exclusion; Shift+click removes overlapping.</summary>
+    public class RingExcludeSelection
+    {
+        public int StartBeatIndex { get; set; }
+
+        public int EndBeatIndex { get; set; }
+
+        /// <summary>When true, remove any saved ranges overlapping this span.</summary>
+        public bool Remove { get; set; }
     }
 
     public static class LoopModes

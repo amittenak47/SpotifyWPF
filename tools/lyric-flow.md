@@ -10,14 +10,16 @@ does **not** disable Bar phase penalty.
 
 | Control | When it applies | What it does |
 |---------|-----------------|--------------|
-| **Bar phase penalty** (`soft` / `hard` / `off`) | Graph **build** | Soft/hard distance penalty from `IndexInBar` (mod-4 bar slot). |
-| **Phrase align (N beats)** | Navigation **filter** | Hard keep-only: hop `i→j` only if `i % N == j % N`. `0`/`1` = off. |
+| **Bar phase penalty** (`soft` / `hard` / `off`) | Graph **build** (+ Hard also filters at nav) | Soft/hard distance penalty from `IndexInBar` of the *next* beat vs landing (mod-4). Enhanced edges are continuation-oriented: leave beat `i`, land on `j ≈ i+1`. |
+| **Phrase align (N beats)** | Navigation **filter** | Hard keep-only: hop `i→j` only if `(i+1) % N == j % N`. `0`/`1` = off. |
+
+Using `i % N == j % N` (twin of the exit) disagrees with Soft/Hard and lands **one beat behind** the groove — Phrase align follows continuation phase instead.
 
 ### Why N = 4 / 8 / 16 can wipe options on *Dreams* (Fleetwood Mac)
 
 Phrase align uses **raw beat index modulo N**, not musical `IndexInBar`.
 If beat 0 is not a true downbeat, or Path B inserted **gap-split** beats,
-index phase drifts from the groove. Neighbors fail `i % N == j % N`, Softmax
+index phase drifts from the groove. Neighbors fail `(i+1) % N == j % N`, Softmax
 sees an empty list, and the ring looks branchless. That is a navigation
 filter — not SCC “components” at graph build, and **not lyrics**.
 
