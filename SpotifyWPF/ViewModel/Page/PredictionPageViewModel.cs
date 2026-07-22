@@ -311,7 +311,8 @@ namespace SpotifyWPF.ViewModel.Page
                 if (_jukeboxSettingsModel.ShowLyrics == value)
                     return;
                 _jukeboxSettingsModel.ShowLyrics = value;
-                PersistJukeboxSettingsNow();
+                // Navigator/UI only — do not rebuild the beat graph.
+                PersistJukeboxSettings();
                 RaisePropertyChanged(nameof(ShowLyricsPanel));
 
                 if (value && !string.IsNullOrEmpty(CurrentTrackId))
@@ -322,7 +323,7 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     CurrentLyrics = null;
                     LyricsStatusText = "Lyrics hidden.";
-                    _loopController.SetLyricPhraseBeats(null);
+                    _loopController.SetLyricFlowContext(null);
                 }
             }
         }
@@ -338,12 +339,52 @@ namespace SpotifyWPF.ViewModel.Page
                 if (Math.Abs(_jukeboxSettingsModel.LyricPhraseWeight - clamped) < 0.001)
                     return;
                 _jukeboxSettingsModel.LyricPhraseWeight = clamped;
-                PersistJukeboxSettingsNow();
+                PersistJukeboxSettings();
                 RaisePropertyChanged(nameof(LyricPhraseWeight));
                 RaisePropertyChanged(nameof(LyricPhraseWeightText));
-                // Rearm so Softmax picks up the new weight with current phrase beats.
-                _loopController.SetLyricPhraseBeats(
-                    LyricBeatMapper.PhraseBoundaryBeats(CurrentLyrics));
+                PushLyricFlowToNavigator();
+            }
+        }
+
+        public bool LyricFlowPhraseCuts
+        {
+            get => _jukeboxSettingsModel.LyricFlowPhraseCuts;
+            set
+            {
+                if (_jukeboxSettingsModel.LyricFlowPhraseCuts == value)
+                    return;
+                _jukeboxSettingsModel.LyricFlowPhraseCuts = value;
+                PersistJukeboxSettings();
+                RaisePropertyChanged(nameof(LyricFlowPhraseCuts));
+                PushLyricFlowToNavigator();
+            }
+        }
+
+        public bool LyricFlowSameSection
+        {
+            get => _jukeboxSettingsModel.LyricFlowSameSection;
+            set
+            {
+                if (_jukeboxSettingsModel.LyricFlowSameSection == value)
+                    return;
+                _jukeboxSettingsModel.LyricFlowSameSection = value;
+                PersistJukeboxSettings();
+                RaisePropertyChanged(nameof(LyricFlowSameSection));
+                PushLyricFlowToNavigator();
+            }
+        }
+
+        public bool LyricFlowBlockClean
+        {
+            get => _jukeboxSettingsModel.LyricFlowBlockClean;
+            set
+            {
+                if (_jukeboxSettingsModel.LyricFlowBlockClean == value)
+                    return;
+                _jukeboxSettingsModel.LyricFlowBlockClean = value;
+                PersistJukeboxSettings();
+                RaisePropertyChanged(nameof(LyricFlowBlockClean));
+                PushLyricFlowToNavigator();
             }
         }
 
@@ -953,8 +994,9 @@ namespace SpotifyWPF.ViewModel.Page
                 RaisePropertyChanged(nameof(JukeboxPhraseAlignBeatsText));
                 PersistJukeboxSettings();
                 Log(_jukeboxSettingsModel.PhraseAlignBeats <= 1
-                    ? "Jukebox: phrase align OFF."
-                    : $"Jukebox: phrase align = {_jukeboxSettingsModel.PhraseAlignBeats} beats (hop only to same phase in the phrase).");
+                    ? "Jukebox: phrase align off (bar phase penalty unchanged — separate control)."
+                    : $"Jukebox: phrase align = {_jukeboxSettingsModel.PhraseAlignBeats} beats " +
+                      "(HARD filter: hop only when beatIndex % N matches — can wipe options on floating grooves).");
             }
         }
 
@@ -2598,7 +2640,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 CurrentLyrics = null;
                 LyricsStatusText = "Lyrics hidden.";
-                _loopController.SetLyricPhraseBeats(null);
+                _loopController.SetLyricFlowContext(null);
                 return;
             }
 
@@ -2620,20 +2662,8 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     CurrentLyrics = null;
                     LyricsStatusText = "No lyrics found.";
-                    _loopController.SetLyricPhraseBeats(null);
+                    _loopController.SetLyricFlowContext(null);
                     return;
-                }
-
-                var graph = _loopController.GetGraphForTrack(trackId);
-                if (graph?.Beats != null && graph.Beats.Count > 0)
-                {
-                    var starts = graph.Beats.Select(b => b.StartMs).ToList();
-                    LyricBeatMapper.MapToBeats(lyrics, starts);
-                    _loopController.SetLyricPhraseBeats(LyricBeatMapper.PhraseBoundaryBeats(lyrics));
-                }
-                else
-                {
-                    _loopController.SetLyricPhraseBeats(null);
                 }
 
                 CurrentLyrics = lyrics;
@@ -2643,6 +2673,7 @@ namespace SpotifyWPF.ViewModel.Page
                         ? $"{lyrics.Lines.Count} lines · {lyrics.Source}"
                         : "Untimed lyrics";
                 UpdateActiveLyricLine(PositionMs);
+                PushLyricFlowToNavigator(trackId);
             }
             catch (OperationCanceledException)
             {
@@ -2653,6 +2684,40 @@ namespace SpotifyWPF.ViewModel.Page
                 LyricsStatusText = "Lyrics unavailable.";
                 Log($"Lyrics load failed: {ex.Message}", verbose: true);
             }
+        }
+
+        /// <summary>
+        /// Map lyrics + analysis sections onto Softmax lyric-flow context and rearm navigator only.
+        /// </summary>
+        private void PushLyricFlowToNavigator(string trackId = null)
+        {
+            trackId = trackId
+                      ?? CurrentLyrics?.TrackId
+                      ?? _loopController.CurrentTrackId
+                      ?? CurrentTrackId;
+
+            if (CurrentLyrics == null || string.IsNullOrEmpty(trackId))
+            {
+                _loopController.SetLyricFlowContext(null);
+                return;
+            }
+
+            var graph = _loopController.GetGraphForTrack(trackId);
+            var analysis = AnalysisCache.Load(trackId);
+            IReadOnlyList<long> starts = null;
+            if (graph?.Beats != null && graph.Beats.Count > 0)
+                starts = graph.Beats.Select(b => b.StartMs).ToList();
+            else if (analysis?.Beats != null && analysis.Beats.Count > 0)
+                starts = analysis.Beats.Select(b => (long)(b.Start * 1000)).ToList();
+
+            if (starts == null || starts.Count == 0)
+            {
+                _loopController.SetLyricFlowContext(null);
+                return;
+            }
+
+            var ctx = LyricBeatMapper.BuildContext(CurrentLyrics, starts, analysis?.Sections);
+            _loopController.SetLyricFlowContext(ctx);
         }
 
         private void UpdateActiveLyricLine(long positionMs)
@@ -3106,6 +3171,9 @@ namespace SpotifyWPF.ViewModel.Page
             _jukeboxSettingsModel.EssentiaRegionGate = snapshot.EssentiaRegionGate;
             _jukeboxSettingsModel.GateRegionNeighborCount = snapshot.GateRegionNeighborCount;
             _jukeboxSettingsModel.LyricPhraseWeight = snapshot.LyricPhraseWeight;
+            _jukeboxSettingsModel.LyricFlowPhraseCuts = snapshot.LyricFlowPhraseCuts;
+            _jukeboxSettingsModel.LyricFlowSameSection = snapshot.LyricFlowSameSection;
+            _jukeboxSettingsModel.LyricFlowBlockClean = snapshot.LyricFlowBlockClean;
             _jukeboxSettingsModel.ShowLyrics = snapshot.ShowLyrics;
 
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMax));
@@ -3128,6 +3196,10 @@ namespace SpotifyWPF.ViewModel.Page
             RaisePropertyChanged(nameof(BranchPreferenceStatusText));
             RaisePropertyChanged(nameof(JukeboxEssentiaRegionGate));
             RaisePropertyChanged(nameof(LyricPhraseWeight));
+            RaisePropertyChanged(nameof(LyricPhraseWeightText));
+            RaisePropertyChanged(nameof(LyricFlowPhraseCuts));
+            RaisePropertyChanged(nameof(LyricFlowSameSection));
+            RaisePropertyChanged(nameof(LyricFlowBlockClean));
             RaisePropertyChanged(nameof(ShowLyricsPanel));
             RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinPercent));
             RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinText));
@@ -3145,6 +3217,7 @@ namespace SpotifyWPF.ViewModel.Page
             ApplyPlaybackSourceFromSettings();
             RaisePropertyChanged(nameof(UseLocalPlayback));
             RaisePropertyChanged(nameof(PlaybackSourceLabel));
+            PushLyricFlowToNavigator();
 
             PersistJukeboxSettings(invalidateGraph: true);
         }
@@ -3284,6 +3357,9 @@ namespace SpotifyWPF.ViewModel.Page
                 EssentiaRegionGate = source.EssentiaRegionGate,
                 GateRegionNeighborCount = source.GateRegionNeighborCount,
                 LyricPhraseWeight = source.LyricPhraseWeight,
+                LyricFlowPhraseCuts = source.LyricFlowPhraseCuts,
+                LyricFlowSameSection = source.LyricFlowSameSection,
+                LyricFlowBlockClean = source.LyricFlowBlockClean,
                 ShowLyrics = source.ShowLyrics
             };
         }
@@ -3472,13 +3548,11 @@ namespace SpotifyWPF.ViewModel.Page
                         : $"{graph.Beats.Count} beats · {graph.TotalBranchCount} branches · {FormatMetricModeLabel(graph.MetricMode)}";
                     RefreshTrackStatusHud();
 
-                    // Remap lyric phrase boundaries once the beat graph exists.
+                    // Remap lyric Softmax context once the beat graph exists (navigator rearm only).
                     if (graph?.Beats != null && CurrentLyrics?.Lines != null &&
                         string.Equals(CurrentLyrics.TrackId, trackId, StringComparison.OrdinalIgnoreCase))
                     {
-                        var starts = graph.Beats.Select(b => b.StartMs).ToList();
-                        LyricBeatMapper.MapToBeats(CurrentLyrics, starts);
-                        _loopController.SetLyricPhraseBeats(LyricBeatMapper.PhraseBoundaryBeats(CurrentLyrics));
+                        PushLyricFlowToNavigator(trackId);
                     }
                 }));
         }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using SpotifyWPF.Model.Prediction;
+using SpotifyWPF.Service.Lyrics;
 
 namespace SpotifyWPF.Service.Prediction
 {
@@ -42,8 +43,7 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly BranchPreferenceStore _preferences;
 
-        /// <summary>Beat indices that start a lyric line (phrase boundaries). Empty when no lyrics.</summary>
-        private readonly HashSet<int> _lyricPhraseBeats;
+        private readonly LyricFlowContext _lyricFlow;
 
         private readonly string _trackId;
 
@@ -90,15 +90,15 @@ namespace SpotifyWPF.Service.Prediction
 
         public BeatNavigator(BeatGraph graph, JukeboxSettings settings, LoopProfile profile = null,
             int? randomSeed = null, BranchPreferenceStore preferences = null,
-            IEnumerable<int> lyricPhraseBeats = null)
+            IEnumerable<int> lyricPhraseBeats = null, LyricFlowContext lyricFlow = null)
         {
             Graph = graph ?? throw new ArgumentNullException(nameof(graph));
             _settings = settings ?? JukeboxSettings.CreateDefaults();
             _trackId = graph.TrackId;
             _preferences = preferences;
-            _lyricPhraseBeats = lyricPhraseBeats != null
-                ? new HashSet<int>(lyricPhraseBeats)
-                : new HashSet<int>();
+            _lyricFlow = lyricFlow ?? (lyricPhraseBeats != null
+                ? new LyricFlowContext { PhraseBoundaryBeats = new HashSet<int>(lyricPhraseBeats) }
+                : LyricFlowContext.Empty);
             _currentBranchChance = ClampProbability(_settings.BranchProbabilityMin);
             _random = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
 
@@ -483,7 +483,7 @@ namespace SpotifyWPF.Service.Prediction
                 var pref = wPref != 0 && _preferences != null
                     ? _preferences.Score(_trackId, fromBeatIndex, edge.DestinationIndex)
                     : 0;
-                var lyricBias = LyricPhraseBias(fromBeatIndex, edge.DestinationIndex);
+                var lyricBias = LyricFlowBias(fromBeatIndex, edge.DestinationIndex);
                 var score = (-edge.Distance / tau) - (lambda * visits) + (wPref * pref) + lyricBias;
                 scores[i] = score;
 
@@ -533,24 +533,65 @@ namespace SpotifyWPF.Service.Prediction
         }
 
         /// <summary>
-        /// Prefer hops that leave or land on a lyric phrase boundary so splices feel like
-        /// verse/line cuts rather than mid-word jumps.
+        /// Layered Softmax lyric steering (phrase cuts / same section / block-clean).
+        /// Does not remove edges — see docs/lyric-flow.md (AutoMashUpper, Foote, LyricAlly).
+        /// Independent of PhraseAlignBeats hard filter and PhasePenaltyMode graph build.
         /// </summary>
-        private double LyricPhraseBias(int fromBeatIndex, int toBeatIndex)
+        private double LyricFlowBias(int fromBeatIndex, int toBeatIndex)
         {
             var weight = _settings.LyricPhraseWeight;
-            if (weight <= 0 || _lyricPhraseBeats.Count == 0)
+            if (weight <= 0 || _lyricFlow == null)
                 return 0;
 
             var bonus = 0.0;
-            if (_lyricPhraseBeats.Contains(fromBeatIndex))
-                bonus += 0.5;
-            if (_lyricPhraseBeats.Contains(toBeatIndex))
-                bonus += 1.0;
+            var phrases = _lyricFlow.PhraseBoundaryBeats;
 
-            // Mild penalty for landing one beat after a phrase start (often mid-word).
-            if (_lyricPhraseBeats.Contains(toBeatIndex - 1) && !_lyricPhraseBeats.Contains(toBeatIndex))
-                bonus -= 0.35;
+            // Layer 1 — phrase cuts (line starts; mid-word landing penalty).
+            if (_settings.LyricFlowPhraseCuts && phrases != null && phrases.Count > 0)
+            {
+                if (phrases.Contains(fromBeatIndex))
+                    bonus += 0.5;
+                if (phrases.Contains(toBeatIndex))
+                    bonus += 1.0;
+                if (phrases.Contains(toBeatIndex - 1) && !phrases.Contains(toBeatIndex))
+                    bonus -= 0.35;
+            }
+
+            // Layer 2 — same analysis section (verse/chorus-scale region).
+            if (_settings.LyricFlowSameSection &&
+                _lyricFlow.BeatSectionIndex != null &&
+                fromBeatIndex >= 0 && toBeatIndex >= 0 &&
+                fromBeatIndex < _lyricFlow.BeatSectionIndex.Length &&
+                toBeatIndex < _lyricFlow.BeatSectionIndex.Length)
+            {
+                var fromSec = _lyricFlow.BeatSectionIndex[fromBeatIndex];
+                var toSec = _lyricFlow.BeatSectionIndex[toBeatIndex];
+                if (fromSec >= 0 && toSec >= 0)
+                {
+                    if (fromSec == toSec)
+                        bonus += 0.85;
+                    else if (Math.Abs(fromSec - toSec) == 1)
+                        bonus += 0.15; // adjacent sections still somewhat coherent
+                    else
+                        bonus -= 0.25;
+                }
+            }
+
+            // Layer 3 — block-clean (land on block start; exit near line end).
+            if (_settings.LyricFlowBlockClean)
+            {
+                var blocks = _lyricFlow.BlockStartBeats;
+                var ends = _lyricFlow.LineEndBeats;
+                if (blocks != null && blocks.Contains(toBeatIndex))
+                    bonus += 0.9;
+                if (ends != null && ends.Contains(fromBeatIndex))
+                    bonus += 0.55;
+                // Jumping into the middle of a line (not a phrase start) while leaving mid-line.
+                if (phrases != null && phrases.Count > 0 &&
+                    !phrases.Contains(toBeatIndex) &&
+                    (ends == null || !ends.Contains(fromBeatIndex)))
+                    bonus -= 0.2;
+            }
 
             return weight * bonus;
         }
@@ -569,8 +610,9 @@ namespace SpotifyWPF.Service.Prediction
                 query = query.Where(e => Math.Abs(e.DestinationIndex - fromBeatIndex) >= minBeats);
             }
 
-            // Hypermeasure / long drum-phrase lock: only land on the same beat-within-phrase.
-            // IndexInBar alone is usually 0–3; Clubbed to Death-style grooves often need 8–16.
+            // Hypermeasure lock: HARD filter on raw beat INDEX modulo N (not IndexInBar).
+            // Independent of PhasePenaltyMode and of lyric Softmax. N=4/8/16 can empty
+            // the candidate list on floating grooves / gap-split grids (e.g. Dreams).
             var phrase = _settings.PhraseAlignBeats;
             if (phrase > 1)
             {

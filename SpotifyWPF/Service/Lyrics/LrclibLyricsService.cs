@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using SpotifyWPF.Model.Lyrics;
+using SpotifyWPF.Model.Prediction;
 using SpotifyWPF.Service.Prediction;
 
 namespace SpotifyWPF.Service.Lyrics
@@ -285,9 +286,39 @@ namespace SpotifyWPF.Service.Lyrics
         }
     }
 
+    /// <summary>
+    /// Beat-mapped lyric context for Softmax steering (phrase / section / block layers).
+    /// See docs/lyric-flow.md.
+    /// </summary>
+    public sealed class LyricFlowContext
+    {
+        public static LyricFlowContext Empty { get; } = new LyricFlowContext();
+
+        /// <summary>Beats that start a timed lyric line.</summary>
+        public HashSet<int> PhraseBoundaryBeats { get; set; } = new HashSet<int>();
+
+        /// <summary>
+        /// Beats that start a "block" — first line, or a line after a ≥1.5s gap
+        /// (verse/chorus-ish lyric chunks without relying on section labels).
+        /// </summary>
+        public HashSet<int> BlockStartBeats { get; set; } = new HashSet<int>();
+
+        /// <summary>
+        /// Beats just before the next lyric line (line endings) — clean exit points.
+        /// </summary>
+        public HashSet<int> LineEndBeats { get; set; } = new HashSet<int>();
+
+        /// <summary>Per-beat analysis section index (−1 unknown). Length = beat count.</summary>
+        public int[] BeatSectionIndex { get; set; }
+
+        public bool HasPhraseData => PhraseBoundaryBeats != null && PhraseBoundaryBeats.Count > 0;
+    }
+
     /// <summary>Maps lyric line start times onto beat indices from a beat graph / analysis.</summary>
     public static class LyricBeatMapper
     {
+        private const double BlockGapSec = 1.5;
+
         public static void MapToBeats(SyncedLyrics lyrics, IReadOnlyList<long> beatStartMs)
         {
             if (lyrics?.Lines == null || beatStartMs == null || beatStartMs.Count == 0)
@@ -310,6 +341,93 @@ namespace SpotifyWPF.Service.Lyrics
             }
 
             return set;
+        }
+
+        /// <summary>
+        /// Build Softmax lyric-flow context from timed lyrics + optional analysis sections.
+        /// Section mapping follows Foote/Paulus-style structural regions already in TrackAnalysis;
+        /// line/block cues follow LyricAlly-style line sync onto the beat grid.
+        /// </summary>
+        public static LyricFlowContext BuildContext(
+            SyncedLyrics lyrics,
+            IReadOnlyList<long> beatStartMs,
+            IReadOnlyList<AnalysisSection> sections)
+        {
+            var ctx = new LyricFlowContext();
+            if (beatStartMs == null || beatStartMs.Count == 0)
+                return ctx;
+
+            if (lyrics?.Lines != null && lyrics.Lines.Count > 0)
+            {
+                MapToBeats(lyrics, beatStartMs);
+                ctx.PhraseBoundaryBeats = PhraseBoundaryBeats(lyrics);
+
+                for (var i = 0; i < lyrics.Lines.Count; i++)
+                {
+                    var line = lyrics.Lines[i];
+                    if (line.BeatIndex < 0)
+                        continue;
+
+                    var isBlockStart = i == 0;
+                    if (!isBlockStart)
+                    {
+                        var gapSec = (line.StartMs - lyrics.Lines[i - 1].StartMs) / 1000.0;
+                        isBlockStart = gapSec >= BlockGapSec;
+                    }
+
+                    if (isBlockStart)
+                        ctx.BlockStartBeats.Add(line.BeatIndex);
+
+                    if (i + 1 < lyrics.Lines.Count)
+                    {
+                        var nextBeat = lyrics.Lines[i + 1].BeatIndex;
+                        if (nextBeat > 0)
+                            ctx.LineEndBeats.Add(nextBeat - 1);
+                    }
+                }
+            }
+
+            ctx.BeatSectionIndex = BuildBeatSectionIndex(beatStartMs, sections);
+            return ctx;
+        }
+
+        public static int[] BuildBeatSectionIndex(
+            IReadOnlyList<long> beatStartMs,
+            IReadOnlyList<AnalysisSection> sections)
+        {
+            if (beatStartMs == null || beatStartMs.Count == 0)
+                return Array.Empty<int>();
+
+            var result = new int[beatStartMs.Count];
+            for (var i = 0; i < result.Length; i++)
+                result[i] = -1;
+
+            if (sections == null || sections.Count == 0)
+                return result;
+
+            for (var b = 0; b < beatStartMs.Count; b++)
+            {
+                var tSec = beatStartMs[b] / 1000.0;
+                var best = -1;
+                for (var s = 0; s < sections.Count; s++)
+                {
+                    var sec = sections[s];
+                    var start = sec.Start;
+                    var end = sec.Start + Math.Max(0, sec.Duration);
+                    if (tSec >= start && tSec < end)
+                    {
+                        best = s;
+                        break;
+                    }
+
+                    if (tSec >= start)
+                        best = s;
+                }
+
+                result[b] = best;
+            }
+
+            return result;
         }
 
         public static int FindActiveLineIndex(SyncedLyrics lyrics, long positionMs)

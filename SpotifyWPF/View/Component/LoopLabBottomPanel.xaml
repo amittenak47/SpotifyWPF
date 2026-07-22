@@ -514,7 +514,7 @@
                                                                Minimum="0"
                                                                Maximum="64"
                                                                Value="{Binding JukeboxMinBeatsBetweenJumps}"/>
-                                        <local:TuningSliderRow Label="Phrase align (beats; 0=off — use 8/16 for long drum phrases)"
+                                        <local:TuningSliderRow Label="Phrase align (beats; 0=off — HARD filter by beat-index % N)"
                                                                ValueText="{Binding JukeboxPhraseAlignBeatsText}"
                                                                Minimum="0"
                                                                Maximum="32"
@@ -524,12 +524,13 @@
                                                        Width="160"
                                                        VerticalAlignment="Center"
                                                        Foreground="{DynamicResource AppForegroundBrush}"
-                                                       ToolTip="Hard = only hop to the same beat-in-bar. Soft = prefer same phase. Off = ignore bar phase. Helps Furious Angels / Clubbed to Death-style long drum phrases when paired with Phrase align."/>
+                                                       ToolTip="Independent of Phrase align. Soft/Hard/Off distance penalty from IndexInBar (mod-4) at GRAPH BUILD. Turning Phrase align to 0 does NOT disable this. Soft = prefer same bar slot; Hard = strong mismatch penalty; Off = ignore."/>
                                             <ComboBox MinWidth="120"
                                                       MinHeight="28"
                                                       VerticalAlignment="Center"
                                                       ItemsSource="{Binding PhasePenaltyModeOptions}"
-                                                      SelectedItem="{Binding SelectedPhasePenaltyMode}"/>
+                                                      SelectedItem="{Binding SelectedPhasePenaltyMode}"
+                                                      ToolTip="Graph-build bar-phase scoring. Not the same as Phrase align (nav hard-filter on beat index modulo)."/>
                                         </StackPanel>
                                         <local:TuningSliderRow Label="Softmax temperature τ (lower = greedier)"
                                                                ValueText="{Binding JukeboxSoftmaxTemperatureText}"
@@ -551,16 +552,31 @@
                                                                Minimum="1"
                                                                Maximum="20"
                                                                Value="{Binding JukeboxPreferenceSkipWindowSeconds}"/>
-                                        <local:TuningSliderRow Label="Lyric phrase bias (prefer line-boundary hops)"
+                                        <local:TuningSliderRow Label="Lyric flow weight (shared Softmax scale; 0=off)"
                                                                ValueText="{Binding LyricPhraseWeightText}"
                                                                Minimum="0"
                                                                Maximum="2"
                                                                Value="{Binding LyricPhraseWeight}"/>
+                                        <CheckBox Content="Lyric flow: phrase cuts (line starts / avoid mid-word)"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
+                                                  IsChecked="{Binding LyricFlowPhraseCuts}"
+                                                  Margin="0,0,0,4"
+                                                  ToolTip="Softmax bonus for timed lyric line boundaries (LyricAlly-style line sync). Does not remove branches. See docs/lyric-flow.md."/>
+                                        <CheckBox Content="Lyric flow: same section (verse/chorus region)"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
+                                                  IsChecked="{Binding LyricFlowSameSection}"
+                                                  Margin="0,0,0,4"
+                                                  ToolTip="Prefer hops that stay inside the same analysis section (Foote/Paulus structure; AutoMashUpper phrase-level transitions). Softmax only."/>
+                                        <CheckBox Content="Lyric flow: block-clean (whole lines / hooks)"
+                                                  Foreground="{DynamicResource AppForegroundBrush}"
+                                                  IsChecked="{Binding LyricFlowBlockClean}"
+                                                  Margin="0,0,0,4"
+                                                  ToolTip="Prefer landing on lyric-block starts and exiting near line ends so skips/loops feel like clean lyric blocks."/>
                                         <CheckBox Content="Show synced lyrics on stage"
                                                   Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding ShowLyricsPanel}"
                                                   Margin="0,0,0,8"
-                                                  ToolTip="Fetches timed lyrics from LRCLIB (not Spotify). Branch hops update the highlight automatically."/>
+                                                  ToolTip="Fetches timed lyrics from LRCLIB (not Spotify). Branch hops update the highlight automatically. Unrelated to Phrase align."/>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                             <Button Content="Clear preferences" MinWidth="120"
                                                     Command="{Binding ClearBranchPreferencesCommand}"

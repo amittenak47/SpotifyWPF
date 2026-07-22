@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using SpotifyWPF.Model.Prediction;
+using SpotifyWPF.Service.Lyrics;
 using SpotifyWPF.Service.Playback;
 
 namespace SpotifyWPF.Service.Prediction
@@ -51,10 +52,10 @@ namespace SpotifyWPF.Service.Prediction
         void ClearBranchPreferences();
 
         /// <summary>
-        /// Supply lyric phrase-boundary beat indices for Softmax bias (empty/null clears).
-        /// Takes effect on the next jukebox rearm.
+        /// Supply lyric-flow Softmax context (phrase / section / block). Empty/null clears.
+        /// Takes effect on the next jukebox rearm. Does not rebuild the beat graph.
         /// </summary>
-        void SetLyricPhraseBeats(IEnumerable<int> beatIndices);
+        void SetLyricFlowContext(LyricFlowContext context);
 
         /// <summary>
         /// Returns the (cached) beat graph for a track, building it from the cached analysis when
@@ -86,8 +87,8 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly BranchPreferenceStore _preferences = new BranchPreferenceStore();
 
-        /// <summary>Lyric phrase-boundary beats for Softmax bias; refreshed when lyrics load.</summary>
-        private HashSet<int> _lyricPhraseBeats = new HashSet<int>();
+        /// <summary>Lyric Softmax context; refreshed when lyrics / analysis sections load.</summary>
+        private LyricFlowContext _lyricFlow = LyricFlowContext.Empty;
 
         /// <summary>Beat graphs are pure functions of the cached analysis; keep them per track.</summary>
         private readonly Dictionary<string, BeatGraph> _graphCache = new Dictionary<string, BeatGraph>();
@@ -232,7 +233,7 @@ namespace SpotifyWPF.Service.Prediction
             var priorCounts = _navigator?.ExportVisitCounts();
             var priorDwell = _navigator?.ExportBeatsSinceJump() ?? int.MaxValue / 4;
             _navigator = new BeatNavigator(graph, _jukeboxSettings.Get(), ActiveProfile,
-                preferences: _preferences, lyricPhraseBeats: _lyricPhraseBeats);
+                preferences: _preferences, lyricFlow: _lyricFlow);
             _navigator.ImportVisitMemory(priorVisits);
             _navigator.ImportVisitCounts(priorCounts);
             _navigator.ImportBeatsSinceJump(priorDwell);
@@ -419,11 +420,9 @@ namespace SpotifyWPF.Service.Prediction
             LoopEvent?.Invoke(this, "Jukebox: cleared branch preference memory.");
         }
 
-        public void SetLyricPhraseBeats(IEnumerable<int> beatIndices)
+        public void SetLyricFlowContext(LyricFlowContext context)
         {
-            _lyricPhraseBeats = beatIndices != null
-                ? new HashSet<int>(beatIndices)
-                : new HashSet<int>();
+            _lyricFlow = context ?? LyricFlowContext.Empty;
 
             if (IsLoopActive && ActiveProfile?.Mode == LoopModes.Jukebox)
                 RearmJukebox();
