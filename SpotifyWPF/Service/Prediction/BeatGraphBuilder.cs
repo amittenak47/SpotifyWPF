@@ -229,7 +229,10 @@ namespace SpotifyWPF.Service.Prediction
 
         /// <summary>
         /// Slice 5: drop Classic neighbors whose region embedding is not among the nearest
-        /// GateRegionNeighborCount for that origin (embeddings choose region; Classic already chose beat).
+        /// GateRegionNeighborCount for the *continuation* beat (embeddings choose region;
+        /// Classic already chose beat). Compare embeds[i+1]↔embeds[j] to match edge scoring
+        /// stack[i+1]≈stack[j] — gating on embeds[i] preferred twins of the exit and landed
+        /// one beat behind Soft/Hard bar phase.
         /// </summary>
         private static void ApplyRegionGate(BeatGraph graph, TrackAnalysis analysis, JukeboxSettings settings,
             int minJump)
@@ -245,6 +248,7 @@ namespace SpotifyWPF.Service.Prediction
                 if (beat.Neighbors.Count == 0)
                     continue;
 
+                var originEmbed = i + 1 < count ? embeds[i + 1] : embeds[i];
                 var regionDists = new List<(int J, double Dist)>(count);
 
                 for (var j = 0; j < count; j++)
@@ -252,7 +256,7 @@ namespace SpotifyWPF.Service.Prediction
                     if (Math.Abs(i - j) < minJump)
                         continue;
 
-                    regionDists.Add((j, VectorDistance(embeds[i], embeds[j])));
+                    regionDists.Add((j, VectorDistance(originEmbed, embeds[j])));
                 }
 
                 var allowed = new HashSet<int>(

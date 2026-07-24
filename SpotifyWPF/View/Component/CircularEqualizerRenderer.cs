@@ -30,7 +30,8 @@ namespace SpotifyWPF.View.Component
         private double[] _waveScratch;
 
         public void Render(DrawingContext dc, IVisualEnergyProvider energy, Point center,
-            double innerRadius, double outerRadius, string preset = PresetBars)
+            double innerRadius, double outerRadius, string preset = PresetBars,
+            string trackId = null)
         {
             if (energy == null)
                 return;
@@ -46,17 +47,21 @@ namespace SpotifyWPF.View.Component
             if (band <= 4)
                 return;
 
+            var spectrum = TrackColorPalette.SpectrumStops(trackId);
+            var accent = TrackColorPalette.Accent(trackId);
+
             if (string.Equals(preset, PresetWaveRing, StringComparison.OrdinalIgnoreCase))
             {
-                RenderWaveRing(dc, energy, bars, center, innerRadius, outerRadius, band);
+                RenderWaveRing(dc, energy, bars, center, innerRadius, outerRadius, band, accent, spectrum);
                 return;
             }
 
-            RenderBars(dc, bars, peaks, center, innerRadius, band);
+            RenderBars(dc, bars, peaks, center, innerRadius, band, spectrum);
         }
 
         private void RenderBars(DrawingContext dc, IReadOnlyList<double> bars,
-            IReadOnlyList<double> peaks, Point center, double innerRadius, double band)
+            IReadOnlyList<double> peaks, Point center, double innerRadius, double band,
+            Color[] spectrum)
         {
             var count = bars.Count;
             var barWidth = Math.Max(1.4, Math.Min(6.0, Math.PI * 2 * innerRadius / count * 0.55));
@@ -79,10 +84,10 @@ namespace SpotifyWPF.View.Component
                 var sin = Math.Sin(angle);
 
                 DrawSegmentedBar(dc, center, innerRadius, height, segmentLen, gap, SegmentCount,
-                    cos, sin, barWidth);
+                    cos, sin, barWidth, spectrum);
 
                 if (peak > height + 0.02)
-                    DrawPeakCap(dc, center, innerRadius, peak, band, cos, sin, barWidth);
+                    DrawPeakCap(dc, center, innerRadius, peak, band, cos, sin, barWidth, spectrum);
             }
         }
 
@@ -91,7 +96,8 @@ namespace SpotifyWPF.View.Component
         /// </summary>
         private void RenderWaveRing(DrawingContext dc, IVisualEnergyProvider energy,
             IReadOnlyList<double> bars, Point center,
-            double innerRadius, double outerRadius, double band)
+            double innerRadius, double outerRadius, double band,
+            Color accent, Color[] spectrum)
         {
             var count = bars.Count;
             EnsureScratch(count);
@@ -134,13 +140,15 @@ namespace SpotifyWPF.View.Component
             geometry.Freeze();
 
             var fill = new SolidColorBrush(Color.FromArgb(
-                (byte)(18 + 32 * global), 0x6A, 0x3A, 0xC8));
+                (byte)(18 + 32 * global), accent.R, accent.G, accent.B));
             fill.Freeze();
             dc.DrawGeometry(fill, null, geometry);
 
-            // Single outer boundary — cyan contour only.
+            var contour = spectrum != null && spectrum.Length > 0
+                ? spectrum[spectrum.Length - 1]
+                : accent;
             dc.DrawGeometry(null,
-                MakePen(Color.FromRgb(0x5C, 0xE8, 0xFF), Math.Max(1.4, band * 0.04),
+                MakePen(contour, Math.Max(1.4, band * 0.04),
                     0.55 + 0.35 * global),
                 geometry);
         }
@@ -198,7 +206,7 @@ namespace SpotifyWPF.View.Component
 
         private static void DrawSegmentedBar(DrawingContext dc, Point center, double inner,
             double height, double segmentLen, double gap, int segments,
-            double cos, double sin, double barWidth)
+            double cos, double sin, double barWidth, Color[] spectrum)
         {
             var lit = (int)Math.Ceiling(height * segments);
             lit = lit < 0 ? 0 : lit > segments ? segments : lit;
@@ -208,7 +216,7 @@ namespace SpotifyWPF.View.Component
                 var t1 = (s + 1) / (double)segments;
                 var r0 = inner + s * (segmentLen + gap);
                 var r1 = r0 + segmentLen;
-                var color = SpectrumColor(t1);
+                var color = SpectrumColor(t1, spectrum);
                 var alpha = GlobalAlpha * (0.55 + 0.45 * t1);
 
                 DrawRadial(dc, center, r0, r1, cos, sin, MakePen(color, barWidth, alpha));
@@ -216,29 +224,36 @@ namespace SpotifyWPF.View.Component
         }
 
         private static void DrawPeakCap(DrawingContext dc, Point center, double inner, double peak,
-            double band, double cos, double sin, double barWidth)
+            double band, double cos, double sin, double barWidth, Color[] spectrum)
         {
             var r = inner + peak * band;
             var half = Math.Max(1.2, barWidth * 0.55);
             var p0 = new Point(center.X + (r - half * 0.15) * cos, center.Y + (r - half * 0.15) * sin);
             var p1 = new Point(center.X + (r + half * 0.15) * cos, center.Y + (r + half * 0.15) * sin);
 
-            dc.DrawLine(MakePen(Color.FromRgb(0xFF, 0xF0, 0xA0), barWidth * 0.95, GlobalAlpha * 0.9),
-                p0, p1);
+            var peakColor = spectrum != null && spectrum.Length > 0
+                ? spectrum[spectrum.Length - 1]
+                : Color.FromRgb(0xFF, 0xF0, 0xA0);
+            dc.DrawLine(MakePen(peakColor, barWidth * 0.95, GlobalAlpha * 0.9), p0, p1);
             dc.DrawLine(MakePen(Colors.White, barWidth * 0.45, GlobalAlpha * 0.7), p0, p1);
         }
 
-        private static Color SpectrumColor(double t)
+        private static Color SpectrumColor(double t, Color[] spectrum)
         {
-            if (t < 0.4)
-                return Lerp(Color.FromRgb(0x1D, 0xB9, 0x54), Color.FromRgb(0xC8, 0xE0, 0x3A), t / 0.4);
+            if (spectrum == null || spectrum.Length == 0)
+                return Color.FromRgb(0x1D, 0xB9, 0x54);
 
-            if (t < 0.7)
-                return Lerp(Color.FromRgb(0xC8, 0xE0, 0x3A), Color.FromRgb(0xF0, 0xA0, 0x20),
-                    (t - 0.4) / 0.3);
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
 
-            return Lerp(Color.FromRgb(0xF0, 0xA0, 0x20), Color.FromRgb(0xE8, 0x3A, 0x3A),
-                (t - 0.7) / 0.3);
+            if (spectrum.Length == 1)
+                return spectrum[0];
+
+            var scaled = t * (spectrum.Length - 1);
+            var i = (int)Math.Floor(scaled);
+            if (i >= spectrum.Length - 1)
+                return spectrum[spectrum.Length - 1];
+
+            return Lerp(spectrum[i], spectrum[i + 1], scaled - i);
         }
 
         private static Color Lerp(Color a, Color b, double t)

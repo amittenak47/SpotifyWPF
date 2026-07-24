@@ -20,6 +20,23 @@ Refactoring parts of the codebase to reduce single-file bloat and abstract/restr
 
 **Infinite Jukebox** under **Experimental** — now merged from `algo-overhaul` into `master`. Beat-aware infinite looping with an **Enhanced** similarity pipeline (z-scored stacked features, continuation scoring, kNN + percentile graph, softmax navigation), ring mini player, session track list, Local WAV transport, and cached AppData analyses. Builds are **x64** today; an **x86** build may be added later.
 
+**Lyrics + Local WAV branch modifiers (in progress)**
+
+- Synced lyrics via **LRCLIB** (not Spotify) shown on the Infinite Jukebox stage; hops update the highlight from transport position.
+- Softmax **lyric flow** (toggleable layers: phrase cuts / same section / block-clean) steers hops — see [`tools/lyric-flow.md`](tools/lyric-flow.md).
+- **Phrase align** is a separate HARD `beatIndex % N` filter (not lyrics; not Bar phase penalty). On floating tracks like *Dreams*, leave it at 0.
+- **Branch modifiers** (supercharge / turbocharge EQ+drive) are **Local WAV only**.
+
+### Research references (lyric flow + structure)
+
+| Topic | Citation |
+|-------|----------|
+| Infinite beat-graph remix | Lamere, *The Infinite Jukebox* (2012); Remixatron |
+| Phrase/section mashup cuts | Davies et al., *AutoMashUpper*, IEEE/ACM TASLP 2014 |
+| Novelty / section boundaries | Foote, ICME 2000; Paulus, Müller, Klapuri, ISMIR 2010 |
+| Timed lyrics ↔ audio | LyricAlly (Wang/Kan et al.); *Multimodal Lyrics-Rhythm Matching*, arXiv:2301.02732 |
+| Beat-sync DJ transitions | Kim et al., arXiv:2008.10267 |
+
 **Release packaging**
 
 Building a release zip and MSIX installer with an Azure-signed app certificate.

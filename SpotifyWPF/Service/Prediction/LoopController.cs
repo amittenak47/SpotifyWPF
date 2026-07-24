@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using SpotifyWPF.Model.Prediction;
+using SpotifyWPF.Service.Lyrics;
 using SpotifyWPF.Service.Playback;
 
 namespace SpotifyWPF.Service.Prediction
@@ -51,6 +52,12 @@ namespace SpotifyWPF.Service.Prediction
         void ClearBranchPreferences();
 
         /// <summary>
+        /// Supply lyric-flow Softmax context (phrase / section / block). Empty/null clears.
+        /// Takes effect on the next jukebox rearm. Does not rebuild the beat graph.
+        /// </summary>
+        void SetLyricFlowContext(LyricFlowContext context);
+
+        /// <summary>
         /// Returns the (cached) beat graph for a track, building it from the cached analysis when
         /// needed. Null when no analysis exists yet. Used by the ring UI — the graph itself stays
         /// service-side.
@@ -79,6 +86,9 @@ namespace SpotifyWPF.Service.Prediction
         private readonly BeatGraphBuilder _graphBuilder = new BeatGraphBuilder();
 
         private readonly BranchPreferenceStore _preferences = new BranchPreferenceStore();
+
+        /// <summary>Lyric Softmax context; refreshed when lyrics / analysis sections load.</summary>
+        private LyricFlowContext _lyricFlow = LyricFlowContext.Empty;
 
         /// <summary>Beat graphs are pure functions of the cached analysis; keep them per track.</summary>
         private readonly Dictionary<string, BeatGraph> _graphCache = new Dictionary<string, BeatGraph>();
@@ -223,7 +233,7 @@ namespace SpotifyWPF.Service.Prediction
             var priorCounts = _navigator?.ExportVisitCounts();
             var priorDwell = _navigator?.ExportBeatsSinceJump() ?? int.MaxValue / 4;
             _navigator = new BeatNavigator(graph, _jukeboxSettings.Get(), ActiveProfile,
-                preferences: _preferences);
+                preferences: _preferences, lyricFlow: _lyricFlow);
             _navigator.ImportVisitMemory(priorVisits);
             _navigator.ImportVisitCounts(priorCounts);
             _navigator.ImportBeatsSinceJump(priorDwell);
@@ -235,8 +245,10 @@ namespace SpotifyWPF.Service.Prediction
                     "Jukebox: random branches off and no locks — playing linearly" +
                     (_jukeboxSettings.Get().EnableEndLoop ? " (end loop still active if a guard edge exists)." : "."));
 
-                // End-loop alone can still arm a late jump; plan it if possible.
-                if (_jukeboxSettings.Get().EnableEndLoop && graph.LastBranchPointIndex >= 0)
+                // End-loop / exclusions can still arm a late jump; plan it if possible.
+                if (_navigator.EffectiveLastBranchPoint >= 0 &&
+                    (_jukeboxSettings.Get().EnableEndLoop ||
+                     (ActiveProfile.ExcludedRanges != null && ActiveProfile.ExcludedRanges.Count > 0)))
                 {
                     PlanAndArmJump(_navigator.FindBeatIndexAtMs(_lastPositionMs));
                     return;
@@ -295,10 +307,31 @@ namespace SpotifyWPF.Service.Prediction
 
             // Watchdog: planned jump trigger is behind us but transport never fired.
             if (!IsLoopActive || ActiveProfile?.Mode != LoopModes.Jukebox || _plannedJump == null)
+            {
+                // Even without a planned jump, eject if scrubbed/played into an excluded span.
+                if (IsLoopActive && ActiveProfile?.Mode == LoopModes.Jukebox &&
+                    _navigator != null && !position.Paused)
+                {
+                    var beat = _navigator.FindBeatIndexAtMs(position.PositionMs);
+                    if (_navigator.IsBeatExcluded(beat))
+                        EjectFromExcludedRegion(beat);
+                }
+
                 return;
+            }
 
             if (position.Paused)
                 return;
+
+            // If we somehow entered an excluded span, bail immediately.
+            {
+                var beat = _navigator.FindBeatIndexAtMs(position.PositionMs);
+                if (_navigator.IsBeatExcluded(beat))
+                {
+                    EjectFromExcludedRegion(beat);
+                    return;
+                }
+            }
 
             var jump = _plannedJump;
 
@@ -327,8 +360,54 @@ namespace SpotifyWPF.Service.Prediction
                     $"Jukebox: jumped beat {jump.FromBeatIndex} → {jump.TargetBeatIndex}.");
                 RaiseJukeboxJump(jump, planned: false);
 
-                if (IsLoopActive && ActiveProfile.Mode == LoopModes.Jukebox && _navigator != null)
+                if (IsLoopActive && ActiveProfile?.Mode == LoopModes.Jukebox)
                     PlanAndArmJump(jump.TargetBeatIndex);
+            }
+            finally
+            {
+                _watchdogBusy = false;
+            }
+        }
+
+        private void EjectFromExcludedRegion(int excludedBeat)
+        {
+            if (_watchdogBusy || _navigator == null)
+                return;
+
+            _watchdogBusy = true;
+
+            try
+            {
+                var escapeFrom = excludedBeat;
+
+                while (escapeFrom > 0 && _navigator.IsBeatExcluded(escapeFrom))
+                    escapeFrom--;
+
+                _plannedJump = null;
+                _playbackHost.DisarmAction();
+                PlanAndArmJump(escapeFrom);
+
+                if (_plannedJump != null)
+                {
+                    LoopEvent?.Invoke(this,
+                        $"Jukebox: excluded region — escaping beat {excludedBeat} via {_plannedJump.FromBeatIndex} → {_plannedJump.TargetBeatIndex}.");
+                    _playbackHost.Seek(_plannedJump.SeekToMs);
+                    _lastPositionMs = _plannedJump.SeekToMs;
+                    _navigator.NotifyJumpFired(_plannedJump.FromBeatIndex, _plannedJump.TargetBeatIndex);
+                    RaiseJukeboxJump(_plannedJump, planned: false);
+                    var landed = _plannedJump.TargetBeatIndex;
+                    _plannedJump = null;
+                    PlanAndArmJump(landed);
+                }
+                else
+                {
+                    // No reverse edge — snap to the beat before the exclusion wall.
+                    var wallMs = _navigator.Graph.Beats[escapeFrom].StartMs;
+                    _playbackHost.Seek(wallMs);
+                    _lastPositionMs = wallMs;
+                    LoopEvent?.Invoke(this,
+                        $"Jukebox: excluded region — snapped to beat {escapeFrom}.");
+                }
             }
             finally
             {
@@ -410,6 +489,14 @@ namespace SpotifyWPF.Service.Prediction
             LoopEvent?.Invoke(this, "Jukebox: cleared branch preference memory.");
         }
 
+        public void SetLyricFlowContext(LyricFlowContext context)
+        {
+            _lyricFlow = context ?? LyricFlowContext.Empty;
+
+            if (IsLoopActive && ActiveProfile?.Mode == LoopModes.Jukebox)
+                RearmJukebox();
+        }
+
         private void OnJukeboxActionFired(ArmedActionFiredEventArgs e)
         {
             if (e.ActionId != JukeboxActionId || _navigator == null)
@@ -422,11 +509,10 @@ namespace SpotifyWPF.Service.Prediction
                 _navigator.NotifyJumpFired(jump.FromBeatIndex, jump.TargetBeatIndex);
 
                 var endLoopNote = ActiveProfile?.Mode == LoopModes.Jukebox &&
-                                  _jukeboxSettings.Get().EnableEndLoop &&
-                                  _navigator?.Graph != null &&
-                                  jump.FromBeatIndex >= _navigator.Graph.LastBranchPointIndex &&
+                                  _navigator != null &&
+                                  jump.FromBeatIndex >= _navigator.EffectiveLastBranchPoint &&
                                   jump.TargetBeatIndex < jump.FromBeatIndex
-                    ? " (end-loop escape)"
+                    ? (_jukeboxSettings.Get().EnableEndLoop ? " (end-loop escape)" : " (excluded-region escape)")
                     : string.Empty;
 
                 LoopEvent?.Invoke(this,

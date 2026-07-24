@@ -4,22 +4,85 @@
              x:Name="Root">
 
     <StackPanel Margin="0,0,0,14">
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-            <TextBlock Text="{Binding Label, ElementName=Root}"
+        <DockPanel Margin="0,0,0,6" LastChildFill="False">
+            <TextBlock DockPanel.Dock="Left"
+                       Text="{Binding Label, ElementName=Root}"
                        Foreground="{DynamicResource AppMutedForegroundBrush}"
-                       VerticalAlignment="Center"/>
-            <Border Style="{StaticResource SettingValueBadgeStyle}">
+                       VerticalAlignment="Center"
+                       TextWrapping="Wrap"
+                       MaxWidth="340"/>
+            <Button x:Name="InfoButton"
+                    DockPanel.Dock="Left"
+                    Width="20" Height="20"
+                    Margin="6,0,0,0"
+                    Padding="0"
+                    FontFamily="Segoe MDL2 Assets"
+                    FontSize="11"
+                    Content="&#xE946;"
+                    Cursor="Help"
+                    Focusable="False"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Opacity="0.55"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed"
+                    MouseEnter="InfoButton_MouseEnter"
+                    MouseLeave="InfoButton_MouseLeave"
+                    ToolTipService.IsEnabled="False">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Width="20" Height="20">
+                            <TextBlock Text="{TemplateBinding Content}"
+                                       FontFamily="{TemplateBinding FontFamily}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       Foreground="{DynamicResource AppAccentBrush}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+            <Border DockPanel.Dock="Right"
+                    Style="{StaticResource SettingValueBadgeStyle}"
+                    Margin="8,0,0,0">
                 <TextBlock Text="{Binding ValueText, ElementName=Root}"
                            Foreground="{DynamicResource AppForegroundBrush}"
                            FontFamily="Consolas"
                            FontSize="11"/>
             </Border>
-        </StackPanel>
+        </DockPanel>
 
         <Slider x:Name="ValueSlider"
                 Style="{StaticResource DarkMediaSliderStyle}"
                 Minimum="{Binding Minimum, ElementName=Root}"
                 Maximum="{Binding Maximum, ElementName=Root}"
                 Value="{Binding Value, ElementName=Root, Mode=TwoWay}"/>
+
+        <Popup x:Name="InfoPopup"
+               PlacementTarget="{Binding ElementName=InfoButton}"
+               Placement="Right"
+               AllowsTransparency="True"
+               StaysOpen="True"
+               Opacity="0"
+               HorizontalOffset="8"
+               VerticalOffset="-4"
+               IsHitTestVisible="False">
+            <Border Background="#F2000000"
+                    BorderBrush="#44FFFFFF"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,10"
+                    MaxWidth="340"
+                    SnapsToDevicePixels="True">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.45" Color="Black"/>
+                </Border.Effect>
+                <TextBlock x:Name="InfoPopupText"
+                           TextWrapping="Wrap"
+                           FontSize="12"
+                           LineHeight="18"
+                           Foreground="#F0F0F0"/>
+            </Border>
+        </Popup>
     </StackPanel>
 </UserControl>

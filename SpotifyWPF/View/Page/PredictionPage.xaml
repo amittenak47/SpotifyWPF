@@ -38,14 +38,14 @@
         <!-- Main stage fills the black area; title/status overlay on top -->
         <Border x:Name="StageHost"
                 Grid.Row="1"
-                Background="{DynamicResource AppBackgroundBrush}"
+                Background="#000000"
                 ClipToBounds="True"
                 Panel.ZIndex="0"
                 PreviewMouseWheel="StageHost_PreviewMouseWheel">
-            <Grid>
+            <Grid Background="#000000">
                 <component:FractalBackgroundControl IsActive="{Binding IsFractalBackgroundEnabled}"
                                                     EnergyProvider="{Binding VisualEnergy}"
-                                                    Opacity="0.9"
+                                                    Opacity="0.55"
                                                     IsHitTestVisible="False"/>
 
                 <Viewbox x:Name="StageViewbox"
@@ -197,16 +197,17 @@
                             FontFamily="Segoe MDL2 Assets"
                             FontSize="13"
                             Focusable="False"
-                            ToolTip="Repeat session list"
+                            ToolTip="{Binding SessionRepeatToolTip}"
+                            Content="{Binding SessionRepeatGlyph}"
                             Command="{Binding ToggleSessionRepeatCommand}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                                <Setter Property="Content" Value="&#xE8EE;"/>
-                                <Setter Property="Opacity" Value="0.45"/>
+                                <Setter Property="Opacity" Value="0.4"/>
                                 <Setter Property="Background" Value="Transparent"/>
                                 <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AppMutedForegroundBrush}"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding SessionRepeatEnabled}" Value="True">
+                                    <DataTrigger Binding="{Binding IsSessionRepeatAccent}" Value="True">
                                         <Setter Property="Opacity" Value="1"/>
                                         <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}"/>
                                     </DataTrigger>
@@ -221,6 +222,29 @@
                                Foreground="{DynamicResource AppMutedForegroundBrush}"
                                Text="{Binding PositionText}"/>
                 </DockPanel>
+
+                <!-- Karaoke lyrics column — right side, scrolls up with active line -->
+                <component:LyricsPanel HorizontalAlignment="Right"
+                                       VerticalAlignment="Stretch"
+                                       Margin="0,40,16,36"
+                                       Panel.ZIndex="40"
+                                       MaxHeight="720"
+                                       MinHeight="360">
+                    <component:LyricsPanel.Style>
+                        <Style TargetType="component:LyricsPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding ShowLyricsPanel}" Value="True"/>
+                                        <Condition Binding="{Binding IsFullLayout}" Value="True"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </component:LyricsPanel.Style>
+                </component:LyricsPanel>
 
                 <!-- Title + status + SSM stacked top-left (SSM below details, not over them) -->
                 <StackPanel HorizontalAlignment="Left"

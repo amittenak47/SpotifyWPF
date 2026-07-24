@@ -35,7 +35,16 @@ namespace SpotifyWPF.Service.Prediction
 
         public static string AudioCacheDirectory => Path.Combine(RootDirectory, "audio-cache");
 
+        public static string LyricsCacheDirectory => Path.Combine(RootDirectory, "lyrics-cache");
+
+        public static string OverlayCacheDirectory => Path.Combine(RootDirectory, "overlays");
+
         public static string WebView2UserDataDirectory => Path.Combine(RootDirectory, "webview2");
+
+        public static string GetLyricsCachePath(string trackId)
+        {
+            return Path.Combine(LyricsCacheDirectory, SanitizeFileName(trackId) + ".json");
+        }
 
         public static string GetAnalysisCachePath(string trackId)
         {

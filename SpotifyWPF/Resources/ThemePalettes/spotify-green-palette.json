@@ -1,12 +1,12 @@
 {
-  "Background": "#121212",
-  "Surface": "#181818",
-  "SurfaceAlt": "#282828",
+  "Background": "#000000",
+  "Surface": "#0A0A0A",
+  "SurfaceAlt": "#121212",
   "Border": "#1DB954",
   "Foreground": "#FFFFFF",
-  "MutedForeground": "#B3B3B3",
-  "DisabledForeground": "#535353",
-  "Hover": "#333333",
+  "MutedForeground": "#A0A0A0",
+  "DisabledForeground": "#4A4A4A",
+  "Hover": "#1A1A1A",
   "Selected": "#169C46",
   "Accent": "#1DB954"
 }

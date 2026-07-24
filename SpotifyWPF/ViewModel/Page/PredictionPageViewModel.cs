@@ -12,9 +12,11 @@ using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using Microsoft.Win32;
 using SpotifyWPF.Model;
+using SpotifyWPF.Model.Lyrics;
 using SpotifyWPF.Model.Prediction;
 using SpotifyWPF.Service;
 using SpotifyWPF.Service.Audio;
+using SpotifyWPF.Service.Lyrics;
 using SpotifyWPF.Service.Playback;
 using SpotifyWPF.Service.Prediction;
 using SpotifyWPF.Service.Visual;
@@ -62,6 +64,8 @@ namespace SpotifyWPF.ViewModel.Page
 
         private readonly IPlaylistLocalStore _playlistLocalStore;
 
+        private readonly ILyricsService _lyricsService;
+
         private readonly VisualEffectsSettings _visualEffectsSettings;
 
         /// <summary>Shared beat/energy state feeding the plasma equalizer and fractal background.</summary>
@@ -99,13 +103,15 @@ namespace SpotifyWPF.ViewModel.Page
             IJukeboxSettingsStore jukeboxSettings,
             ILoopLabSessionStore sessionStore,
             IVisualEffectsStore visualEffectsStore,
-            IPlaylistLocalStore playlistLocalStore)
+            IPlaylistLocalStore playlistLocalStore,
+            ILyricsService lyricsService)
         {
             _loopRegionStore = loopRegionStore;
             _jukeboxSettings = jukeboxSettings;
             _sessionStore = sessionStore;
             _visualEffectsStore = visualEffectsStore;
             _playlistLocalStore = playlistLocalStore;
+            _lyricsService = lyricsService ?? throw new ArgumentNullException(nameof(lyricsService));
             _visualEffectsSettings = visualEffectsStore.Get();
             _visualEffectsStore.SettingsChanged += (_, __) =>
             {
@@ -180,7 +186,7 @@ namespace SpotifyWPF.ViewModel.Page
                 track => (track ?? SelectedSessionTrack) != null && !IsAnalyzing);
             PreviousSessionTrackCommand = new RelayCommand(async () => await NavigateAndPlaySessionTrackAsync(-1), () => CanNavigateSessionTrack(-1));
             NextSessionTrackCommand = new RelayCommand(async () => await NavigateAndPlaySessionTrackAsync(1), () => CanNavigateSessionTrack(1));
-            ToggleSessionRepeatCommand = new RelayCommand(() => SessionRepeatEnabled = !SessionRepeatEnabled);
+            ToggleSessionRepeatCommand = new RelayCommand(CycleSessionRepeatMode);
             ToggleLibrarySidebarCommand = new RelayCommand(() => IsLibrarySidebarOpen = !IsLibrarySidebarOpen);
             RefreshLibraryPlaylistsCommand = new RelayCommand(RefreshLibraryPlaylists);
             AddLibraryPlaylistToSessionCommand = new RelayCommand<PlaylistCacheItem>(
@@ -215,6 +221,9 @@ namespace SpotifyWPF.ViewModel.Page
             EnterMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = true, () => !IsMiniPlayerMode);
             ExitMiniPlayerCommand = new RelayCommand(() => IsMiniPlayerMode = false, () => IsMiniPlayerMode);
             ToggleRingLockCommand = new RelayCommand<RingBranchClick>(ToggleRingLock);
+            SetRingExcludedRangeCommand = new RelayCommand<RingExcludeSelection>(SetRingExcludedRange);
+            StretchRingModifierCommand = new RelayCommand<RingModifierStretch>(StretchRingModifier);
+            CycleRingModifierCommand = new RelayCommand<RingBranchClick>(CycleRingModifier);
             RingScrubToCommand = new RelayCommand<long>(ScrubToPositionMs, ms => DurationMs > 0 && CanPlayTransport());
             EndRingScrubCommand = new RelayCommand(EndScrub);
             HoldRingSpeedCommand = new RelayCommand<bool>(SetRingHoldSpeed);
@@ -276,6 +285,149 @@ namespace SpotifyWPF.ViewModel.Page
             set => Set(ref _nowPlayingArtist, value);
         }
 
+        private SyncedLyrics _currentLyrics;
+
+        public SyncedLyrics CurrentLyrics
+        {
+            get => _currentLyrics;
+            private set
+            {
+                if (Set(ref _currentLyrics, value))
+                {
+                    RaisePropertyChanged(nameof(HasLyrics));
+                    RaisePropertyChanged(nameof(LyricsStatusText));
+                    UpdateActiveLyricLine(PositionMs);
+                }
+            }
+        }
+
+        public bool HasLyrics => CurrentLyrics != null &&
+                                 (CurrentLyrics.HasSyncedLines || !string.IsNullOrWhiteSpace(CurrentLyrics.PlainLyrics));
+
+        public bool ShowLyricsPanel
+        {
+            get => _jukeboxSettingsModel.ShowLyrics;
+            set
+            {
+                if (_jukeboxSettingsModel.ShowLyrics == value)
+                    return;
+                _jukeboxSettingsModel.ShowLyrics = value;
+                // Navigator/UI only — do not rebuild the beat graph.
+                PersistJukeboxSettings();
+                RaisePropertyChanged(nameof(ShowLyricsPanel));
+
+                if (value && !string.IsNullOrEmpty(CurrentTrackId))
+                {
+                    _ = LoadLyricsForTrackAsync(CurrentTrackId, NowPlayingTitle, NowPlayingArtist, DurationMs);
+                }
+                else if (!value)
+                {
+                    CurrentLyrics = null;
+                    LyricsStatusText = "Lyrics hidden.";
+                    _loopController.SetLyricFlowContext(null);
+                }
+            }
+        }
+
+        public string LyricPhraseWeightText => $"{LyricPhraseWeight:0.00}";
+
+        public double LyricPhraseWeight
+        {
+            get => _jukeboxSettingsModel.LyricPhraseWeight;
+            set
+            {
+                var clamped = Math.Max(0, Math.Min(2, value));
+                if (Math.Abs(_jukeboxSettingsModel.LyricPhraseWeight - clamped) < 0.001)
+                    return;
+                _jukeboxSettingsModel.LyricPhraseWeight = clamped;
+                PersistJukeboxSettings();
+                RaisePropertyChanged(nameof(LyricPhraseWeight));
+                RaisePropertyChanged(nameof(LyricPhraseWeightText));
+                PushLyricFlowToNavigator();
+            }
+        }
+
+        public bool LyricFlowPhraseCuts
+        {
+            get => _jukeboxSettingsModel.LyricFlowPhraseCuts;
+            set
+            {
+                if (_jukeboxSettingsModel.LyricFlowPhraseCuts == value)
+                    return;
+                _jukeboxSettingsModel.LyricFlowPhraseCuts = value;
+                PersistJukeboxSettings();
+                RaisePropertyChanged(nameof(LyricFlowPhraseCuts));
+                PushLyricFlowToNavigator();
+            }
+        }
+
+        public bool LyricFlowSameSection
+        {
+            get => _jukeboxSettingsModel.LyricFlowSameSection;
+            set
+            {
+                if (_jukeboxSettingsModel.LyricFlowSameSection == value)
+                    return;
+                _jukeboxSettingsModel.LyricFlowSameSection = value;
+                PersistJukeboxSettings();
+                RaisePropertyChanged(nameof(LyricFlowSameSection));
+                PushLyricFlowToNavigator();
+            }
+        }
+
+        public bool LyricFlowBlockClean
+        {
+            get => _jukeboxSettingsModel.LyricFlowBlockClean;
+            set
+            {
+                if (_jukeboxSettingsModel.LyricFlowBlockClean == value)
+                    return;
+                _jukeboxSettingsModel.LyricFlowBlockClean = value;
+                PersistJukeboxSettings();
+                RaisePropertyChanged(nameof(LyricFlowBlockClean));
+                PushLyricFlowToNavigator();
+            }
+        }
+
+        private string _lyricsStatusText = "No lyrics loaded.";
+
+        public string LyricsStatusText
+        {
+            get => _lyricsStatusText;
+            private set => Set(ref _lyricsStatusText, value);
+        }
+
+        public ObservableCollection<LyricDisplayLine> LyricDisplayLines { get; } =
+            new ObservableCollection<LyricDisplayLine>();
+
+        private string _activeLyricText = string.Empty;
+
+        public string ActiveLyricText
+        {
+            get => _activeLyricText;
+            private set => Set(ref _activeLyricText, value);
+        }
+
+        private string _previousLyricText = string.Empty;
+
+        public string PreviousLyricText
+        {
+            get => _previousLyricText;
+            private set => Set(ref _previousLyricText, value);
+        }
+
+        private string _nextLyricText = string.Empty;
+
+        public string NextLyricText
+        {
+            get => _nextLyricText;
+            private set => Set(ref _nextLyricText, value);
+        }
+
+        private int _activeLyricIndex = -1;
+
+        private CancellationTokenSource _lyricsLoadCts;
+
         private long _positionMs;
 
         public long PositionMs
@@ -287,6 +439,7 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     RaisePropertyChanged(nameof(PositionText));
                     _visualEnergy.SetTransport(value, IsPaused);
+                    UpdateActiveLyricLine(value);
                 }
             }
         }
@@ -501,23 +654,66 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
-        private bool _sessionRepeatEnabled;
+        private SessionRepeatMode _sessionRepeatMode = SessionRepeatMode.Off;
 
-        public bool SessionRepeatEnabled
+        /// <summary>Off → One (current track) → All (session wrap). Click cycles.</summary>
+        public SessionRepeatMode SessionRepeatMode
         {
-            get => _sessionRepeatEnabled;
+            get => _sessionRepeatMode;
             set
             {
-                if (Set(ref _sessionRepeatEnabled, value))
+                if (Set(ref _sessionRepeatMode, value))
                 {
+                    RaisePropertyChanged(nameof(SessionRepeatEnabled));
                     RaisePropertyChanged(nameof(SessionRepeatGlyph));
+                    RaisePropertyChanged(nameof(SessionRepeatToolTip));
+                    RaisePropertyChanged(nameof(IsSessionRepeatAccent));
                     PreviousSessionTrackCommand?.RaiseCanExecuteChanged();
                     NextSessionTrackCommand?.RaiseCanExecuteChanged();
                 }
             }
         }
 
-        public string SessionRepeatGlyph => SessionRepeatEnabled ? "🔁" : "➡";
+        /// <summary>True when repeat is One or All.</summary>
+        public bool SessionRepeatEnabled
+        {
+            get => SessionRepeatMode != SessionRepeatMode.Off;
+            set => SessionRepeatMode = value ? SessionRepeatMode.All : SessionRepeatMode.Off;
+        }
+
+        public string SessionRepeatGlyph
+        {
+            get
+            {
+                switch (SessionRepeatMode)
+                {
+                    case SessionRepeatMode.One:
+                        return "\uE8ED";
+                    case SessionRepeatMode.All:
+                        return "\uE8EE";
+                    default:
+                        return "\uE8EE";
+                }
+            }
+        }
+
+        public string SessionRepeatToolTip
+        {
+            get
+            {
+                switch (SessionRepeatMode)
+                {
+                    case SessionRepeatMode.One:
+                        return "Repeat one — replay the current session track";
+                    case SessionRepeatMode.All:
+                        return "Repeat all — wrap through the session list";
+                    default:
+                        return "Repeat off — stop at list ends (click to cycle)";
+                }
+            }
+        }
+
+        public bool IsSessionRepeatAccent => SessionRepeatMode != SessionRepeatMode.Off;
 
         private bool _isTrackSearchOpen;
 
@@ -845,8 +1041,9 @@ namespace SpotifyWPF.ViewModel.Page
                 RaisePropertyChanged(nameof(JukeboxPhraseAlignBeatsText));
                 PersistJukeboxSettings();
                 Log(_jukeboxSettingsModel.PhraseAlignBeats <= 1
-                    ? "Jukebox: phrase align OFF."
-                    : $"Jukebox: phrase align = {_jukeboxSettingsModel.PhraseAlignBeats} beats (hop only to same phase in the phrase).");
+                    ? "Jukebox: phrase align off (bar phase penalty unchanged — separate control)."
+                    : $"Jukebox: phrase align = {_jukeboxSettingsModel.PhraseAlignBeats} beats " +
+                      "(HARD filter: (from+1) % N == to % N continuation phase — can wipe options on floating grooves).");
             }
         }
 
@@ -1170,6 +1367,22 @@ namespace SpotifyWPF.ViewModel.Page
 
         private IReadOnlyList<BranchLock> _ringLockedBranches = Array.Empty<BranchLock>();
 
+        public IReadOnlyList<BranchModifier> RingBranchModifiers
+        {
+            get => _ringBranchModifiers;
+            set => Set(ref _ringBranchModifiers, value);
+        }
+
+        private IReadOnlyList<BranchModifier> _ringBranchModifiers = Array.Empty<BranchModifier>();
+
+        public IReadOnlyList<ExcludedRange> RingExcludedRanges
+        {
+            get => _ringExcludedRanges;
+            set => Set(ref _ringExcludedRanges, value);
+        }
+
+        private IReadOnlyList<ExcludedRange> _ringExcludedRanges = Array.Empty<ExcludedRange>();
+
         public string RingLockCountText
         {
             get => _ringLockCountText;
@@ -1464,6 +1677,7 @@ namespace SpotifyWPF.ViewModel.Page
             else
             {
                 _transportRouter.Source = JukeboxPlaybackSource.Spotify;
+                _transportRouter.Local.ClearBranchModifier();
 
                 if (wantLocal)
                     _jukeboxSettingsModel.PlaybackSource = "Spotify";
@@ -1725,6 +1939,15 @@ namespace SpotifyWPF.ViewModel.Page
 
         /// <summary>Ring click: lock/unlock the clicked beat's best branch.</summary>
         public RelayCommand<RingBranchClick> ToggleRingLockCommand { get; }
+
+        /// <summary>Shift+drag / Shift+click exclusion paint on the ring.</summary>
+        public RelayCommand<RingExcludeSelection> SetRingExcludedRangeCommand { get; }
+
+        /// <summary>Local WAV: stretch a locked branch outward to attach/update a modifier.</summary>
+        public RelayCommand<RingModifierStretch> StretchRingModifierCommand { get; }
+
+        /// <summary>Local WAV: cycle supercharge → turbocharge → remove on a locked branch.</summary>
+        public RelayCommand<RingBranchClick> CycleRingModifierCommand { get; }
 
         public RelayCommand<long> RingScrubToCommand { get; }
 
@@ -2462,6 +2685,174 @@ namespace SpotifyWPF.ViewModel.Page
             RefreshRingVisualization(state.TrackId);
             ApplyLoopSettings();
             RefreshTrackStatusHud();
+            _ = LoadLyricsForTrackAsync(state.TrackId, state.TrackName, state.ArtistNames, state.DurationMs);
+        }
+
+        private async Task LoadLyricsForTrackAsync(string trackId, string title, string artist, long durationMs)
+        {
+            _lyricsLoadCts?.Cancel();
+            _lyricsLoadCts = new CancellationTokenSource();
+            var ct = _lyricsLoadCts.Token;
+
+            if (!_jukeboxSettingsModel.ShowLyrics || string.IsNullOrWhiteSpace(trackId))
+            {
+                CurrentLyrics = null;
+                LyricsStatusText = "Lyrics hidden.";
+                _loopController.SetLyricFlowContext(null);
+                return;
+            }
+
+            LyricsStatusText = "Loading lyrics…";
+            ActiveLyricText = string.Empty;
+            PreviousLyricText = string.Empty;
+            NextLyricText = string.Empty;
+
+            try
+            {
+                var durationSec = durationMs > 0 ? (int)Math.Round(durationMs / 1000.0) : 0;
+                var lyrics = await _lyricsService.GetSyncedLyricsAsync(
+                    trackId, title, artist, album: null, durationSec, ct).ConfigureAwait(true);
+
+                if (ct.IsCancellationRequested)
+                    return;
+
+                if (lyrics == null)
+                {
+                    CurrentLyrics = null;
+                    LyricsStatusText = "No lyrics found.";
+                    _loopController.SetLyricFlowContext(null);
+                    return;
+                }
+
+                CurrentLyrics = lyrics;
+                LyricsStatusText = lyrics.Instrumental
+                    ? "Instrumental"
+                    : lyrics.HasSyncedLines
+                        ? $"{lyrics.Lines.Count} lines · {lyrics.Source}"
+                        : "Untimed lyrics";
+                UpdateActiveLyricLine(PositionMs);
+                PushLyricFlowToNavigator(trackId);
+            }
+            catch (OperationCanceledException)
+            {
+                // superseded by a newer track
+            }
+            catch (Exception ex)
+            {
+                LyricsStatusText = "Lyrics unavailable.";
+                Log($"Lyrics load failed: {ex.Message}", verbose: true);
+            }
+        }
+
+        /// <summary>
+        /// Map lyrics + analysis sections onto Softmax lyric-flow context and rearm navigator only.
+        /// </summary>
+        private void PushLyricFlowToNavigator(string trackId = null)
+        {
+            trackId = trackId
+                      ?? CurrentLyrics?.TrackId
+                      ?? _loopController.CurrentTrackId
+                      ?? CurrentTrackId;
+
+            if (CurrentLyrics == null || string.IsNullOrEmpty(trackId))
+            {
+                _loopController.SetLyricFlowContext(null);
+                return;
+            }
+
+            var graph = _loopController.GetGraphForTrack(trackId);
+            var analysis = AnalysisCache.Load(trackId);
+            IReadOnlyList<long> starts = null;
+            if (graph?.Beats != null && graph.Beats.Count > 0)
+                starts = graph.Beats.Select(b => b.StartMs).ToList();
+            else if (analysis?.Beats != null && analysis.Beats.Count > 0)
+                starts = analysis.Beats.Select(b => (long)(b.Start * 1000)).ToList();
+
+            if (starts == null || starts.Count == 0)
+            {
+                _loopController.SetLyricFlowContext(null);
+                return;
+            }
+
+            var ctx = LyricBeatMapper.BuildContext(CurrentLyrics, starts, analysis?.Sections);
+            _loopController.SetLyricFlowContext(ctx);
+        }
+
+        private void UpdateActiveLyricLine(long positionMs)
+        {
+            var lyrics = CurrentLyrics;
+            if (lyrics?.Lines == null || lyrics.Lines.Count == 0)
+            {
+                if (_activeLyricIndex != -1 || LyricDisplayLines.Count > 0)
+                {
+                    _activeLyricIndex = -1;
+                    ActiveLyricText = string.Empty;
+                    PreviousLyricText = string.Empty;
+                    NextLyricText = string.Empty;
+                    LyricDisplayLines.Clear();
+                }
+
+                return;
+            }
+
+            var index = LyricBeatMapper.FindActiveLineIndex(lyrics, positionMs);
+            if (index == _activeLyricIndex && LyricDisplayLines.Count > 0)
+                return;
+
+            _activeLyricIndex = index;
+            ActiveLyricText = index >= 0 ? lyrics.Lines[index].Text : string.Empty;
+            PreviousLyricText = index > 0 ? lyrics.Lines[index - 1].Text : string.Empty;
+            NextLyricText = index >= 0 && index + 1 < lyrics.Lines.Count
+                ? lyrics.Lines[index + 1].Text
+                : string.Empty;
+            RaisePropertyChanged(nameof(ActiveLyricText));
+
+            // Karaoke column: small window of lines that scrolls as the active line advances.
+            const int before = 3;
+            const int after = 4;
+            var start = Math.Max(0, index - before);
+            var end = Math.Min(lyrics.Lines.Count - 1, Math.Max(index, 0) + after);
+            if (index < 0)
+            {
+                start = 0;
+                end = Math.Min(lyrics.Lines.Count - 1, after);
+            }
+
+            var needed = end - start + 1;
+            while (LyricDisplayLines.Count < needed)
+                LyricDisplayLines.Add(new LyricDisplayLine());
+            while (LyricDisplayLines.Count > needed)
+                LyricDisplayLines.RemoveAt(LyricDisplayLines.Count - 1);
+
+            for (var i = 0; i < needed; i++)
+            {
+                var lineIndex = start + i;
+                var row = LyricDisplayLines[i];
+                var dist = index < 0 ? lineIndex + 1 : Math.Abs(lineIndex - index);
+                row.Text = lyrics.Lines[lineIndex].Text ?? string.Empty;
+                row.IsActive = lineIndex == index;
+                row.IsNear = !row.IsActive && dist == 1;
+                row.FontSize = row.IsActive ? 22 : row.IsNear ? 15 : 12.5;
+                row.Opacity = row.IsActive ? 1.0 : row.IsNear ? 0.72 : Math.Max(0.22, 0.55 - dist * 0.1);
+            }
+        }
+
+        private void CycleSessionRepeatMode()
+        {
+            switch (SessionRepeatMode)
+            {
+                case SessionRepeatMode.Off:
+                    SessionRepeatMode = SessionRepeatMode.One;
+                    break;
+                case SessionRepeatMode.One:
+                    SessionRepeatMode = SessionRepeatMode.All;
+                    break;
+                default:
+                    SessionRepeatMode = SessionRepeatMode.Off;
+                    break;
+            }
+
+            Log($"Session repeat: {SessionRepeatMode}.", verbose: true);
         }
 
         /// <summary>Whether a loop mode was active (stamped on log entries).</summary>
@@ -2519,6 +2910,7 @@ namespace SpotifyWPF.ViewModel.Page
                 else
                 {
                     RingJumpFlash = new JukeboxJumpFlash(e.FromBeatIndex, e.ToBeatIndex);
+                    ApplyLocalModifierForJump(e.FromBeatIndex, e.ToBeatIndex);
                 }
 
                 var chance = _loopController.NavigatorBranchChance;
@@ -2527,6 +2919,24 @@ namespace SpotifyWPF.ViewModel.Page
                     ? $"planning (dist {e.BranchDistance:0}){suffix}"
                     : $"jumped (dist {e.BranchDistance:0}){suffix}";
             });
+        }
+
+        /// <summary>Local WAV only — engage the effect chain for a modifier on this hop.</summary>
+        private void ApplyLocalModifierForJump(int fromBeat, int toBeat)
+        {
+            if (_transportRouter.Source != JukeboxPlaybackSource.Local)
+            {
+                _transportRouter.Local.ClearBranchModifier();
+                return;
+            }
+
+            var mod = RingBranchModifiers?.FirstOrDefault(m =>
+                m.Enabled && m.FromBeatIndex == fromBeat && m.ToBeatIndex == toBeat);
+
+            if (mod != null)
+                _transportRouter.Local.ApplyBranchModifier(mod);
+            else
+                _transportRouter.Local.ClearBranchModifier();
         }
 
         private void ToggleRingLock(RingBranchClick click)
@@ -2554,6 +2964,15 @@ namespace SpotifyWPF.ViewModel.Page
             if (existing != null)
             {
                 profile.LockedBranches.Remove(existing);
+                if (profile.BranchModifiers != null)
+                {
+                    profile.BranchModifiers.RemoveAll(m =>
+                        m.FromBeatIndex == fromBeat && m.ToBeatIndex == toBeat);
+                }
+
+                if (_transportRouter.Source == JukeboxPlaybackSource.Local)
+                    _transportRouter.Local.ClearBranchModifier();
+
                 Log($"Ring: unlocked branch beat {fromBeat} → {toBeat}.");
             }
             else
@@ -2572,6 +2991,100 @@ namespace SpotifyWPF.ViewModel.Page
             RefreshRingLocks(profile);
         }
 
+        private void StretchRingModifier(RingModifierStretch stretch)
+        {
+            if (stretch == null || _transportRouter.Source != JukeboxPlaybackSource.Local)
+                return;
+
+            var trackId = _loopController.CurrentTrackId;
+            if (trackId == null)
+                return;
+
+            var profile = _loopController.GetProfileForTrack(trackId);
+            if (profile.LockedBranches == null ||
+                !profile.LockedBranches.Any(l =>
+                    l.FromBeatIndex == stretch.FromBeatIndex && l.ToBeatIndex == stretch.ToBeatIndex))
+            {
+                Log("Ring: lock a branch before stretching a Local WAV modifier.");
+                return;
+            }
+
+            if (profile.BranchModifiers == null)
+                profile.BranchModifiers = new List<BranchModifier>();
+
+            var existing = profile.BranchModifiers.FirstOrDefault(m =>
+                m.FromBeatIndex == stretch.FromBeatIndex && m.ToBeatIndex == stretch.ToBeatIndex);
+
+            var tier = stretch.Turbo ? ModifierTiers.Turbocharge : ModifierTiers.Supercharge;
+            if (existing == null)
+            {
+                existing = BranchModifier.CreatePreset(stretch.FromBeatIndex, stretch.ToBeatIndex, tier);
+                profile.BranchModifiers.Add(existing);
+                Log($"Ring: {tier} modifier on beat {stretch.FromBeatIndex} → {stretch.ToBeatIndex} (Local WAV).");
+            }
+
+            existing.Stretch = Math.Max(0.05, Math.Min(1.0, stretch.Stretch01));
+            existing.Enabled = true;
+            if (stretch.Turbo)
+                existing.Tier = ModifierTiers.Turbocharge;
+
+            _loopController.ApplyProfile(profile);
+            RefreshRingLocks(profile);
+            _transportRouter.Local.ApplyBranchModifier(existing);
+        }
+
+        private void CycleRingModifier(RingBranchClick click)
+        {
+            if (click == null || _transportRouter.Source != JukeboxPlaybackSource.Local)
+                return;
+
+            var trackId = _loopController.CurrentTrackId;
+            if (trackId == null)
+                return;
+
+            var profile = _loopController.GetProfileForTrack(trackId);
+            if (profile.LockedBranches == null ||
+                !profile.LockedBranches.Any(l =>
+                    l.FromBeatIndex == click.FromBeatIndex && l.ToBeatIndex == click.ToBeatIndex))
+                return;
+
+            if (profile.BranchModifiers == null)
+                profile.BranchModifiers = new List<BranchModifier>();
+
+            var existing = profile.BranchModifiers.FirstOrDefault(m =>
+                m.FromBeatIndex == click.FromBeatIndex && m.ToBeatIndex == click.ToBeatIndex);
+
+            if (existing == null)
+            {
+                existing = BranchModifier.CreatePreset(click.FromBeatIndex, click.ToBeatIndex,
+                    ModifierTiers.Supercharge);
+                profile.BranchModifiers.Add(existing);
+                Log($"Ring: supercharge beat {click.FromBeatIndex} → {click.ToBeatIndex} (Local WAV).");
+            }
+            else if (string.Equals(existing.Tier, ModifierTiers.Supercharge, StringComparison.OrdinalIgnoreCase))
+            {
+                var turbo = BranchModifier.CreatePreset(click.FromBeatIndex, click.ToBeatIndex,
+                    ModifierTiers.Turbocharge);
+                turbo.Stretch = Math.Max(existing.Stretch, 0.7);
+                profile.BranchModifiers.Remove(existing);
+                profile.BranchModifiers.Add(turbo);
+                existing = turbo;
+                Log($"Ring: turbocharge beat {click.FromBeatIndex} → {click.ToBeatIndex} (Local WAV).");
+            }
+            else
+            {
+                profile.BranchModifiers.Remove(existing);
+                _transportRouter.Local.ClearBranchModifier();
+                existing = null;
+                Log($"Ring: removed modifier beat {click.FromBeatIndex} → {click.ToBeatIndex}.");
+            }
+
+            _loopController.ApplyProfile(profile);
+            RefreshRingLocks(profile);
+            if (existing != null)
+                _transportRouter.Local.ApplyBranchModifier(existing);
+        }
+
         private void ClearRingLocks()
         {
             var trackId = _loopController.CurrentTrackId;
@@ -2585,6 +3098,10 @@ namespace SpotifyWPF.ViewModel.Page
                 return;
 
             profile.LockedBranches.Clear();
+            if (profile.BranchModifiers != null)
+                profile.BranchModifiers.Clear();
+            if (_transportRouter.Source == JukeboxPlaybackSource.Local)
+                _transportRouter.Local.ClearBranchModifier();
             _loopController.ApplyProfile(profile);
             RefreshRingLocks(profile);
             Log("Ring: cleared all locked branches.");
@@ -2602,11 +3119,110 @@ namespace SpotifyWPF.ViewModel.Page
         {
             RingLockedBranches = profile?.LockedBranches?.ToList()
                                  ?? (IReadOnlyList<BranchLock>)Array.Empty<BranchLock>();
+            RingBranchModifiers = profile?.BranchModifiers?.ToList()
+                                  ?? (IReadOnlyList<BranchModifier>)Array.Empty<BranchModifier>();
+            RingExcludedRanges = profile?.ExcludedRanges?.ToList()
+                                 ?? (IReadOnlyList<ExcludedRange>)Array.Empty<ExcludedRange>();
             RingLockCountText = RingLockedBranches.Count == 0
-                ? "no locks"
-                : $"{RingLockedBranches.Count} locked";
+                ? (RingExcludedRanges.Count > 0
+                    ? $"{RingExcludedRanges.Count} excluded"
+                    : "no locks")
+                : RingBranchModifiers.Count > 0
+                    ? $"{RingLockedBranches.Count} locked · {RingBranchModifiers.Count} mod"
+                    : RingExcludedRanges.Count > 0
+                        ? $"{RingLockedBranches.Count} locked · {RingExcludedRanges.Count} excl"
+                        : $"{RingLockedBranches.Count} locked";
             RaisePropertyChanged(nameof(RingLockCount));
             RefreshBranchPresetsForSelection();
+        }
+
+        private void SetRingExcludedRange(RingExcludeSelection selection)
+        {
+            if (selection == null)
+                return;
+
+            var trackId = SelectedSessionTrack?.TrackId ?? _loopController.CurrentTrackId;
+
+            if (string.IsNullOrEmpty(trackId))
+                return;
+
+            var profile = _loopController.GetProfileForTrack(trackId);
+
+            if (profile.ExcludedRanges == null)
+                profile.ExcludedRanges = new List<ExcludedRange>();
+
+            var a = Math.Min(selection.StartBeatIndex, selection.EndBeatIndex);
+            var b = Math.Max(selection.StartBeatIndex, selection.EndBeatIndex);
+
+            if (selection.Remove)
+            {
+                var removed = profile.ExcludedRanges.RemoveAll(r =>
+                {
+                    if (r == null)
+                        return false;
+
+                    var ra = Math.Min(r.StartBeatIndex, r.EndBeatIndex);
+                    var rb = Math.Max(r.StartBeatIndex, r.EndBeatIndex);
+                    return !(b < ra || a > rb);
+                });
+
+                if (removed == 0)
+                    return;
+
+                Log($"Jukebox: cleared excluded span overlapping beats {a}–{b}.");
+            }
+            else
+            {
+                profile.ExcludedRanges.Add(new ExcludedRange
+                {
+                    StartBeatIndex = a,
+                    EndBeatIndex = b
+                });
+                MergeExcludedRanges(profile.ExcludedRanges);
+                Log($"Jukebox: excluded beats {a}–{b} from branching and playback " +
+                    "(Shift+click the red arc to clear).");
+            }
+
+            profile.Mode = LoopModes.Jukebox;
+            profile.Enabled = true;
+            _loopController.ApplyProfile(profile);
+            RefreshRingLocks(profile);
+        }
+
+        private static void MergeExcludedRanges(List<ExcludedRange> ranges)
+        {
+            if (ranges == null || ranges.Count <= 1)
+                return;
+
+            var ordered = ranges
+                .Where(r => r != null)
+                .Select(r => (A: Math.Min(r.StartBeatIndex, r.EndBeatIndex),
+                    B: Math.Max(r.StartBeatIndex, r.EndBeatIndex)))
+                .OrderBy(t => t.A)
+                .ToList();
+
+            ranges.Clear();
+
+            if (ordered.Count == 0)
+                return;
+
+            var curA = ordered[0].A;
+            var curB = ordered[0].B;
+
+            for (var i = 1; i < ordered.Count; i++)
+            {
+                if (ordered[i].A <= curB + 1)
+                {
+                    curB = Math.Max(curB, ordered[i].B);
+                    continue;
+                }
+
+                ranges.Add(new ExcludedRange { StartBeatIndex = curA, EndBeatIndex = curB });
+                curA = ordered[i].A;
+                curB = ordered[i].B;
+            }
+
+            ranges.Add(new ExcludedRange { StartBeatIndex = curA, EndBeatIndex = curB });
         }
 
         private void RefreshBranchPresetsForSelection()
@@ -2686,6 +3302,8 @@ namespace SpotifyWPF.ViewModel.Page
             var profile = _loopController.GetProfileForTrack(trackId);
             profile.LockedBranches = preset.LockedBranches?
                 .Select(CloneBranchLock).ToList() ?? new List<BranchLock>();
+            profile.BranchModifiers = preset.BranchModifiers?
+                .Select(CloneBranchModifier).ToList() ?? new List<BranchModifier>();
 
             profile.RandomBranches = preset.RandomBranches;
 
@@ -2754,6 +3372,11 @@ namespace SpotifyWPF.ViewModel.Page
                 : 8000;
             _jukeboxSettingsModel.EssentiaRegionGate = snapshot.EssentiaRegionGate;
             _jukeboxSettingsModel.GateRegionNeighborCount = snapshot.GateRegionNeighborCount;
+            _jukeboxSettingsModel.LyricPhraseWeight = snapshot.LyricPhraseWeight;
+            _jukeboxSettingsModel.LyricFlowPhraseCuts = snapshot.LyricFlowPhraseCuts;
+            _jukeboxSettingsModel.LyricFlowSameSection = snapshot.LyricFlowSameSection;
+            _jukeboxSettingsModel.LyricFlowBlockClean = snapshot.LyricFlowBlockClean;
+            _jukeboxSettingsModel.ShowLyrics = snapshot.ShowLyrics;
 
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMax));
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMaxText));
@@ -2774,6 +3397,12 @@ namespace SpotifyWPF.ViewModel.Page
             RaisePropertyChanged(nameof(JukeboxPreferenceSkipWindowText));
             RaisePropertyChanged(nameof(BranchPreferenceStatusText));
             RaisePropertyChanged(nameof(JukeboxEssentiaRegionGate));
+            RaisePropertyChanged(nameof(LyricPhraseWeight));
+            RaisePropertyChanged(nameof(LyricPhraseWeightText));
+            RaisePropertyChanged(nameof(LyricFlowPhraseCuts));
+            RaisePropertyChanged(nameof(LyricFlowSameSection));
+            RaisePropertyChanged(nameof(LyricFlowBlockClean));
+            RaisePropertyChanged(nameof(ShowLyricsPanel));
             RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinPercent));
             RaisePropertyChanged(nameof(JukeboxBranchProbabilityMinText));
             RaisePropertyChanged(nameof(JukeboxBranchProbabilityMaxPercent));
@@ -2790,6 +3419,7 @@ namespace SpotifyWPF.ViewModel.Page
             ApplyPlaybackSourceFromSettings();
             RaisePropertyChanged(nameof(UseLocalPlayback));
             RaisePropertyChanged(nameof(PlaybackSourceLabel));
+            PushLyricFlowToNavigator();
 
             PersistJukeboxSettings(invalidateGraph: true);
         }
@@ -2824,6 +3454,8 @@ namespace SpotifyWPF.ViewModel.Page
                 existing.SettingsSnapshot = CloneJukeboxSettings(_jukeboxSettingsModel);
                 existing.LockedBranches = profile.LockedBranches?
                     .Select(CloneBranchLock).ToList() ?? new List<BranchLock>();
+                existing.BranchModifiers = profile.BranchModifiers?
+                    .Select(CloneBranchModifier).ToList() ?? new List<BranchModifier>();
                 preset = existing;
             }
             else
@@ -2835,7 +3467,9 @@ namespace SpotifyWPF.ViewModel.Page
                     AnalysisFingerprint = fingerprint,
                     SettingsSnapshot = CloneJukeboxSettings(_jukeboxSettingsModel),
                     LockedBranches = profile.LockedBranches?
-                        .Select(CloneBranchLock).ToList() ?? new List<BranchLock>()
+                        .Select(CloneBranchLock).ToList() ?? new List<BranchLock>(),
+                    BranchModifiers = profile.BranchModifiers?
+                        .Select(CloneBranchModifier).ToList() ?? new List<BranchModifier>()
                 };
                 profile.LockPresets.Add(preset);
             }
@@ -2848,6 +3482,7 @@ namespace SpotifyWPF.ViewModel.Page
             SaveBranchPresetCommand.RaiseCanExecuteChanged();
             LoadBranchPresetCommand.RaiseCanExecuteChanged();
             Log($"Saved tune + branches \"{preset.Name}\" ({preset.LockedBranches.Count} locks" +
+                (preset.BranchModifiers?.Count > 0 ? $", {preset.BranchModifiers.Count} mods" : "") +
                 (fingerprint != null ? ", fingerprint ok" : ", no analysis yet") + ").");
         }
 
@@ -2864,6 +3499,29 @@ namespace SpotifyWPF.ViewModel.Page
                 FromBeatIndex = source.FromBeatIndex,
                 ToBeatIndex = source.ToBeatIndex,
                 Probability = probability
+            };
+        }
+
+        private static BranchModifier CloneBranchModifier(BranchModifier source)
+        {
+            if (source == null)
+                return null;
+
+            return new BranchModifier
+            {
+                FromBeatIndex = source.FromBeatIndex,
+                ToBeatIndex = source.ToBeatIndex,
+                Tier = source.Tier,
+                Stretch = source.Stretch,
+                Enabled = source.Enabled,
+                EqLowDb = source.EqLowDb,
+                EqMidDb = source.EqMidDb,
+                EqHighDb = source.EqHighDb,
+                GainDb = source.GainDb,
+                Drive = source.Drive,
+                OverlayPaths = source.OverlayPaths != null
+                    ? new List<string>(source.OverlayPaths)
+                    : new List<string>()
             };
         }
 
@@ -2899,7 +3557,12 @@ namespace SpotifyWPF.ViewModel.Page
                 PreferenceWeight = source.PreferenceWeight,
                 PreferenceSkipWindowMs = source.PreferenceSkipWindowMs,
                 EssentiaRegionGate = source.EssentiaRegionGate,
-                GateRegionNeighborCount = source.GateRegionNeighborCount
+                GateRegionNeighborCount = source.GateRegionNeighborCount,
+                LyricPhraseWeight = source.LyricPhraseWeight,
+                LyricFlowPhraseCuts = source.LyricFlowPhraseCuts,
+                LyricFlowSameSection = source.LyricFlowSameSection,
+                LyricFlowBlockClean = source.LyricFlowBlockClean,
+                ShowLyrics = source.ShowLyrics
             };
         }
 
@@ -3086,6 +3749,13 @@ namespace SpotifyWPF.ViewModel.Page
                         ? "No beat map — analyze track to build the ring"
                         : $"{graph.Beats.Count} beats · {graph.TotalBranchCount} branches · {FormatMetricModeLabel(graph.MetricMode)}";
                     RefreshTrackStatusHud();
+
+                    // Remap lyric Softmax context once the beat graph exists (navigator rearm only).
+                    if (graph?.Beats != null && CurrentLyrics?.Lines != null &&
+                        string.Equals(CurrentLyrics.TrackId, trackId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        PushLyricFlowToNavigator(trackId);
+                    }
                 }));
         }
 
@@ -3095,6 +3765,30 @@ namespace SpotifyWPF.ViewModel.Page
             _lastEndedTrackId = trackId;
 
             await RefreshPredictionsAsync();
+
+            // Repeat one: replay the same session track when the song actually ends
+            // (usually only when End loop is off).
+            if (SessionRepeatMode == SessionRepeatMode.One &&
+                !string.IsNullOrEmpty(trackId) &&
+                !_loopController.IsLoopActive)
+            {
+                var same = SessionTracks.FirstOrDefault(t => t.TrackId == trackId)
+                           ?? SelectedSessionTrack;
+                if (same != null)
+                {
+                    Log("Repeat one — replaying current track.");
+                    await PlaySessionTrackAsync(same);
+                    return;
+                }
+            }
+
+            if (SessionRepeatMode == SessionRepeatMode.All &&
+                SessionTracks.Count > 0 &&
+                !_loopController.IsLoopActive)
+            {
+                await NavigateAndPlaySessionTrackAsync(1);
+                return;
+            }
 
             if (AutoPlayNext && !IsAnalyzing && !_loopController.IsLoopActive && Predictions.Count > 0)
             {
@@ -3272,7 +3966,7 @@ namespace SpotifyWPF.ViewModel.Page
             if (SessionTracks.Count == 0)
                 return false;
 
-            if (SessionRepeatEnabled)
+            if (SessionRepeatMode == SessionRepeatMode.All || SessionRepeatMode == SessionRepeatMode.One)
                 return true;
 
             var index = GetSessionTrackIndex();
@@ -3294,7 +3988,12 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 targetIndex = delta > 0 ? 0 : SessionTracks.Count - 1;
             }
-            else if (SessionRepeatEnabled)
+            else if (SessionRepeatMode == SessionRepeatMode.One)
+            {
+                // Stay on / replay the current track.
+                targetIndex = index;
+            }
+            else if (SessionRepeatMode == SessionRepeatMode.All)
             {
                 targetIndex = (index + delta) % SessionTracks.Count;
                 if (targetIndex < 0)
