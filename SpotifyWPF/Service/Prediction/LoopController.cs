@@ -31,6 +31,9 @@ namespace SpotifyWPF.Service.Prediction
         /// <summary>Human-readable loop activity for the UI log ("armed", "jumped", …).</summary>
         event EventHandler<string> LoopEvent;
 
+        /// <summary>Per-beat branch probability rolls and dwell (activity log Verbose filter).</summary>
+        event EventHandler<string> LoopVerboseEvent;
+
         /// <summary>Raised when a jukebox jump is planned or performed (ring glow).</summary>
         event EventHandler<JukeboxJumpEventArgs> JukeboxJump;
 
@@ -111,6 +114,8 @@ namespace SpotifyWPF.Service.Prediction
             _navigator == null ? (int?)null : _navigator.FindBeatIndexAtMs(_lastPositionMs);
 
         public event EventHandler<string> LoopEvent;
+
+        public event EventHandler<string> LoopVerboseEvent;
 
         public event EventHandler<JukeboxJumpEventArgs> JukeboxJump;
 
@@ -234,6 +239,7 @@ namespace SpotifyWPF.Service.Prediction
             var priorDwell = _navigator?.ExportBeatsSinceJump() ?? int.MaxValue / 4;
             _navigator = new BeatNavigator(graph, _jukeboxSettings.Get(), ActiveProfile,
                 preferences: _preferences, lyricFlow: _lyricFlow);
+            _navigator.VerboseLogged += OnNavigatorVerboseLogged;
             _navigator.ImportVisitMemory(priorVisits);
             _navigator.ImportVisitCounts(priorCounts);
             _navigator.ImportBeatsSinceJump(priorDwell);
@@ -289,6 +295,10 @@ namespace SpotifyWPF.Service.Prediction
             LoopEvent?.Invoke(this,
                 $"Jukebox: next jump at {FormatMs(triggerMs)} " +
                 $"→ beat {_plannedJump.TargetBeatIndex} ({FormatMs(_plannedJump.SeekToMs)}).");
+            LoopVerboseEvent?.Invoke(this,
+                $"Jukebox: armed beat {_plannedJump.FromBeatIndex} → {_plannedJump.TargetBeatIndex} · " +
+                $"chance after plan {(_navigator?.CurrentBranchChance ?? 0) * 100:0.##}% " +
+                "(no re-roll at trigger — plan simulates forward until a roll wins)");
 
             RaiseJukeboxJump(_plannedJump, planned: true);
         }
@@ -414,6 +424,9 @@ namespace SpotifyWPF.Service.Prediction
                 _watchdogBusy = false;
             }
         }
+
+        private void OnNavigatorVerboseLogged(object sender, string message) =>
+            LoopVerboseEvent?.Invoke(this, message);
 
         private void RaiseJukeboxJump(JukeboxJump jump, bool planned)
         {

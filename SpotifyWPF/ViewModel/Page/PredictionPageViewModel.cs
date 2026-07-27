@@ -163,6 +163,7 @@ namespace SpotifyWPF.ViewModel.Page
                     ClearBranchPreferencesCommand?.RaiseCanExecuteChanged();
                 }
             };
+            _loopController.LoopVerboseEvent += (_, message) => Log(message, verbose: true);
             _loopController.JukeboxJump += OnJukeboxJump;
 
             _playbackHost.PlayerReady += OnPlayerReady;

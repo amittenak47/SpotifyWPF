@@ -88,6 +88,9 @@ namespace SpotifyWPF.Service.Prediction
 
         public double CurrentBranchChance => _currentBranchChance;
 
+        /// <summary>Verbose branch-probability diagnostics (roll / skip / dwell). Shown at Verbose log level.</summary>
+        public event EventHandler<string> VerboseLogged;
+
         /// <summary>True when random branches are off and no locks are set (caller should warn).</summary>
         public bool IsIdleWithoutLocks => !_randomBranches && _lockedBranches.Count == 0;
 
@@ -188,6 +191,10 @@ namespace SpotifyWPF.Service.Prediction
 
         private int DwellBeats => Math.Max(0, _settings.MinBeatsBetweenJumps);
 
+        private void LogVerbose(string message) => VerboseLogged?.Invoke(this, message);
+
+        private static string FormatChance(double chance) => $"{chance * 100:0.##}%";
+
         /// <summary>True when the graph has at least one usable branch (or end-loop can still fire).</summary>
         public bool CanJump =>
             (_settings.EnableEndLoop && EffectiveLastBranchPoint >= 0) ||
@@ -246,6 +253,11 @@ namespace SpotifyWPF.Service.Prediction
                     return escaped;
             }
 
+            LogVerbose(
+                $"Jukebox: plan from beat {start} · chance {FormatChance(_currentBranchChance)} · " +
+                $"since jump {_beatsSinceJump} beat(s) · dwell {DwellBeats} · " +
+                $"random {(_randomBranches ? "on" : "off")}");
+
             for (var i = start; i < beats.Count; i++)
             {
                 var beat = beats[i];
@@ -292,18 +304,36 @@ namespace SpotifyWPF.Service.Prediction
                     _beatsSinceJump++;
                     _currentBranchChance = ClampProbability(
                         _currentBranchChance + _settings.BranchProbabilityRampPerBeat);
+                    LogVerbose(
+                        $"Jukebox: beat {i} dwell ({_beatsSinceJump}/{DwellBeats}) — " +
+                        $"chance now {FormatChance(_currentBranchChance)} (no roll)");
                     continue;
                 }
 
-                if (_random.NextDouble() < _currentBranchChance)
+                var chanceAtBeat = _currentBranchChance;
+                var roll = _random.NextDouble();
+
+                if (roll < chanceAtBeat)
                 {
                     var edge = ChooseEdge(i, beat.Neighbors);
 
                     if (edge != null)
                     {
+                        LogVerbose(
+                            $"Jukebox: beat {i} roll {roll:0.###} < {FormatChance(chanceAtBeat)} — " +
+                            $"TAKE random hop → beat {edge.DestinationIndex} (committed; will fire at trigger)");
                         _currentBranchChance = ClampProbability(_settings.BranchProbabilityMin);
                         return MakeJump(i, edge, beat.Neighbors);
                     }
+
+                    LogVerbose(
+                        $"Jukebox: beat {i} roll {roll:0.###} < {FormatChance(chanceAtBeat)} — " +
+                        "roll won but no eligible edge; stay linear");
+                }
+                else
+                {
+                    LogVerbose(
+                        $"Jukebox: beat {i} roll {roll:0.###} ≥ {FormatChance(chanceAtBeat)} — stay linear");
                 }
 
                 _beatsSinceJump++;
@@ -435,14 +465,37 @@ namespace SpotifyWPF.Service.Prediction
                 if (!TryGetLockProbability(fromIndex, edge, out var probability) || probability <= 0)
                     continue;
 
-                if (probability >= 1.0 || _random.NextDouble() < probability)
+                var lockRoll = probability >= 1.0 ? 0.0 : _random.NextDouble();
+
+                if (probability >= 1.0 || lockRoll < probability)
+                {
                     eligible.Add((edge, probability));
+                    LogVerbose(
+                        probability >= 1.0
+                            ? $"Jukebox: beat {fromIndex} locked → {edge.DestinationIndex} " +
+                              $"prob {FormatChance(probability)} — take (100%)"
+                            : $"Jukebox: beat {fromIndex} locked → {edge.DestinationIndex} " +
+                              $"roll {lockRoll:0.###} < {FormatChance(probability)} — eligible");
+                }
+                else
+                {
+                    LogVerbose(
+                        $"Jukebox: beat {fromIndex} locked → {edge.DestinationIndex} " +
+                        $"roll {lockRoll:0.###} ≥ {FormatChance(probability)} — skip lock");
+                }
             }
 
             if (eligible.Count == 0)
                 return null;
 
             var chosen = WeightedPick(eligible);
+            if (chosen != null)
+            {
+                LogVerbose(
+                    $"Jukebox: beat {fromIndex} locked hop → beat {chosen.DestinationIndex} " +
+                    "(committed; will fire at trigger)");
+            }
+
             return chosen == null ? null : MakeJump(fromIndex, chosen, neighbors);
         }
 
