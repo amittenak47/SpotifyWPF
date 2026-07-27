@@ -10,36 +10,36 @@ namespace SpotifyWPF.Model.Prediction
     {
         /// <summary>Auto-tune stops raising the branch similarity threshold above this value.</summary>
         [JsonPropertyName("branchSimilarityThresholdMax")]
-        public double BranchSimilarityThresholdMax { get; set; } = 55;
+        public double BranchSimilarityThresholdMax { get; set; } = 15;
 
         /// <summary>Minimum random branch chance (0–1). Original Tune dialog low end of range.</summary>
         [JsonPropertyName("branchProbabilityMin")]
-        public double BranchProbabilityMin { get; set; } = 0.05;
+        public double BranchProbabilityMin { get; set; } = 0.0137;
 
         /// <summary>Maximum random branch chance (0–1). Original Tune dialog high end of range.</summary>
         [JsonPropertyName("branchProbabilityMax")]
-        public double BranchProbabilityMax { get; set; } = 0.25;
+        public double BranchProbabilityMax { get; set; } = 0.6;
 
         /// <summary>Added branch chance per linear beat until a jump is taken (0–1).</summary>
         [JsonPropertyName("branchProbabilityRampPerBeat")]
-        public double BranchProbabilityRampPerBeat { get; set; } = 0.01;
+        public double BranchProbabilityRampPerBeat { get; set; } = 0.01006;
 
         /// <summary>
         /// Single-roll chance (0–1) to replan a random hop once between arm-time and its trigger beat.
         /// Does not ramp — sparse DJ-style restlessness before future waveform momentum.
         /// </summary>
         [JsonPropertyName("liveliness")]
-        public double Liveliness { get; set; } = 0.15;
+        public double Liveliness { get; set; } = 0.012;
 
         /// <summary>Fire seeks this many ms before the beat boundary to compensate for SDK latency.</summary>
         [JsonPropertyName("seekLeadMs")]
-        public int SeekLeadMs { get; set; } = 100;
+        public int SeekLeadMs { get; set; } = 0;
 
         [JsonPropertyName("allowOnlyReverseBranches")]
         public bool AllowOnlyReverseBranches { get; set; }
 
         [JsonPropertyName("allowOnlyLongBranches")]
-        public bool AllowOnlyLongBranches { get; set; }
+        public bool AllowOnlyLongBranches { get; set; } = true;
 
         /// <summary>Minimum beat distance when <see cref="AllowOnlyLongBranches"/> is enabled.</summary>
         [JsonPropertyName("longBranchMinBeats")]
@@ -55,7 +55,7 @@ namespace SpotifyWPF.Model.Prediction
 
         /// <summary>Spotify Web Playback SDK vs local cached WAV (Slice 1B). Values: "Spotify" | "Local".</summary>
         [JsonPropertyName("playbackSource")]
-        public string PlaybackSource { get; set; } = "Spotify";
+        public string PlaybackSource { get; set; } = "Local";
 
         /// <summary>
         /// Theiler window: minimum beat separation for Classic graph edges (Slice 2). Default 8.
@@ -65,7 +65,7 @@ namespace SpotifyWPF.Model.Prediction
 
         /// <summary>Max outgoing Classic kNN neighbors per beat.</summary>
         [JsonPropertyName("classicMaxNeighbors")]
-        public int ClassicMaxNeighbors { get; set; } = 12;
+        public int ClassicMaxNeighbors { get; set; } = 6;
 
         /// <summary>
         /// Phase penalty mode for Classic distance: "off", "soft" (default), or "hard".
@@ -88,28 +88,28 @@ namespace SpotifyWPF.Model.Prediction
         /// Beat tracker for Path B analyze: "auto" | "beatthis" | "dp".
         /// </summary>
         [JsonPropertyName("beatTrackerMode")]
-        public string BeatTrackerMode { get; set; } = "auto";
+        public string BeatTrackerMode { get; set; } = "beatthis";
 
         /// <summary>
         /// Graph metric: "auto" (Classic if features exist) | "classic" | "legacy".
         /// </summary>
         [JsonPropertyName("graphMetricMode")]
-        public string GraphMetricMode { get; set; } = "auto";
+        public string GraphMetricMode { get; set; } = "classic";
 
         /// <summary>
         /// After a hop, force this many linear beats before another random branch is considered
         /// (locks + end-loop still fire). Default 16 ≈ one phrase of stability.
         /// </summary>
         [JsonPropertyName("minBeatsBetweenJumps")]
-        public int MinBeatsBetweenJumps { get; set; } = 16;
+        public int MinBeatsBetweenJumps { get; set; } = 8;
 
         /// <summary>Softmax temperature τ for Slice 4 edge pick. Lower = greedier (nearest). Default 1.</summary>
         [JsonPropertyName("softmaxTemperature")]
-        public double SoftmaxTemperature { get; set; } = 1.0;
+        public double SoftmaxTemperature { get; set; } = 0.1;
 
         /// <summary>Visit-count novelty λ: subtract λ·visits(dest) from softmax score. Default 0.35.</summary>
         [JsonPropertyName("visitNoveltyLambda")]
-        public double VisitNoveltyLambda { get; set; } = 0.35;
+        public double VisitNoveltyLambda { get; set; } = 0;
 
         /// <summary>Beats within this radius of a recent landing count as the same pocket (tabu / visit bucket).</summary>
         [JsonPropertyName("visitRegionRadiusBeats")]
@@ -131,13 +131,13 @@ namespace SpotifyWPF.Model.Prediction
         /// Small default so scrub/choice history gently steers Softmax once labels exist.
         /// </summary>
         [JsonPropertyName("preferenceWeight")]
-        public double PreferenceWeight { get; set; } = 0.2;
+        public double PreferenceWeight { get; set; } = 0;
 
         /// <summary>
         /// Slice 6: user scrub within this many ms after a hop lands counts as a skip negative.
         /// </summary>
         [JsonPropertyName("preferenceSkipWindowMs")]
-        public int PreferenceSkipWindowMs { get; set; } = 8000;
+        public int PreferenceSkipWindowMs { get; set; } = 1000;
 
         /// <summary>
         /// Slice 5: when region embeddings exist, only allow Classic hops whose region distance
@@ -155,7 +155,7 @@ namespace SpotifyWPF.Model.Prediction
         /// See docs/lyric-flow.md (AutoMashUpper / Foote / LyricAlly lineage).
         /// </summary>
         [JsonPropertyName("lyricPhraseWeight")]
-        public double LyricPhraseWeight { get; set; } = 0.35;
+        public double LyricPhraseWeight { get; set; } = 0.0144;
 
         /// <summary>Layer 1: prefer timed lyric line starts; penalize mid-word landings.</summary>
         [JsonPropertyName("lyricFlowPhraseCuts")]
