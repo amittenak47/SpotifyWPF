@@ -18,6 +18,16 @@ namespace SpotifyWPF.Service.Prediction
         public long SeekToMs { get; set; }
 
         public double BranchDistance { get; set; }
+
+        /// <summary>How this hop was chosen (random walk, user lock, or end-loop guard).</summary>
+        public JukeboxHopKind Kind { get; set; } = JukeboxHopKind.Random;
+    }
+
+    public enum JukeboxHopKind
+    {
+        Random,
+        Locked,
+        EndLoop
     }
 
     /// <summary>
@@ -369,7 +379,7 @@ namespace SpotifyWPF.Service.Prediction
 
                 var edge = SoftmaxPick(source, early, ignoreVisits: true)
                            ?? early[_random.Next(early.Count)];
-                return MakeJump(source, edge, candidates);
+                return MakeJump(source, edge, candidates, JukeboxHopKind.EndLoop);
             }
 
             // No early landing available — use tiered ChooseEndLoopEdge from fromIndex backward.
@@ -377,7 +387,7 @@ namespace SpotifyWPF.Service.Prediction
             {
                 var edge = ChooseEndLoopEdge(fallbackSource, fallbackCandidates)
                            ?? fallbackCandidates[_random.Next(fallbackCandidates.Count)];
-                return MakeJump(fallbackSource, edge, fallbackCandidates);
+                return MakeJump(fallbackSource, edge, fallbackCandidates, JukeboxHopKind.EndLoop);
             }
 
             for (var i = fromIndex - 1; i >= 0; i--)
@@ -387,7 +397,7 @@ namespace SpotifyWPF.Service.Prediction
 
                 var edge = ChooseEndLoopEdge(fallbackSource, fallbackCandidates)
                            ?? fallbackCandidates[_random.Next(fallbackCandidates.Count)];
-                return MakeJump(fallbackSource, edge, fallbackCandidates);
+                return MakeJump(fallbackSource, edge, fallbackCandidates, JukeboxHopKind.EndLoop);
             }
 
             return null;
@@ -496,7 +506,7 @@ namespace SpotifyWPF.Service.Prediction
                     "(committed; will fire at trigger)");
             }
 
-            return chosen == null ? null : MakeJump(fromIndex, chosen, neighbors);
+            return chosen == null ? null : MakeJump(fromIndex, chosen, neighbors, JukeboxHopKind.Locked);
         }
 
         private BeatEdge WeightedPick(List<(BeatEdge Edge, double Weight)> items)
@@ -791,7 +801,8 @@ namespace SpotifyWPF.Service.Prediction
             return query.ToList();
         }
 
-        private JukeboxJump MakeJump(int fromIndex, BeatEdge edge, IReadOnlyList<BeatEdge> candidates)
+        private JukeboxJump MakeJump(int fromIndex, BeatEdge edge, IReadOnlyList<BeatEdge> candidates,
+            JukeboxHopKind kind = JukeboxHopKind.Random)
         {
             RememberDestination(edge.DestinationIndex);
             _beatsSinceJump = 0;
@@ -825,7 +836,8 @@ namespace SpotifyWPF.Service.Prediction
                 TargetBeatIndex = edge.DestinationIndex,
                 TriggerMs = Math.Max(0, triggerMs),
                 SeekToMs = target.StartMs,
-                BranchDistance = edge.Distance
+                BranchDistance = edge.Distance,
+                Kind = kind
             };
         }
 

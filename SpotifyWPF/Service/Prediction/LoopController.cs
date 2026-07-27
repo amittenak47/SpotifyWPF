@@ -102,6 +102,13 @@ namespace SpotifyWPF.Service.Prediction
 
         private long _lastPositionMs;
 
+        private readonly Random _livelinessRandom = new Random();
+
+        /// <summary>Single-roll liveliness: replan once at this beat before the armed hop fires.</summary>
+        private bool _livelinessReconsiderScheduled;
+
+        private int _livelinessReconsiderAtBeat = -1;
+
         public LoopProfile ActiveProfile { get; private set; }
 
         public string CurrentTrackId { get; private set; }
@@ -275,6 +282,7 @@ namespace SpotifyWPF.Service.Prediction
 
         private void PlanAndArmJump(int fromBeatIndex)
         {
+            ClearLivelinessReconsideration();
             _plannedJump = _navigator.PlanNextJump(fromBeatIndex);
 
             if (_plannedJump == null)
@@ -283,6 +291,14 @@ namespace SpotifyWPF.Service.Prediction
                 LoopEvent?.Invoke(this, "Jukebox: no more branches ahead; playing out linearly.");
                 return;
             }
+
+            ArmCurrentPlannedJump(scheduleLiveliness: true);
+        }
+
+        private void ArmCurrentPlannedJump(bool scheduleLiveliness)
+        {
+            if (_plannedJump == null)
+                return;
 
             // If the trigger is already behind the playhead (common for end-loop escape after
             // overshooting the last branch point), fire on the next transport tick.
@@ -300,7 +316,99 @@ namespace SpotifyWPF.Service.Prediction
                 $"chance after plan {(_navigator?.CurrentBranchChance ?? 0) * 100:0.##}% " +
                 "(no re-roll at trigger — plan simulates forward until a roll wins)");
 
+            if (scheduleLiveliness)
+                TryScheduleLivelinessReconsideration(_plannedJump);
+
             RaiseJukeboxJump(_plannedJump, planned: true);
+        }
+
+        private void ClearLivelinessReconsideration()
+        {
+            _livelinessReconsiderScheduled = false;
+            _livelinessReconsiderAtBeat = -1;
+        }
+
+        /// <summary>
+        /// One sparse roll per random hop: if it hits, replan once at a random beat before the trigger.
+        /// Does not accumulate — unlike branch-probability ramp.
+        /// </summary>
+        private void TryScheduleLivelinessReconsideration(JukeboxJump planned)
+        {
+            ClearLivelinessReconsideration();
+
+            if (planned == null || planned.Kind != JukeboxHopKind.Random || _navigator == null)
+                return;
+
+            if (ActiveProfile?.RandomBranches != true)
+                return;
+
+            var liveliness = Math.Max(0, Math.Min(1, _jukeboxSettings.Get().Liveliness));
+            if (liveliness <= 0)
+                return;
+
+            var currentBeat = _navigator.FindBeatIndexAtMs(_lastPositionMs);
+            var hopBeat = planned.FromBeatIndex;
+            var span = hopBeat - currentBeat - 1;
+
+            if (span <= 0)
+                return;
+
+            var roll = _livelinessRandom.NextDouble();
+            if (roll >= liveliness)
+            {
+                LoopVerboseEvent?.Invoke(this,
+                    $"Jukebox: liveliness roll {roll:0.###} ≥ {liveliness * 100:0.#}% — keeping planned hop");
+                return;
+            }
+
+            _livelinessReconsiderAtBeat = currentBeat + 1 + _livelinessRandom.Next(span);
+            _livelinessReconsiderScheduled = true;
+            LoopVerboseEvent?.Invoke(this,
+                $"Jukebox: liveliness roll {roll:0.###} < {liveliness * 100:0.#}% — " +
+                $"will replan once at beat {_livelinessReconsiderAtBeat} " +
+                $"(armed {planned.FromBeatIndex}→{planned.TargetBeatIndex})");
+        }
+
+        private void TryLivelinessReconsiderIfDue(PositionSnapshot position)
+        {
+            if (!_livelinessReconsiderScheduled || _navigator == null || _plannedJump == null || position.Paused)
+                return;
+
+            var beat = _navigator.FindBeatIndexAtMs(position.PositionMs);
+            if (beat < _livelinessReconsiderAtBeat)
+                return;
+
+            ClearLivelinessReconsideration();
+
+            var previous = _plannedJump;
+            var newJump = _navigator.PlanNextJump(beat);
+
+            if (newJump == null)
+            {
+                LoopVerboseEvent?.Invoke(this,
+                    $"Jukebox: liveliness replan at beat {beat} — no alternate; keeping " +
+                    $"{previous.FromBeatIndex}→{previous.TargetBeatIndex}");
+                return;
+            }
+
+            if (newJump.FromBeatIndex == previous.FromBeatIndex &&
+                newJump.TargetBeatIndex == previous.TargetBeatIndex)
+            {
+                LoopVerboseEvent?.Invoke(this,
+                    $"Jukebox: liveliness replan at beat {beat} — same hop " +
+                    $"{previous.FromBeatIndex}→{previous.TargetBeatIndex}");
+                return;
+            }
+
+            _plannedJump = newJump;
+            LoopEvent?.Invoke(this,
+                $"Jukebox: liveliness switched hop {previous.FromBeatIndex}→{previous.TargetBeatIndex} " +
+                $"to {newJump.FromBeatIndex}→{newJump.TargetBeatIndex}.");
+            LoopVerboseEvent?.Invoke(this,
+                $"Jukebox: liveliness replan at beat {beat} — new plan (no second liveliness roll)");
+
+            _playbackHost.DisarmAction();
+            ArmCurrentPlannedJump(scheduleLiveliness: false);
         }
 
         private bool _watchdogBusy;
@@ -343,6 +451,8 @@ namespace SpotifyWPF.Service.Prediction
                 }
             }
 
+            TryLivelinessReconsiderIfDue(position);
+
             var jump = _plannedJump;
 
             if (position.PositionMs + 40 < jump.TriggerMs)
@@ -358,6 +468,7 @@ namespace SpotifyWPF.Service.Prediction
             {
                 // Clear first so a synchronous PositionUpdated from Seek cannot re-enter.
                 _plannedJump = null;
+                ClearLivelinessReconsideration();
                 _playbackHost.DisarmAction();
                 LoopEvent?.Invoke(this,
                     $"Jukebox: watchdog — forcing overdue jump {jump.FromBeatIndex} → {jump.TargetBeatIndex}.");
@@ -459,6 +570,7 @@ namespace SpotifyWPF.Service.Prediction
         {
             _lastPositionMs = Math.Max(0, positionMs);
             _plannedJump = null;
+            ClearLivelinessReconsideration();
             _playbackHost.DisarmAction();
 
             // Scrub shortly after a hop = preference negative (Slice 6).

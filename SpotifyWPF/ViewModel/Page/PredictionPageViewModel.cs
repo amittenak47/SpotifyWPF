@@ -1108,6 +1108,26 @@ namespace SpotifyWPF.ViewModel.Page
         public string JukeboxBranchRampText =>
             $"{_jukeboxSettingsModel.BranchProbabilityRampPerBeat * 100:0.##}%";
 
+        /// <summary>Single-roll chance to replan a random hop once before it fires (0–50%).</summary>
+        public double JukeboxLivelinessPercent
+        {
+            get => _jukeboxSettingsModel.Liveliness * 100;
+            set
+            {
+                var clamped = Math.Max(0, Math.Min(0.5, value / 100));
+                if (Math.Abs(_jukeboxSettingsModel.Liveliness - clamped) < 0.0001)
+                    return;
+
+                _jukeboxSettingsModel.Liveliness = clamped;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(JukeboxLivelinessText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string JukeboxLivelinessText =>
+            $"{_jukeboxSettingsModel.Liveliness * 100:0.#}%";
+
         public string JukeboxSeekLeadMsText =>
             $"{_jukeboxSettingsModel.SeekLeadMs:0} ms";
 
@@ -3562,6 +3582,7 @@ namespace SpotifyWPF.ViewModel.Page
             _jukeboxSettingsModel.BranchProbabilityMin = snapshot.BranchProbabilityMin;
             _jukeboxSettingsModel.BranchProbabilityMax = snapshot.BranchProbabilityMax;
             _jukeboxSettingsModel.BranchProbabilityRampPerBeat = snapshot.BranchProbabilityRampPerBeat;
+            _jukeboxSettingsModel.Liveliness = snapshot.Liveliness;
             _jukeboxSettingsModel.SeekLeadMs = snapshot.SeekLeadMs;
             _jukeboxSettingsModel.AllowOnlyReverseBranches = snapshot.AllowOnlyReverseBranches;
             _jukeboxSettingsModel.AllowOnlyLongBranches = snapshot.AllowOnlyLongBranches;
@@ -3627,6 +3648,8 @@ namespace SpotifyWPF.ViewModel.Page
             RaisePropertyChanged(nameof(JukeboxBranchProbabilityMaxText));
             RaisePropertyChanged(nameof(JukeboxBranchRampPerBeatPercent));
             RaisePropertyChanged(nameof(JukeboxBranchRampText));
+            RaisePropertyChanged(nameof(JukeboxLivelinessPercent));
+            RaisePropertyChanged(nameof(JukeboxLivelinessText));
             RaisePropertyChanged(nameof(JukeboxSeekLeadMs));
             RaisePropertyChanged(nameof(JukeboxSeekLeadMsText));
             RaisePropertyChanged(nameof(JukeboxAllowOnlyReverseBranches));
@@ -3754,6 +3777,7 @@ namespace SpotifyWPF.ViewModel.Page
                 BranchProbabilityMin = source.BranchProbabilityMin,
                 BranchProbabilityMax = source.BranchProbabilityMax,
                 BranchProbabilityRampPerBeat = source.BranchProbabilityRampPerBeat,
+                Liveliness = source.Liveliness,
                 SeekLeadMs = source.SeekLeadMs,
                 AllowOnlyReverseBranches = source.AllowOnlyReverseBranches,
                 AllowOnlyLongBranches = source.AllowOnlyLongBranches,

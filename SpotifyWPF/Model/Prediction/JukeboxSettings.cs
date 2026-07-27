@@ -24,6 +24,13 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("branchProbabilityRampPerBeat")]
         public double BranchProbabilityRampPerBeat { get; set; } = 0.01;
 
+        /// <summary>
+        /// Single-roll chance (0–1) to replan a random hop once between arm-time and its trigger beat.
+        /// Does not ramp — sparse DJ-style restlessness before future waveform momentum.
+        /// </summary>
+        [JsonPropertyName("liveliness")]
+        public double Liveliness { get; set; } = 0.15;
+
         /// <summary>Fire seeks this many ms before the beat boundary to compensate for SDK latency.</summary>
         [JsonPropertyName("seekLeadMs")]
         public int SeekLeadMs { get; set; } = 100;

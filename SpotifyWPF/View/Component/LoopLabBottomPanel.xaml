@@ -449,6 +449,12 @@
                                                                Maximum="3"
                                                                Value="{Binding JukeboxBranchRampPerBeatPercent}"
                                                                InfoTip="How fast branch chance climbs toward max each linear beat.&#x0a;&#x0a;Example: 0.5%/beat needs ~30 beats to climb 15 points; 2%/beat gets restless quickly."/>
+                                        <local:TuningSliderRow Label="Liveliness (replan once before hop)"
+                                                               ValueText="{Binding JukeboxLivelinessText}"
+                                                               Minimum="0"
+                                                               Maximum="50"
+                                                               Value="{Binding JukeboxLivelinessPercent}"
+                                                               InfoTip="Single roll when a random hop is armed: may replan once at a random beat before the trigger. Does not ramp — sparse DJ restlessness. 0 = off.&#x0a;&#x0a;Example: 15% ≈ one in seven hops gets a second look; locks and end-loop are untouched."/>
                                         <local:TuningSliderRow Label="Seek lead (Spotify SDK only; 0 on Local WAV)"
                                                                ValueText="{Binding JukeboxSeekLeadMsText}"
                                                                Minimum="0"
