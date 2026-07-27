@@ -43,14 +43,14 @@ Personal fork of [SpotifyWPF](https://github.com/mrpnut/SpotifyWPF). Bulk-playli
 - [x] Verbose per-beat branch-probability logging (activity log → Verbose)
 - [x] 3-state repeat, tuning info tips, terminal-black stage, per-track EQ palette
 - [x] Web Playback readiness gate before analyze/play
-- 🟡 **Fix manual branch/hop UI** — multi-step hop chains on the ring; improve lock deletions; allow freestyle branches (not only graph edges)
-- 🟡 **Fix Prediction tab** — Music Predictions / similar-song finder (broken or incomplete today)
+🟡 **Fix manual branch/hop UI** — multi-step hop chains on the ring; improve lock deletions; allow freestyle branches (not only graph edges)
+🟡 **Fix Prediction tab** — Music Predictions / similar-song finder (broken or incomplete today)
 - [ ] **Momentum** — section-aware DJ feel (waveform / envelope + structure)
 - [ ] **Waveform / envelope-aware splicing** — cleaner hop landings, quiet-outro gating
 - [ ] **Automated DJ** — momentum-driven replans on top of liveliness + dwell
 - [ ] **Embeddings** — test and tune Essentia region gate in real sessions
 - [ ] **Personal audio** — expand Local WAV EQ/drive hooks, per-track enhancement presets
-- 🟡 Optional **compress WAV → FLAC** for cache storage (keep WAV for waveform editing; FLAC for space)
+🟡 Optional **compress WAV → FLAC** for cache storage (keep WAV for waveform editing; FLAC for space)
 - [ ] Laplacian section labels (McFee & Ellis 2014) for structure steering
 - [ ] Instrumental stem remix + waveform-aligned overlays (Local WAV only; Phase 6 in forward plan)
 
@@ -59,10 +59,10 @@ Personal fork of [SpotifyWPF](https://github.com/mrpnut/SpotifyWPF). Bulk-playli
 - [x] `tools/attach_region_embeddings.py`, `SpotifyPlaylistProbe`
 
 ### Release & infra
-- 🟡 Fork-specific release zip
-- 🟡 MSIX / appinstaller with Azure-signed certificate
-- 🟡 WebView2 bootstrap in installer
-- 🟡 Optional x86 build (after x64 packaging is stable)
+🟡 Fork-specific release zip
+🟡 MSIX / appinstaller with Azure-signed certificate
+🟡 WebView2 bootstrap in installer
+🟡 Optional x86 build (after x64 packaging is stable)
 
 ### Deferred
 - [ ] Playlists schema, track grid actions, add-tracks workflow, import/export polish, Search page parity (Spotify API depth — revisit after experimental features)
