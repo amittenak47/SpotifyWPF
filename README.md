@@ -4,28 +4,36 @@ Personal fork of [SpotifyWPF](https://github.com/mrpnut/SpotifyWPF). The goal is
 
 ## Current focus
 
-**Playlist, albums, artists, search**
+**Playlists, albums, artists, search**
 
-Still working on playlist, albums, artists, and search flows against current Spotify API endpoints and bringing back the original playlist-management workflow: login, load playlists, stage items for deletion, and delete in batches with rate-limit awareness.
+Primary work is extending the **playlists schema** and the **Playlist**, **Albums**, **Artists**, and **Search** flows against current Spotify API endpoints — same surface area as the original bulk-playlist tooling, with room to grow (track grid actions, create/add tracks, import/export polish, richer metadata).
 
-**Playlists functionality**
+Playlists are largely complete today (logging, track grid loading, create-playlist fixes, staged deletion, Actions tab job queue). The near-term goal is **feature depth** on those pages, not another structural pass.
 
-Playlists functionality is for the most part complete with logging, track grid loading, create-playlist fixes, staged deletion, and the Actions tab job queue.
+**Refactoring — deferred**
 
-**Ongoing — refactoring**
+Large-scale refactors (splitting single-file bloat, reusable control panels, collapsible sections) are **pushed back** while playlist and library features ship. The `cursor/playlist-management-refactor` work that already landed on `master` stays; further UI abstraction waits.
 
-Refactoring parts of the codebase to reduce single-file bloat and abstract/restructure UI into reusable components (control panels, collapsible sections, shared dark-theme controls).
+**Infinite Jukebox — mostly finished; enhancements next**
 
-**Infinite Jukebox (experimental)**
+**Infinite Jukebox** under **Experimental** is in a **mostly finished** state on `master` after the `algo-overhaul` merge and the lyrics / Local WAV / liveliness work on `cursor/lyrics-branch-modifiers-e82b`. Beat-aware infinite looping, Enhanced similarity, ring mini player, session tracks, Local WAV transport, synced lyrics, lyric-flow Softmax steering, branch modifiers, and tune presets are in place.
 
-**Infinite Jukebox** under **Experimental** — now merged from `algo-overhaul` into `master`. Beat-aware infinite looping with an **Enhanced** similarity pipeline (z-scored stacked features, continuation scoring, kNN + percentile graph, softmax navigation), ring mini player, session track list, Local WAV transport, and cached AppData analyses. Builds are **x64** today; an **x86** build may be added later.
+**Near-term jukebox enhancements** (not new core algorithm from scratch):
 
-**Lyrics + Local WAV branch modifiers (in progress)**
+- **Momentum** — section-aware DJ feel (waveform / envelope + structure; see [`tools/loop-lab-forward-plan.md`](tools/loop-lab-forward-plan.md))
+- **Improved automated DJ** — liveliness, dwell, and future momentum-driven replans
+- **Embeddings** — test and tune Essentia region gate / `regionEmbeddings` in real sessions
+- **Personal audio** — Local-WAV EQ/drive modifiers and per-track enhancement hooks
+- **Build / release packaging** — release zip and MSIX installer with signing
 
-- Synced lyrics via **LRCLIB** (not Spotify) shown on the Infinite Jukebox stage; hops update the highlight from transport position.
+**Lyrics + Local WAV (shipped on feature branch)**
+
+- Synced lyrics via **LRCLIB** (not Spotify) on the Infinite Jukebox stage; hops update the highlight from transport position.
 - Softmax **lyric flow** (toggleable layers: phrase cuts / same section / block-clean) steers hops — see [`tools/lyric-flow.md`](tools/lyric-flow.md).
+- Forward roadmap (waveform, momentum, stems/voice Phase 6) — see [`tools/loop-lab-forward-plan.md`](tools/loop-lab-forward-plan.md).
 - **Phrase align** is a separate HARD `beatIndex % N` filter (not lyrics; not Bar phase penalty). On floating tracks like *Dreams*, leave it at 0.
 - **Branch modifiers** (supercharge / turbocharge EQ+drive) are **Local WAV only**.
+- **Liveliness** — single-roll replan of a random hop once before it fires (sparse DJ restlessness; no ramp).
 
 ### Research references (lyric flow + structure)
 
@@ -39,11 +47,24 @@ Refactoring parts of the codebase to reduce single-file bloat and abstract/restr
 
 **Release packaging**
 
-Building a release zip and MSIX installer with an Azure-signed app certificate.
+Building a release zip and MSIX installer with an Azure-signed app certificate. Packaging moves up in priority as playlist and jukebox features stabilize.
 
 > These are working descriptions, not release milestones. Watch rate limits during usage; try to set a delay (>500ms between actions) and reduce large requests into smaller chunks. 500 consecutive requests can result in a 24-hour restriction.
 
 ## Changelog
+
+### `master` — `cursor/lyrics-branch-modifiers-e82b` merge: lyrics, modifiers, liveliness
+
+Merged **`cursor/lyrics-branch-modifiers-e82b`** into **`master`**. Infinite Jukebox is feature-complete for a first release; this merge adds polish and DJ-oriented tuning rather than a new graph metric.
+
+- **Lyrics** — LRCLIB synced lyrics on stage; karaoke column; lyric-flow Softmax layers (phrase / section / block-clean).
+- **Local WAV branch modifiers** — supercharge / turbocharge EQ+drive on locked hops (Ctrl-drag / Alt-cycle); cleared when switching back to Spotify.
+- **Navigation fixes** — continuation-phase branching, ring exclusion paint, end-loop / dwell tuning defaults from real Loop Lab sessions.
+- **Liveliness** — optional single-roll replan of a random hop before trigger (sparse; no probability ramp).
+- **Verbose hop logging** — per-beat branch rolls in activity log (Verbose filter).
+- **UX** — 3-state repeat, tuning info tips, terminal-black stage, per-track EQ palette, Web Playback readiness gate before analyze/play.
+
+---
 
 ### `master` — `algo-overhaul` merge: Enhanced Infinite Jukebox algorithm
 
@@ -211,14 +232,32 @@ Remixatron is the closest open-source prior art for beat-sync features and struc
 
 ## Experimental
 
-**Infinite Jukebox** lives under **Experimental → Infinite Jukebox** on `master` (merged from `algo-overhaul`). It is isolated from the core Playlists workflow: beat-aware infinite looping, personalized next-track prediction experiments, ring mini player, and Local WAV analysis/playback. See the **`algo-overhaul` merge** changelog entry above for the Enhanced algorithm, Remixatron/original comparison, and bibliography.
+**Infinite Jukebox** lives under **Experimental → Infinite Jukebox** on `master`. Core looping, Enhanced graph navigation, lyrics, and Local WAV modifiers are in place; active work is momentum, automated DJ polish, embeddings, and personal audio enhancements. See **`cursor/lyrics-branch-modifiers-e82b` merge** and **`algo-overhaul` merge** changelog entries.
 
 ## Planned improvements
 
-- Revise the installer/publish flow for this fork (certificate, `appinstaller`, and release packaging).
-- Continue playlist content workflows (track grid actions, create/add tracks, import/export polish).
+**Playlists & library (current priority)**
+
+- Extend playlists schema and Playlist / Albums / Artists / Search workflows.
+- Track grid actions, create/add tracks, import/export polish.
 - Keep rate-limit-safe request spacing across load, delete, and track-fetch operations.
-- Laplacian section labels (McFee & Ellis 2014) and further Essentia region-gate polish on Infinite Jukebox.
+
+**Infinite Jukebox (enhancements)**
+
+- Waveform / envelope-aware splicing and **section momentum** (Phase 4–5 in [`tools/loop-lab-forward-plan.md`](tools/loop-lab-forward-plan.md)).
+- Automated DJ polish (liveliness, dwell, momentum-driven replans).
+- Essentia **embeddings** testing and region-gate tuning in real sessions.
+- Personal **Local WAV** audio enhancements (modifiers, per-track EQ hooks).
+- Laplacian section labels (McFee & Ellis 2014) when structure steering needs another layer.
+
+**Release**
+
+- Revise installer/publish flow (certificate, `appinstaller`, release zip).
+- Optional **x86** build after x64 packaging is stable.
+
+**Deferred**
+
+- Further UI/control-panel refactoring beyond what already shipped on `master`.
 
 ## Using this fork
 
