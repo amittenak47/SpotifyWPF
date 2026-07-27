@@ -75,6 +75,14 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("regionEmbeddings")]
         public List<List<double>> RegionEmbeddings { get; set; }
 
+        /// <summary>
+        /// Optional beat-aligned, NON-z-scored energy detail (tools/analyze_track.py). Absent on
+        /// Spotify analyses and on caches written before this block existed — consumers must fall
+        /// back to the tier-1 derivation rather than requiring a re-analyze.
+        /// </summary>
+        [JsonPropertyName("beatEnergy")]
+        public BeatEnergyBlock BeatEnergy { get; set; }
+
         /// <summary>True when Slice 2 Classic vectors are present for graph assembly.</summary>
         [JsonIgnore]
         public bool HasClassicFeatures =>
@@ -85,6 +93,65 @@ namespace SpotifyWPF.Model.Prediction
         public bool HasRegionEmbeddings =>
             RegionEmbeddings != null && Beats != null &&
             RegionEmbeddings.Count == Beats.Count && RegionEmbeddings.Count > 0;
+
+        /// <summary>True when tier-2 band-resolved energy detail is present and beat-aligned.</summary>
+        [JsonIgnore]
+        public bool HasBeatEnergy =>
+            BeatEnergy != null && Beats != null && Beats.Count > 0 &&
+            BeatEnergy.LowDb != null && BeatEnergy.LowDb.Count == Beats.Count;
+    }
+
+    /// <summary>
+    /// Beat-synchronous, interpretable (non-z-scored) energy features. Stored columnar rather than
+    /// as an array of objects: roughly 40% smaller JSON and cheaper to deserialize.
+    ///
+    /// These never enter <see cref="TrackAnalysis.BeatFeatures"/> or
+    /// <see cref="TrackAnalysis.StackedFeatures"/> — doing so would change the similarity metric,
+    /// hence the graph topology, hence every preset anyone has tuned.
+    /// </summary>
+    public class BeatEnergyBlock
+    {
+        [JsonPropertyName("version")]
+        public int Version { get; set; } = 1;
+
+        /// <summary>Kick band ~20–120 Hz, dB.</summary>
+        [JsonPropertyName("lowDb")]
+        public List<double> LowDb { get; set; }
+
+        /// <summary>Bass body ~120–500 Hz, dB.</summary>
+        [JsonPropertyName("lowMidDb")]
+        public List<double> LowMidDb { get; set; }
+
+        /// <summary>Vocal / lead ~500 Hz–6 kHz, dB.</summary>
+        [JsonPropertyName("midDb")]
+        public List<double> MidDb { get; set; }
+
+        /// <summary>Hats / air ~6–12 kHz, dB.</summary>
+        [JsonPropertyName("highDb")]
+        public List<double> HighDb { get; set; }
+
+        /// <summary>HPSS percussive share, 0–1. Separates "loud pad" from "loud with drums".</summary>
+        [JsonPropertyName("percussiveFraction")]
+        public List<double> PercussiveFraction { get; set; }
+
+        [JsonPropertyName("onsetStrength")]
+        public List<double> OnsetStrength { get; set; }
+
+        [JsonPropertyName("centroidHz")]
+        public List<double> CentroidHz { get; set; }
+
+        [JsonPropertyName("rolloffHz")]
+        public List<double> RolloffHz { get; set; }
+
+        /// <summary>dB reference the band values were taken against, so C# can reproduce the scale.</summary>
+        [JsonPropertyName("refDb")]
+        public double RefDb { get; set; }
+
+        [JsonPropertyName("loDb")]
+        public double LoDb { get; set; }
+
+        [JsonPropertyName("hiDb")]
+        public double HiDb { get; set; }
     }
 
     public class DpBeatAgreement

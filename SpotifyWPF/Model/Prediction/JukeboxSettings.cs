@@ -173,6 +173,97 @@ namespace SpotifyWPF.Model.Prediction
         [JsonPropertyName("showLyrics")]
         public bool ShowLyrics { get; set; } = true;
 
+        // ── Energy control (PID + buildup gate) ──────────────────────────────────────────
+        // None of these belong in AffectsGraphTopology: the beat graph is a pure function of
+        // stackedFeatures / regionEmbeddings / threshold / kNN / mutual / bridge / phase /
+        // EnableEndLoop. Energy control only steers navigation, so edits take the Rearm() path.
+
+        /// <summary>Master enable for energy-aware hop control. Off = byte-identical to pre-feature behavior.</summary>
+        [JsonPropertyName("energyControlEnabled")]
+        public bool EnergyControlEnabled { get; set; }
+
+        /// <summary>Target trajectory: "hold" (match the current section), "flat", or "arc".</summary>
+        [JsonPropertyName("energyTargetMode")]
+        public string EnergyTargetMode { get; set; } = "hold";
+
+        /// <summary>Setpoint (0–1) for "flat" mode; also the arc top for "arc".</summary>
+        [JsonPropertyName("energyFlatSetpoint")]
+        public double EnergyFlatSetpoint { get; set; } = 0.55;
+
+        /// <summary>Bars the "arc" ramp takes to reach <see cref="EnergyFlatSetpoint"/>.</summary>
+        [JsonPropertyName("energyArcBars")]
+        public int EnergyArcBars { get; set; } = 16;
+
+        /// <summary>Proportional gain. The term that actually earns its keep — see EnergyPidController.</summary>
+        [JsonPropertyName("energyKp")]
+        public double EnergyKp { get; set; } = 0.9;
+
+        /// <summary>Integral gain. Small by default: it winds up against setpoints the graph cannot reach.</summary>
+        [JsonPropertyName("energyKi")]
+        public double EnergyKi { get; set; } = 0.05;
+
+        /// <summary>
+        /// Derivative gain. Default 0 — D is symmetric (damps a drop-out as hard as a build-up)
+        /// and differentiates a curve we can already read ahead in. The buildup gate does this job.
+        /// </summary>
+        [JsonPropertyName("energyKd")]
+        public double EnergyKd { get; set; }
+
+        /// <summary>Hard bound on the integral accumulator (anti-windup).</summary>
+        [JsonPropertyName("energyIntegralClamp")]
+        public double EnergyIntegralClamp { get; set; } = 0.5;
+
+        /// <summary>Beats of low-pass on the measured energy y[k].</summary>
+        [JsonPropertyName("energyMeasureSmoothBeats")]
+        public int EnergyMeasureSmoothBeats { get; set; } = 4;
+
+        /// <summary>Beats of low-pass on the setpoint r[k] in "hold" mode (32 ≈ 8 bars).</summary>
+        [JsonPropertyName("energyHoldSmoothBeats")]
+        public int EnergyHoldSmoothBeats { get; set; } = 32;
+
+        /// <summary>WHEN channel: branch chance is multiplied by (1 + gain·u), then re-clamped.</summary>
+        [JsonPropertyName("energyHopChanceGain")]
+        public double EnergyHopChanceGain { get; set; } = 0.8;
+
+        /// <summary>WHERE channel: w_energy in the Softmax score. Normalized by τ internally.</summary>
+        [JsonPropertyName("energyHopWeight")]
+        public double EnergyHopWeight { get; set; } = 0.5;
+
+        /// <summary>Suppress hops through detected buildups (risers / snare rolls).</summary>
+        [JsonPropertyName("buildupGateEnabled")]
+        public bool BuildupGateEnabled { get; set; } = true;
+
+        /// <summary>Probability (0–1) that the gate actually vetoes a hop while active.</summary>
+        [JsonPropertyName("buildupGateStrength")]
+        public double BuildupGateStrength { get; set; } = 0.9;
+
+        /// <summary>Beats of lookahead the buildup detector inspects.</summary>
+        [JsonPropertyName("buildupGateLookaheadBeats")]
+        public int BuildupGateLookaheadBeats { get; set; } = 8;
+
+        /// <summary>Replan an armed hop when |u − u@plan| exceeds this. Deliberate, unlike the Liveliness roll.</summary>
+        [JsonPropertyName("energyReplanHysteresis")]
+        public double EnergyReplanHysteresis { get; set; } = 0.25;
+
+        /// <summary>Enable the slow PI loop that trims seek lead from measured trigger latency.</summary>
+        [JsonPropertyName("seekLeadAutoCalibrate")]
+        public bool SeekLeadAutoCalibrate { get; set; }
+
+        /// <summary>
+        /// Auto-learned addition to <see cref="SeekLeadMs"/>. Written by SeekLeadCalibrator only —
+        /// never by the user, so the manual slider never jitters under their cursor.
+        /// </summary>
+        [JsonPropertyName("seekLeadAutoTrimMs")]
+        public int SeekLeadAutoTrimMs { get; set; }
+
+        /// <summary>Ceiling for <see cref="SeekLeadAutoTrimMs"/>.</summary>
+        [JsonPropertyName("seekLeadAutoMaxMs")]
+        public int SeekLeadAutoMaxMs { get; set; } = 250;
+
+        /// <summary>Local-WAV only: equal-power micro-crossfade on jukebox seeks (8–30 ms).</summary>
+        [JsonPropertyName("hopCrossfadeEnabled")]
+        public bool HopCrossfadeEnabled { get; set; } = true;
+
         public static JukeboxSettings CreateDefaults() => new JukeboxSettings();
 
         /// <summary>True when a settings change requires rebuilding the beat graph (not just re-arming).</summary>

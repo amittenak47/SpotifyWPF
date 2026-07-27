@@ -423,6 +423,135 @@ def build_classic_features(y, sr, beat_times):
     return beat_features, stacked, chroma, mfcc, rms_db
 
 
+def sync_to_beats(F, beat_times, sr, n_beats):
+    """Beat-synchronous median aggregation, aligned to exactly one column per beat.
+
+    Shared by build_classic_features and build_beat_energy so the two can never drift out of
+    alignment — a half-beat offset between the similarity vectors and the energy curve would be
+    invisible in the JSON and maddening to debug from the app.
+    """
+    beat_frames = librosa.time_to_frames(beat_times, sr=sr, hop_length=HOP_LENGTH)
+    beat_frames = librosa.util.fix_frames(beat_frames, x_max=F.shape[1])
+    if beat_frames.size == 0 or beat_frames[-1] < F.shape[1] - 1:
+        beat_frames = np.concatenate([beat_frames, [F.shape[1]]])
+
+    Fb = librosa.util.sync(F, beat_frames, aggregate=np.median, pad=False)
+
+    if Fb.shape[1] > n_beats:
+        Fb = Fb[:, :n_beats]
+    elif Fb.shape[1] < n_beats:
+        pad = np.repeat(Fb[:, -1:], n_beats - Fb.shape[1], axis=1)
+        Fb = np.concatenate([Fb, pad], axis=1)
+
+    return Fb
+
+
+def _band_rows(sr, n_fft, low_hz, high_hz):
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+    idx = np.where((freqs >= low_hz) & (freqs < high_hz))[0]
+    return idx if idx.size else np.array([0])
+
+
+def build_beat_energy(y, sr, beat_times):
+    """Interpretable, NON-z-scored beat-synced energy features.
+
+    Deliberately kept out of beatFeatures / stackedFeatures: those feed the similarity metric, so
+    anything added there changes graph topology and silently invalidates every tuned preset.
+
+    Bands are chosen for what a listener reads as energy, not for spectral tidiness:
+      20-120 Hz   kick presence — the single strongest "did the beat drop out" cue, and the one
+                  thing broadband RMS cannot tell you on a modern limited master
+      120-500 Hz  bass body
+      500-6k      vocal / lead
+      6k-12k      hats and air — rising highs with the kick gone is the canonical filtered riser
+    """
+    n_fft = 2048
+    S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=HOP_LENGTH))
+    n_beats = len(beat_times)
+
+    bands = {
+        "lowDb": (20.0, 120.0),
+        "lowMidDb": (120.0, 500.0),
+        "midDb": (500.0, 6000.0),
+        "highDb": (6000.0, 12000.0),
+    }
+
+    ref = float(np.max(S)) if np.max(S) > 0 else 1.0
+    out = {}
+
+    for name, (lo, hi) in bands.items():
+        rows = _band_rows(sr, n_fft, lo, hi)
+        band_rms = np.sqrt(np.mean(np.square(S[rows, :]), axis=0))
+        band_db = librosa.amplitude_to_db(band_rms, ref=ref)
+        synced = sync_to_beats(band_db.reshape(1, -1), beat_times, sr, n_beats)
+        out[name] = [round(float(v), 3) for v in synced[0]]
+
+    # Percussive share via decompose.hpss on the magnitude spectrogram we already have.
+    # NOT effects.hpss: that resynthesises two full audio signals through ISTFT which we would
+    # immediately discard, roughly doubling analysis wall time for identical information.
+    harmonic, percussive = librosa.decompose.hpss(S)
+    h_energy = np.mean(harmonic, axis=0)
+    p_energy = np.mean(percussive, axis=0)
+    fraction = p_energy / np.maximum(h_energy + p_energy, 1e-9)
+    synced_fraction = sync_to_beats(fraction.reshape(1, -1), beat_times, sr, n_beats)
+    out["percussiveFraction"] = [round(float(v), 4) for v in synced_fraction[0]]
+
+    onset_env = librosa.onset.onset_strength(S=librosa.power_to_db(S ** 2), sr=sr,
+                                             hop_length=HOP_LENGTH)
+    synced_onset = sync_to_beats(onset_env.reshape(1, -1), beat_times, sr, n_beats)
+    out["onsetStrength"] = [round(float(v), 4) for v in synced_onset[0]]
+
+    centroid = librosa.feature.spectral_centroid(S=S, sr=sr)
+    synced_centroid = sync_to_beats(centroid, beat_times, sr, n_beats)
+    out["centroidHz"] = [round(float(v), 2) for v in synced_centroid[0]]
+
+    rolloff = librosa.feature.spectral_rolloff(S=S, sr=sr)
+    synced_rolloff = sync_to_beats(rolloff, beat_times, sr, n_beats)
+    out["rolloffHz"] = [round(float(v), 2) for v in synced_rolloff[0]]
+
+    all_low = np.asarray(out["lowDb"], dtype=float)
+    out["version"] = 1
+    out["refDb"] = round(float(librosa.amplitude_to_db(np.array([ref]), ref=ref)[0]), 3)
+    out["loDb"] = round(float(np.percentile(all_low, 5)), 3)
+    out["hiDb"] = round(float(np.percentile(all_low, 95)), 3)
+
+    return out
+
+
+def run_energy_only(wav_path, analysis_path):
+    """Add beatEnergy to an existing analysis WITHOUT touching anything else.
+
+    This is the upgrade path that matters. A full re-analyze rewrites the beat grid (BeatThis is
+    not bit-deterministic across versions), which moves beat indices and therefore breaks every
+    saved branch lock and preset. Here beats/bars/tatums/segments/beatFeatures/stackedFeatures are
+    read and written back untouched, so indices are provably unchanged.
+    """
+    with open(analysis_path) as handle:
+        analysis = json.load(handle)
+
+    beats = analysis.get("beats") or []
+    if not beats:
+        sys.stderr.write("Analysis has no beats; cannot attach energy.\n")
+        sys.exit(3)
+
+    try:
+        y, sr_native = sf.read(wav_path, dtype="float32", always_2d=True)
+        y = y.mean(axis=1)
+        if sr_native != SAMPLE_RATE:
+            y = librosa.resample(y, orig_sr=sr_native, target_sr=SAMPLE_RATE)
+        sr = SAMPLE_RATE
+    except Exception:
+        y, sr = librosa.load(wav_path, sr=SAMPLE_RATE, mono=True)
+
+    beat_times = np.asarray([b["start"] for b in beats], dtype=float)
+    analysis["beatEnergy"] = build_beat_energy(y, sr, beat_times)
+
+    with open(analysis_path, "w") as handle:
+        json.dump(analysis, handle)
+
+    print("Attached beatEnergy to %s (%d beats, grid untouched)" % (analysis_path, len(beats)))
+
+
 def build_overlapping_segments(frame_times, chroma, mfcc12, rms_db, duration):
     """Kept for Path-A-compatible ring/legacy consumers; Classic graph prefers beatFeatures."""
     segments = []
@@ -485,7 +614,20 @@ def main():
         choices=["auto", "beatthis", "dp"],
         help="auto: BeatThis then DP; beatthis: require BeatThis/ONNX; dp: force librosa DP",
     )
+    parser.add_argument(
+        "--energy-only",
+        action="store_true",
+        help="Attach beatEnergy to the existing output_json and exit. Leaves the beat grid and all "
+             "similarity features untouched, so saved branch locks and presets stay valid.",
+    )
     args = parser.parse_args()
+
+    if args.energy_only:
+        if not os.path.isfile(args.output_json):
+            sys.stderr.write("--energy-only needs an existing analysis at %s\n" % args.output_json)
+            sys.exit(3)
+        run_energy_only(args.input_wav, args.output_json)
+        return
 
     try:
         y, sr_native = sf.read(args.input_wav, dtype="float32", always_2d=True)
@@ -571,6 +713,13 @@ def main():
         "beatFeatures": beat_features,
         "stackedFeatures": stacked,
     }
+
+    try:
+        analysis["beatEnergy"] = build_beat_energy(y, sr, beat_times)
+    except Exception as exc:
+        # Energy detail is strictly optional — the app falls back to deriving a coarser curve from
+        # segment loudness. Never fail an otherwise-good analysis over it.
+        sys.stderr.write("beatEnergy computation failed (%s); continuing without it.\n" % exc)
 
     with open(args.output_json, "w") as handle:
         json.dump(analysis, handle)

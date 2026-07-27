@@ -58,6 +58,9 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly LyricFlowContext _lyricFlow;
 
+        /// <summary>Energy steering seam. <see cref="NullHopBias"/> reproduces pre-feature behavior exactly.</summary>
+        private readonly IHopBias _hopBias;
+
         private readonly string _trackId;
 
         private double _currentBranchChance;
@@ -106,12 +109,14 @@ namespace SpotifyWPF.Service.Prediction
 
         public BeatNavigator(BeatGraph graph, JukeboxSettings settings, LoopProfile profile = null,
             int? randomSeed = null, BranchPreferenceStore preferences = null,
-            IEnumerable<int> lyricPhraseBeats = null, LyricFlowContext lyricFlow = null)
+            IEnumerable<int> lyricPhraseBeats = null, LyricFlowContext lyricFlow = null,
+            IHopBias hopBias = null)
         {
             Graph = graph ?? throw new ArgumentNullException(nameof(graph));
             _settings = settings ?? JukeboxSettings.CreateDefaults();
             _trackId = graph.TrackId;
             _preferences = preferences;
+            _hopBias = hopBias ?? NullHopBias.Instance;
             _lyricFlow = lyricFlow ?? (lyricPhraseBeats != null
                 ? new LyricFlowContext { PhraseBoundaryBeats = new HashSet<int>(lyricPhraseBeats) }
                 : LyricFlowContext.Empty);
@@ -320,7 +325,28 @@ namespace SpotifyWPF.Service.Prediction
                     continue;
                 }
 
-                var chanceAtBeat = _currentBranchChance;
+                // Buildup gate: veto by skipping the roll entirely, NOT by scaling the chance.
+                // ClampProbability floors at BranchProbabilityMin (1.37% by default), so a zero
+                // multiplier would still leave ~10% odds of hopping across an 8-beat riser —
+                // exactly the thing the gate exists to prevent.
+                if (_hopBias.SuppressHops(i))
+                {
+                    _beatsSinceJump++;
+                    _currentBranchChance = ClampProbability(
+                        _currentBranchChance + _settings.BranchProbabilityRampPerBeat);
+                    LogVerbose(
+                        $"Jukebox: beat {i} buildup gate — holding hop " +
+                        $"(chance now {FormatChance(_currentBranchChance)})");
+                    continue;
+                }
+
+                // Energy bias is applied to the threshold at READ time and never written back.
+                // _currentBranchChance integrates beats-since-hop; the PID integrates energy error.
+                // Folding u into the accumulator would make it a double integrator (∫∫e) with a
+                // guaranteed limit cycle — energy dips, chance ramps AND I grows, hops go violent,
+                // energy overshoots, repeat. Leave this as a multiply-on-read.
+                var chanceAtBeat = ClampProbability(
+                    _currentBranchChance * _hopBias.BranchChanceMultiplier(i));
                 var roll = _random.NextDouble();
 
                 if (roll < chanceAtBeat)
@@ -622,7 +648,9 @@ namespace SpotifyWPF.Service.Prediction
                     ? _preferences.Score(_trackId, fromBeatIndex, edge.DestinationIndex)
                     : 0;
                 var lyricBias = LyricFlowBias(fromBeatIndex, edge.DestinationIndex);
-                var score = (-edge.Distance / tau) - (lambda * visits) + (wPref * pref) + lyricBias;
+                var energyBias = EnergyFlowBias(fromBeatIndex, edge.DestinationIndex, tau);
+                var score = (-edge.Distance / tau) - (lambda * visits) + (wPref * pref) +
+                            lyricBias + energyBias;
                 scores[i] = score;
 
                 if (score > maxScore)
@@ -734,6 +762,38 @@ namespace SpotifyWPF.Service.Prediction
             return weight * bonus;
         }
 
+        /// <summary>
+        /// Softmax-only energy steering: bias landings toward (or away from) higher energy according
+        /// to what the controller currently wants. Like <see cref="LyricFlowBias"/> this never
+        /// removes an edge — energy is not allowed to veto a musically good splice, only to break
+        /// ties among comparably good ones.
+        ///
+        /// On the 1/τ: the distance term is −d/τ, so at the default τ=0.1 the candidate spread Δd
+        /// contributes Δd/τ logits of separation, and lowering τ silently shrinks the influence of
+        /// every additive bias term. (That is almost certainly why LyricPhraseWeight sits at 0.0144
+        /// — a value hand-tuned against one particular τ.) Dividing by τ here makes w_energy
+        /// τ-invariant, so changing temperature does not require re-tuning it. Deliberately NOT
+        /// retrofitted to LyricFlowBias: that would silently change the meaning of lyricPhraseWeight
+        /// in every preset anyone has already saved.
+        /// </summary>
+        private double EnergyFlowBias(int fromBeatIndex, int toBeatIndex, double tau)
+        {
+            if (!_settings.EnergyControlEnabled)
+                return 0;
+
+            var weight = _settings.EnergyHopWeight;
+
+            if (weight <= 0)
+                return 0;
+
+            var output = _hopBias.Output;
+
+            if (Math.Abs(output) < 1e-4)
+                return 0;
+
+            return (weight / tau) * output * _hopBias.EnergyScore(fromBeatIndex, toBeatIndex);
+        }
+
         private List<BeatEdge> FilterEdges(int fromBeatIndex, IReadOnlyList<BeatEdge> edges,
             bool exemptLongBranchFilter)
         {
@@ -816,10 +876,13 @@ namespace SpotifyWPF.Service.Prediction
 
             var target = Graph.Beats[edge.DestinationIndex];
             // Seek lead compensates Spotify SDK latency only; local WAV seeks are in-process.
+            // The auto trim is a SEPARATE field from the user's SeekLeadMs slider so the calibrator
+            // can learn without the slider jittering under the user's cursor or silently
+            // overwriting a number they deliberately tuned.
             var seekLead = string.Equals(_settings.PlaybackSource, "Local",
                 StringComparison.OrdinalIgnoreCase)
                 ? 0
-                : Math.Max(0, _settings.SeekLeadMs);
+                : Math.Max(0, _settings.SeekLeadMs + _settings.SeekLeadAutoTrimMs);
             // Fire on the next beat's grid tick (≈ EndMs of from) so rounding on DurationSec
             // cannot let a few ms of from+1 play before the seek.
             var boundaryMs = fromIndex + 1 < Graph.Beats.Count
@@ -888,6 +951,27 @@ namespace SpotifyWPF.Service.Prediction
                 var old = _recentDestinations.Dequeue();
                 _recentDestinationSet.Remove(old);
             }
+        }
+
+        /// <summary>
+        /// Undo the visit count a discarded plan added. <see cref="MakeJump"/> increments visits at
+        /// PLAN time, but a plan that gets replaced (liveliness, or an energy replan) never played —
+        /// leaving the increment permanently inflates the −λ·visits novelty penalty on a
+        /// destination nobody ever heard. Latent today because VisitNoveltyLambda defaults to 0, and
+        /// rare while liveliness was the only replan path; energy replanning makes it routine.
+        ///
+        /// The tabu queue is deliberately left alone: not immediately re-planning into the pocket we
+        /// just backed out of is the behavior we want.
+        /// </summary>
+        public void RollbackPlannedDestination(int destinationIndex)
+        {
+            if (!_visitCounts.TryGetValue(destinationIndex, out var count))
+                return;
+
+            if (count <= 1)
+                _visitCounts.Remove(destinationIndex);
+            else
+                _visitCounts[destinationIndex] = count - 1;
         }
 
         /// <summary>Copy visit memory across navigator recreations (rearm / lock edits).</summary>

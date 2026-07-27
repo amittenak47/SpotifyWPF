@@ -54,6 +54,12 @@ namespace SpotifyWPF.Service.Prediction
         /// <summary>Slice 6: wipe pairwise preference memory.</summary>
         void ClearBranchPreferences();
 
+        /// <summary>Per-beat energy controller state (tuning status line). Null while disabled.</summary>
+        event EventHandler<EnergyPidSample> EnergyStateChanged;
+
+        /// <summary>Cached per-beat energy curve for a track, or null when no analysis exists.</summary>
+        BeatEnergyProfile GetEnergyProfileForTrack(string trackId);
+
         /// <summary>
         /// Supply lyric-flow Softmax context (phrase / section / block). Empty/null clears.
         /// Takes effect on the next jukebox rearm. Does not rebuild the beat graph.
@@ -104,6 +110,25 @@ namespace SpotifyWPF.Service.Prediction
 
         private readonly Random _livelinessRandom = new Random();
 
+        private readonly BeatEnergyProfileBuilder _energyBuilder = new BeatEnergyProfileBuilder();
+
+        /// <summary>Energy curves are pure functions of the cached analysis; keep them per track.</summary>
+        private readonly Dictionary<string, BeatEnergyProfile> _energyCache =
+            new Dictionary<string, BeatEnergyProfile>();
+
+        private EnergyPidController _energyPid;
+
+        private SeekLeadCalibrator _seekLeadCalibrator;
+
+        private int _lastPidBeat = -1;
+
+        /// <summary>Controller output when the armed hop was planned — the replan hysteresis baseline.</summary>
+        private double _outputAtPlan;
+
+        private bool _gateActiveAtPlan;
+
+        private int _replansThisHop;
+
         /// <summary>Single-roll liveliness: replan once at this beat before the armed hop fires.</summary>
         private bool _livelinessReconsiderScheduled;
 
@@ -127,6 +152,8 @@ namespace SpotifyWPF.Service.Prediction
         public event EventHandler<JukeboxJumpEventArgs> JukeboxJump;
 
         public event EventHandler ActiveLoopChanged;
+
+        public event EventHandler<EnergyPidSample> EnergyStateChanged;
 
         public LoopController(IJukeboxTransport playbackHost, ILoopRegionStore store,
             IJukeboxSettingsStore jukeboxSettings)
@@ -190,6 +217,11 @@ namespace SpotifyWPF.Service.Prediction
             _plannedJump = null;
             _lastPositionMs = state.PositionMs;
 
+            // New track = new energy curve; nothing about the old controller state transfers.
+            _energyPid = null;
+            _lastPidBeat = -1;
+            _seekLeadCalibrator?.Reset();
+
             // The player page dropped any armed action on track change; arm for the new track.
             Rearm();
 
@@ -244,8 +276,14 @@ namespace SpotifyWPF.Service.Prediction
             var priorVisits = _navigator?.ExportVisitMemory();
             var priorCounts = _navigator?.ExportVisitCounts();
             var priorDwell = _navigator?.ExportBeatsSinceJump() ?? int.MaxValue / 4;
-            _navigator = new BeatNavigator(graph, _jukeboxSettings.Get(), ActiveProfile,
-                preferences: _preferences, lyricFlow: _lyricFlow);
+            var settings = _jukeboxSettings.Get();
+            var beatAtPosition = Math.Max(0, FindBeatIndexInGraph(graph, _lastPositionMs));
+
+            EnsureEnergyController(settings, beatAtPosition);
+
+            _navigator = new BeatNavigator(graph, settings, ActiveProfile,
+                preferences: _preferences, lyricFlow: _lyricFlow,
+                hopBias: (IHopBias)_energyPid ?? NullHopBias.Instance);
             _navigator.VerboseLogged += OnNavigatorVerboseLogged;
             _navigator.ImportVisitMemory(priorVisits);
             _navigator.ImportVisitCounts(priorCounts);
@@ -283,6 +321,12 @@ namespace SpotifyWPF.Service.Prediction
         private void PlanAndArmJump(int fromBeatIndex)
         {
             ClearLivelinessReconsideration();
+
+            // Baseline for the replan hysteresis: how far u has moved since this hop was committed.
+            _outputAtPlan = _energyPid?.Output ?? 0;
+            _gateActiveAtPlan = _energyPid?.BuildupGateActive ?? false;
+            _replansThisHop = 0;
+
             _plannedJump = _navigator.PlanNextJump(fromBeatIndex);
 
             if (_plannedJump == null)
@@ -380,35 +424,10 @@ namespace SpotifyWPF.Service.Prediction
 
             ClearLivelinessReconsideration();
 
-            var previous = _plannedJump;
-            var newJump = _navigator.PlanNextJump(beat);
-
-            if (newJump == null)
-            {
-                LoopVerboseEvent?.Invoke(this,
-                    $"Jukebox: liveliness replan at beat {beat} — no alternate; keeping " +
-                    $"{previous.FromBeatIndex}→{previous.TargetBeatIndex}");
-                return;
-            }
-
-            if (newJump.FromBeatIndex == previous.FromBeatIndex &&
-                newJump.TargetBeatIndex == previous.TargetBeatIndex)
-            {
-                LoopVerboseEvent?.Invoke(this,
-                    $"Jukebox: liveliness replan at beat {beat} — same hop " +
-                    $"{previous.FromBeatIndex}→{previous.TargetBeatIndex}");
-                return;
-            }
-
-            _plannedJump = newJump;
-            LoopEvent?.Invoke(this,
-                $"Jukebox: liveliness switched hop {previous.FromBeatIndex}→{previous.TargetBeatIndex} " +
-                $"to {newJump.FromBeatIndex}→{newJump.TargetBeatIndex}.");
-            LoopVerboseEvent?.Invoke(this,
-                $"Jukebox: liveliness replan at beat {beat} — new plan (no second liveliness roll)");
-
-            _playbackHost.DisarmAction();
-            ArmCurrentPlannedJump(scheduleLiveliness: false);
+            // Shares the energy replan path so both routes roll back the plan-time visit count
+            // identically. Liveliness does not count toward the energy replan cap — it is a single
+            // roll that already fires at most once per armed hop.
+            ReplanArmedHop(beat, "liveliness", countsTowardCap: false);
         }
 
         private bool _watchdogBusy;
@@ -431,6 +450,11 @@ namespace SpotifyWPF.Service.Prediction
                     _navigator != null && !position.Paused)
                 {
                     var beat = _navigator.FindBeatIndexAtMs(position.PositionMs);
+
+                    // Keep the controller tracking even with nothing armed, so its state is warm
+                    // (and its setpoint meaningful) by the time the next hop is planned.
+                    TickEnergyController(beat);
+
                     if (_navigator.IsBeatExcluded(beat))
                         EjectFromExcludedRegion(beat);
                 }
@@ -449,6 +473,13 @@ namespace SpotifyWPF.Service.Prediction
                     EjectFromExcludedRegion(beat);
                     return;
                 }
+
+                // Reuse the beat index already computed above rather than recomputing it.
+                // May replan the armed hop, so it runs before the trigger check below.
+                TickEnergyController(beat);
+
+                if (_plannedJump == null)
+                    return;
             }
 
             TryLivelinessReconsiderIfDue(position);
@@ -476,6 +507,10 @@ namespace SpotifyWPF.Service.Prediction
                 _lastPositionMs = jump.SeekToMs;
 
                 _navigator?.NotifyJumpFired(jump.FromBeatIndex, jump.TargetBeatIndex);
+                NotifyEnergyHopFired(jump);
+
+                // Deliberately no seek-lead sample here: the watchdog fires precisely because the
+                // transport did NOT report, so its timing says nothing about transport latency.
 
                 LoopEvent?.Invoke(this,
                     $"Jukebox: jumped beat {jump.FromBeatIndex} → {jump.TargetBeatIndex}.");
@@ -536,6 +571,45 @@ namespace SpotifyWPF.Service.Prediction
             }
         }
 
+        /// <summary>Bleed the integral and reseed the measurement at the landing beat.</summary>
+        private void NotifyEnergyHopFired(JukeboxJump jump)
+        {
+            if (_energyPid == null || jump == null)
+                return;
+
+            _energyPid.NotifyHopFired(jump.FromBeatIndex, jump.TargetBeatIndex);
+            _energyPid.Reseed(jump.TargetBeatIndex);
+            _lastPidBeat = -1;
+        }
+
+        /// <summary>
+        /// Feed one fired hop to the seek-lead loop. The learned value goes into
+        /// SeekLeadAutoTrimMs, never into the user's SeekLeadMs slider.
+        /// </summary>
+        private void UpdateSeekLeadCalibration(long plannedTriggerMs, long firedAtMs)
+        {
+            var settings = _jukeboxSettings.Get();
+
+            if (!settings.SeekLeadAutoCalibrate)
+                return;
+
+            // Local WAV seeks in-process on the same tick, so the error is ~0 and the loop would
+            // just be learning noise. Skip rather than special-case it inside the calibrator.
+            if (string.Equals(settings.PlaybackSource, "Local", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (_seekLeadCalibrator == null)
+                _seekLeadCalibrator = new SeekLeadCalibrator(settings.SeekLeadAutoMaxMs);
+
+            if (!_seekLeadCalibrator.NotifyHopFired(plannedTriggerMs, firedAtMs))
+                return;
+
+            settings.SeekLeadAutoTrimMs = _seekLeadCalibrator.TrimMs;
+            LoopVerboseEvent?.Invoke(this,
+                $"Jukebox: seek lead auto-trim → {_seekLeadCalibrator.TrimMs} ms " +
+                $"(manual {settings.SeekLeadMs} ms, {_seekLeadCalibrator.SampleCount} samples)");
+        }
+
         private void OnNavigatorVerboseLogged(object sender, string message) =>
             LoopVerboseEvent?.Invoke(this, message);
 
@@ -559,8 +633,11 @@ namespace SpotifyWPF.Service.Prediction
         public void InvalidateGraphCache(bool rearmIfActive = true)
         {
             _graphCache.Clear();
+            _energyCache.Clear();
             _navigator = null;
             _plannedJump = null;
+            _energyPid = null;
+            _lastPidBeat = -1;
 
             if (rearmIfActive && IsLoopActive && ActiveProfile.Mode == LoopModes.Jukebox)
                 Rearm();
@@ -597,6 +674,12 @@ namespace SpotifyWPF.Service.Prediction
                     // Large seek / skip-ahead: clear recent-destination exhaustion so Softmax
                     // does not fall through to an end-segment-only loop.
                     _navigator.NotifySeekReplan(fromBeat);
+
+                    // A scrub is a change of intent, so integral and derivative history are
+                    // meaningless — full reset rather than the landing reseed a hop gets.
+                    _energyPid?.Reset(fromBeat);
+                    _lastPidBeat = -1;
+
                     PlanAndArmJump(fromBeat);
                 }
 
@@ -632,6 +715,8 @@ namespace SpotifyWPF.Service.Prediction
             if (jump != null)
             {
                 _navigator.NotifyJumpFired(jump.FromBeatIndex, jump.TargetBeatIndex);
+                NotifyEnergyHopFired(jump);
+                UpdateSeekLeadCalibration(jump.TriggerMs, e.FiredAtMs);
 
                 var endLoopNote = ActiveProfile?.Mode == LoopModes.Jukebox &&
                                   _navigator != null &&
@@ -689,6 +774,213 @@ namespace SpotifyWPF.Service.Prediction
                 LoopEvent?.Invoke(this, $"Jukebox: beat graph failed — {ex.GetBaseException().Message}");
                 return null;
             }
+        }
+
+        public BeatEnergyProfile GetEnergyProfileForTrack(string trackId)
+        {
+            if (trackId == null)
+                return null;
+
+            if (_energyCache.TryGetValue(trackId, out var cached))
+                return cached;
+
+            var analysis = AnalysisCache.Load(trackId);
+
+            if (analysis == null || analysis.Beats == null || analysis.Beats.Count == 0)
+                return null;
+
+            try
+            {
+                var profile = _energyBuilder.Build(analysis);
+
+                if (profile == null)
+                    return null;
+
+                _energyCache[trackId] = profile;
+
+                LoopEvent?.Invoke(this,
+                    $"Jukebox: energy profile — {profile.BeatCount} beats, tier {profile.Tier} " +
+                    $"({profile.SourceDescription}), median {profile.MedianEnergy01:0.00}.");
+
+                return profile;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to build energy profile for {trackId}: {ex}");
+                LoopEvent?.Invoke(this, $"Jukebox: energy profile failed — {ex.GetBaseException().Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Create or refresh the energy controller. A settings edit reseeds rather than resets, so
+        /// nudging a gain mid-song does not wipe the accumulated controller state.
+        /// </summary>
+        private void EnsureEnergyController(JukeboxSettings settings, int beatAtPosition)
+        {
+            if (!settings.EnergyControlEnabled)
+            {
+                _energyPid = null;
+                _lastPidBeat = -1;
+                return;
+            }
+
+            var profile = GetEnergyProfileForTrack(CurrentTrackId);
+
+            if (profile == null || profile.BeatCount == 0)
+            {
+                _energyPid = null;
+                _lastPidBeat = -1;
+                return;
+            }
+
+            if (_energyPid == null)
+            {
+                _energyPid = new EnergyPidController(profile, settings);
+                _energyPid.Reset(beatAtPosition);
+                _lastPidBeat = -1;
+            }
+            else
+            {
+                _energyPid.Reseed(beatAtPosition);
+            }
+        }
+
+        private static int FindBeatIndexInGraph(BeatGraph graph, long positionMs)
+        {
+            if (graph?.Beats == null || graph.Beats.Count == 0)
+                return -1;
+
+            for (var i = 0; i < graph.Beats.Count; i++)
+            {
+                if (positionMs < graph.Beats[i].EndMs)
+                    return i;
+            }
+
+            return graph.Beats.Count - 1;
+        }
+
+        /// <summary>
+        /// Advance the controller on beat crossings and decide whether the armed hop should be
+        /// reconsidered. PositionUpdated fires roughly every 250 ms while a beat at 160 BPM lasts
+        /// 375 ms, so this normally sees each beat once or twice — but a UI stall can skip several,
+        /// hence the bounded catch-up.
+        /// </summary>
+        private void TickEnergyController(int beat)
+        {
+            if (_energyPid == null || beat < 0)
+                return;
+
+            // Backward hop / end-loop escape: a jump in time, not a gap to integrate through.
+            if (beat < _lastPidBeat)
+            {
+                _energyPid.Reseed(beat);
+                _lastPidBeat = beat;
+                return;
+            }
+
+            var from = _lastPidBeat < 0 ? beat : Math.Max(_lastPidBeat + 1, beat - 8);
+            EnergyPidSample sample = null;
+
+            for (var b = from; b <= beat; b++)
+                sample = _energyPid.UpdateForBeat(b);
+
+            _lastPidBeat = beat;
+
+            if (sample == null)
+                return;
+
+            EnergyStateChanged?.Invoke(this, sample);
+            LoopVerboseEvent?.Invoke(this, FormatEnergySample(sample));
+
+            TryEnergyReconsiderIfDue(beat, sample);
+        }
+
+        private static string FormatEnergySample(EnergyPidSample sample) =>
+            $"Energy: beat {sample.BeatIndex} · y {sample.Measurement:0.00} r {sample.Setpoint:0.00} " +
+            $"e {sample.Error:+0.00;-0.00} · P {sample.P:+0.00;-0.00} I {sample.I:+0.00;-0.00} " +
+            $"D {sample.D:+0.00;-0.00} → u {sample.Output:+0.00;-0.00} · " +
+            $"gate {(sample.GateActive ? "ON" : "off")} · tier {sample.Tier}";
+
+        /// <summary>
+        /// Energy-driven replan of an already-armed hop. Hops are planned ahead and armed, so this
+        /// is the only way live energy can affect a decision that has already been committed.
+        ///
+        /// Unlike the liveliness roll, this is deliberate rather than random — a random re-roll is
+        /// exactly as likely to swap a good hop for a bad one as the reverse. A gate that only just
+        /// tripped bypasses the replan cap: a hop armed to fire in the middle of a riser we have
+        /// just detected is the single highest-value replan available.
+        /// </summary>
+        private void TryEnergyReconsiderIfDue(int beat, EnergyPidSample sample)
+        {
+            if (_plannedJump == null || _navigator == null)
+                return;
+
+            if (_plannedJump.Kind != JukeboxHopKind.Random)
+                return;
+
+            if (ActiveProfile?.RandomBranches != true)
+                return;
+
+            var settings = _jukeboxSettings.Get();
+            var gateFiredLate = sample.GateActive && !_gateActiveAtPlan;
+            var hysteresis = Math.Max(0, settings.EnergyReplanHysteresis);
+            var drifted = hysteresis > 0 && Math.Abs(sample.Output - _outputAtPlan) > hysteresis;
+
+            if (!gateFiredLate && !(drifted && _replansThisHop < 2))
+                return;
+
+            var reason = gateFiredLate
+                ? "buildup gate tripped after arming"
+                : $"u drifted {_outputAtPlan:+0.00;-0.00} → {sample.Output:+0.00;-0.00}";
+
+            ReplanArmedHop(beat, reason, countsTowardCap: !gateFiredLate);
+        }
+
+        /// <summary>
+        /// Shared replan path for liveliness and energy: drop the armed hop, plan again from the
+        /// current beat, and re-arm if the plan actually changed.
+        /// </summary>
+        private void ReplanArmedHop(int beat, string reason, bool countsTowardCap)
+        {
+            var previous = _plannedJump;
+
+            if (previous == null || _navigator == null)
+                return;
+
+            var newJump = _navigator.PlanNextJump(beat);
+
+            if (newJump == null)
+            {
+                LoopVerboseEvent?.Invoke(this,
+                    $"Jukebox: replan at beat {beat} ({reason}) — no alternate; keeping " +
+                    $"{previous.FromBeatIndex}→{previous.TargetBeatIndex}");
+                return;
+            }
+
+            if (newJump.FromBeatIndex == previous.FromBeatIndex &&
+                newJump.TargetBeatIndex == previous.TargetBeatIndex)
+            {
+                LoopVerboseEvent?.Invoke(this,
+                    $"Jukebox: replan at beat {beat} ({reason}) — same hop " +
+                    $"{previous.FromBeatIndex}→{previous.TargetBeatIndex}");
+                return;
+            }
+
+            // The discarded plan already counted a visit at plan time; undo it so a destination
+            // nobody ever heard does not accumulate a novelty penalty.
+            _navigator.RollbackPlannedDestination(previous.TargetBeatIndex);
+
+            if (countsTowardCap)
+                _replansThisHop++;
+
+            _plannedJump = newJump;
+            LoopEvent?.Invoke(this,
+                $"Jukebox: replanned hop {previous.FromBeatIndex}→{previous.TargetBeatIndex} " +
+                $"to {newJump.FromBeatIndex}→{newJump.TargetBeatIndex} ({reason}).");
+
+            _playbackHost.DisarmAction();
+            ArmCurrentPlannedJump(scheduleLiveliness: false);
         }
 
         private static string FormatMs(long ms)

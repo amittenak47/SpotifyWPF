@@ -165,6 +165,7 @@ namespace SpotifyWPF.ViewModel.Page
             };
             _loopController.LoopVerboseEvent += (_, message) => Log(message, verbose: true);
             _loopController.JukeboxJump += OnJukeboxJump;
+            _loopController.EnergyStateChanged += OnEnergyStateChanged;
 
             _playbackHost.PlayerReady += OnPlayerReady;
             _playbackHost.PlayerError += OnPlayerError;
@@ -1129,7 +1130,306 @@ namespace SpotifyWPF.ViewModel.Page
             $"{_jukeboxSettingsModel.Liveliness * 100:0.#}%";
 
         public string JukeboxSeekLeadMsText =>
-            $"{_jukeboxSettingsModel.SeekLeadMs:0} ms";
+            _jukeboxSettingsModel.SeekLeadAutoTrimMs > 0
+                ? $"{_jukeboxSettingsModel.SeekLeadMs:0} ms (+{_jukeboxSettingsModel.SeekLeadAutoTrimMs} auto)"
+                : $"{_jukeboxSettingsModel.SeekLeadMs:0} ms";
+
+        #region Energy control (PID)
+
+        public bool EnergyControlEnabled
+        {
+            get => _jukeboxSettingsModel.EnergyControlEnabled;
+            set
+            {
+                if (_jukeboxSettingsModel.EnergyControlEnabled == value)
+                    return;
+
+                _jukeboxSettingsModel.EnergyControlEnabled = value;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(EnergyControlStatusText));
+                PersistJukeboxSettings();
+                Log($"Jukebox: energy control {(value ? "on" : "off")}.");
+            }
+        }
+
+        public ObservableCollection<string> EnergyTargetModeOptions { get; } =
+            new ObservableCollection<string> { "Hold current", "Flat", "Arc" };
+
+        public string SelectedEnergyTargetMode
+        {
+            get
+            {
+                var mode = (_jukeboxSettingsModel.EnergyTargetMode ?? "hold").Trim();
+
+                if (mode.Equals("flat", StringComparison.OrdinalIgnoreCase))
+                    return "Flat";
+
+                return mode.Equals("arc", StringComparison.OrdinalIgnoreCase) ? "Arc" : "Hold current";
+            }
+            set
+            {
+                var mode = string.Equals(value, "Flat", StringComparison.OrdinalIgnoreCase)
+                    ? "flat"
+                    : string.Equals(value, "Arc", StringComparison.OrdinalIgnoreCase) ? "arc" : "hold";
+
+                if (string.Equals(_jukeboxSettingsModel.EnergyTargetMode, mode, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                _jukeboxSettingsModel.EnergyTargetMode = mode;
+                RaisePropertyChanged();
+                PersistJukeboxSettings();
+                Log($"Jukebox: energy target = {mode}.");
+            }
+        }
+
+        public double EnergyKp
+        {
+            get => _jukeboxSettingsModel.EnergyKp;
+            set
+            {
+                if (Math.Abs(_jukeboxSettingsModel.EnergyKp - value) < 0.001)
+                    return;
+
+                _jukeboxSettingsModel.EnergyKp = Math.Max(0, value);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(EnergyKpText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string EnergyKpText => $"Kp {_jukeboxSettingsModel.EnergyKp:0.00}";
+
+        public double EnergyKi
+        {
+            get => _jukeboxSettingsModel.EnergyKi;
+            set
+            {
+                if (Math.Abs(_jukeboxSettingsModel.EnergyKi - value) < 0.0001)
+                    return;
+
+                _jukeboxSettingsModel.EnergyKi = Math.Max(0, value);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(EnergyKiText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string EnergyKiText => $"Ki {_jukeboxSettingsModel.EnergyKi:0.000}";
+
+        public double EnergyKd
+        {
+            get => _jukeboxSettingsModel.EnergyKd;
+            set
+            {
+                if (Math.Abs(_jukeboxSettingsModel.EnergyKd - value) < 0.001)
+                    return;
+
+                _jukeboxSettingsModel.EnergyKd = Math.Max(0, value);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(EnergyKdText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string EnergyKdText => $"Kd {_jukeboxSettingsModel.EnergyKd:0.00}";
+
+        public double EnergySetpointPercent
+        {
+            get => _jukeboxSettingsModel.EnergyFlatSetpoint * 100;
+            set
+            {
+                var clamped = Math.Max(0, Math.Min(1, value / 100));
+
+                if (Math.Abs(_jukeboxSettingsModel.EnergyFlatSetpoint - clamped) < 0.001)
+                    return;
+
+                _jukeboxSettingsModel.EnergyFlatSetpoint = clamped;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(EnergySetpointText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string EnergySetpointText => $"{_jukeboxSettingsModel.EnergyFlatSetpoint * 100:0}%";
+
+        public double EnergyHopWeight
+        {
+            get => _jukeboxSettingsModel.EnergyHopWeight;
+            set
+            {
+                if (Math.Abs(_jukeboxSettingsModel.EnergyHopWeight - value) < 0.001)
+                    return;
+
+                _jukeboxSettingsModel.EnergyHopWeight = Math.Max(0, value);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(EnergyHopWeightText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string EnergyHopWeightText => $"w {_jukeboxSettingsModel.EnergyHopWeight:0.00}";
+
+        public double EnergyHopChanceGain
+        {
+            get => _jukeboxSettingsModel.EnergyHopChanceGain;
+            set
+            {
+                if (Math.Abs(_jukeboxSettingsModel.EnergyHopChanceGain - value) < 0.001)
+                    return;
+
+                _jukeboxSettingsModel.EnergyHopChanceGain = Math.Max(0, value);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(EnergyHopChanceGainText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string EnergyHopChanceGainText => $"×{_jukeboxSettingsModel.EnergyHopChanceGain:0.00}";
+
+        public bool BuildupGateEnabled
+        {
+            get => _jukeboxSettingsModel.BuildupGateEnabled;
+            set
+            {
+                if (_jukeboxSettingsModel.BuildupGateEnabled == value)
+                    return;
+
+                _jukeboxSettingsModel.BuildupGateEnabled = value;
+                RaisePropertyChanged();
+                PersistJukeboxSettings();
+            }
+        }
+
+        public double BuildupGateStrengthPercent
+        {
+            get => _jukeboxSettingsModel.BuildupGateStrength * 100;
+            set
+            {
+                var clamped = Math.Max(0, Math.Min(1, value / 100));
+
+                if (Math.Abs(_jukeboxSettingsModel.BuildupGateStrength - clamped) < 0.001)
+                    return;
+
+                _jukeboxSettingsModel.BuildupGateStrength = clamped;
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(BuildupGateStrengthText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string BuildupGateStrengthText => $"{_jukeboxSettingsModel.BuildupGateStrength * 100:0}%";
+
+        public double BuildupGateLookaheadBeats
+        {
+            get => _jukeboxSettingsModel.BuildupGateLookaheadBeats;
+            set
+            {
+                var rounded = (int)Math.Round(value);
+
+                if (_jukeboxSettingsModel.BuildupGateLookaheadBeats == rounded)
+                    return;
+
+                _jukeboxSettingsModel.BuildupGateLookaheadBeats = Math.Max(2, rounded);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(BuildupGateLookaheadBeatsText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string BuildupGateLookaheadBeatsText =>
+            $"{_jukeboxSettingsModel.BuildupGateLookaheadBeats} beats";
+
+        public double EnergyReplanHysteresis
+        {
+            get => _jukeboxSettingsModel.EnergyReplanHysteresis;
+            set
+            {
+                if (Math.Abs(_jukeboxSettingsModel.EnergyReplanHysteresis - value) < 0.001)
+                    return;
+
+                _jukeboxSettingsModel.EnergyReplanHysteresis = Math.Max(0, value);
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(EnergyReplanHysteresisText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public string EnergyReplanHysteresisText =>
+            $"Δu {_jukeboxSettingsModel.EnergyReplanHysteresis:0.00}";
+
+        public bool SeekLeadAutoCalibrate
+        {
+            get => _jukeboxSettingsModel.SeekLeadAutoCalibrate;
+            set
+            {
+                if (_jukeboxSettingsModel.SeekLeadAutoCalibrate == value)
+                    return;
+
+                _jukeboxSettingsModel.SeekLeadAutoCalibrate = value;
+
+                // Turning it off drops the learned trim so the user's slider means what it says.
+                if (!value)
+                    _jukeboxSettingsModel.SeekLeadAutoTrimMs = 0;
+
+                RaisePropertyChanged();
+                RaisePropertyChanged(nameof(JukeboxSeekLeadMsText));
+                PersistJukeboxSettings();
+            }
+        }
+
+        public bool HopCrossfadeEnabled
+        {
+            get => _jukeboxSettingsModel.HopCrossfadeEnabled;
+            set
+            {
+                if (_jukeboxSettingsModel.HopCrossfadeEnabled == value)
+                    return;
+
+                _jukeboxSettingsModel.HopCrossfadeEnabled = value;
+                RaisePropertyChanged();
+                PersistJukeboxSettings();
+            }
+        }
+
+        private EnergyPidSample _lastEnergySample;
+
+        /// <summary>
+        /// Controller readout. Fires once per beat, which is slow enough to bind straight to a
+        /// TextBlock. Marshalled because the transport tick that drives it is not guaranteed to be
+        /// on the UI thread.
+        /// </summary>
+        private void OnEnergyStateChanged(object sender, EnergyPidSample sample)
+        {
+            _lastEnergySample = sample;
+
+            var dispatcher = Application.Current?.Dispatcher;
+
+            if (dispatcher == null || dispatcher.CheckAccess())
+                RaisePropertyChanged(nameof(EnergyControlStatusText));
+            else
+                dispatcher.BeginInvoke((Action)(() => RaisePropertyChanged(nameof(EnergyControlStatusText))));
+        }
+
+        /// <summary>Live controller readout for the Tuning tab; refreshed on each beat.</summary>
+        public string EnergyControlStatusText
+        {
+            get
+            {
+                if (!_jukeboxSettingsModel.EnergyControlEnabled)
+                    return "Energy control off.";
+
+                var sample = _lastEnergySample;
+
+                if (sample == null)
+                    return "Energy control on — waiting for playback.";
+
+                return $"e {sample.Error:+0.00;-0.00} · u {sample.Output:+0.00;-0.00} · " +
+                       $"P {sample.P:+0.00;-0.00} I {sample.I:+0.00;-0.00} D {sample.D:+0.00;-0.00} · " +
+                       $"gate {(sample.GateActive ? "ON" : "off")} · tier {sample.Tier}";
+            }
+        }
+
+        #endregion
 
         public bool JukeboxAllowOnlyReverseBranches
         {
@@ -3617,6 +3917,60 @@ namespace SpotifyWPF.ViewModel.Page
             _jukeboxSettingsModel.LyricFlowBlockClean = snapshot.LyricFlowBlockClean;
             _jukeboxSettingsModel.ShowLyrics = snapshot.ShowLyrics;
 
+            // Energy control. A preset saved before this feature existed deserializes with
+            // EnergyControlEnabled = false, so loading it turns energy control off — correct for a
+            // snapshot, but worth knowing if a preset seems to "disable" the feature.
+            _jukeboxSettingsModel.EnergyControlEnabled = snapshot.EnergyControlEnabled;
+            if (!string.IsNullOrEmpty(snapshot.EnergyTargetMode))
+                _jukeboxSettingsModel.EnergyTargetMode = snapshot.EnergyTargetMode;
+            _jukeboxSettingsModel.EnergyFlatSetpoint = snapshot.EnergyFlatSetpoint;
+            _jukeboxSettingsModel.EnergyArcBars = snapshot.EnergyArcBars;
+            _jukeboxSettingsModel.EnergyKp = snapshot.EnergyKp;
+            _jukeboxSettingsModel.EnergyKi = snapshot.EnergyKi;
+            _jukeboxSettingsModel.EnergyKd = snapshot.EnergyKd;
+            _jukeboxSettingsModel.EnergyIntegralClamp = snapshot.EnergyIntegralClamp;
+            _jukeboxSettingsModel.EnergyMeasureSmoothBeats = snapshot.EnergyMeasureSmoothBeats > 0
+                ? snapshot.EnergyMeasureSmoothBeats
+                : 4;
+            _jukeboxSettingsModel.EnergyHoldSmoothBeats = snapshot.EnergyHoldSmoothBeats > 0
+                ? snapshot.EnergyHoldSmoothBeats
+                : 32;
+            _jukeboxSettingsModel.EnergyHopChanceGain = snapshot.EnergyHopChanceGain;
+            _jukeboxSettingsModel.EnergyHopWeight = snapshot.EnergyHopWeight;
+            _jukeboxSettingsModel.BuildupGateEnabled = snapshot.BuildupGateEnabled;
+            _jukeboxSettingsModel.BuildupGateStrength = snapshot.BuildupGateStrength;
+            _jukeboxSettingsModel.BuildupGateLookaheadBeats = snapshot.BuildupGateLookaheadBeats > 1
+                ? snapshot.BuildupGateLookaheadBeats
+                : 8;
+            _jukeboxSettingsModel.EnergyReplanHysteresis = snapshot.EnergyReplanHysteresis;
+            _jukeboxSettingsModel.HopCrossfadeEnabled = snapshot.HopCrossfadeEnabled;
+
+            // SeekLeadAuto* is machine/transport calibration, not musical authorship: deliberately
+            // NOT restored from a preset, so importing someone else's setup cannot import their
+            // network latency.
+
+            RaisePropertyChanged(nameof(EnergyControlEnabled));
+            RaisePropertyChanged(nameof(EnergyKp));
+            RaisePropertyChanged(nameof(EnergyKpText));
+            RaisePropertyChanged(nameof(EnergyKi));
+            RaisePropertyChanged(nameof(EnergyKiText));
+            RaisePropertyChanged(nameof(EnergyKd));
+            RaisePropertyChanged(nameof(EnergyKdText));
+            RaisePropertyChanged(nameof(EnergyHopWeight));
+            RaisePropertyChanged(nameof(EnergyHopWeightText));
+            RaisePropertyChanged(nameof(EnergyHopChanceGain));
+            RaisePropertyChanged(nameof(EnergyHopChanceGainText));
+            RaisePropertyChanged(nameof(EnergySetpointPercent));
+            RaisePropertyChanged(nameof(EnergySetpointText));
+            RaisePropertyChanged(nameof(SelectedEnergyTargetMode));
+            RaisePropertyChanged(nameof(BuildupGateEnabled));
+            RaisePropertyChanged(nameof(BuildupGateStrengthPercent));
+            RaisePropertyChanged(nameof(BuildupGateStrengthText));
+            RaisePropertyChanged(nameof(BuildupGateLookaheadBeats));
+            RaisePropertyChanged(nameof(BuildupGateLookaheadBeatsText));
+            RaisePropertyChanged(nameof(EnergyReplanHysteresis));
+            RaisePropertyChanged(nameof(EnergyReplanHysteresisText));
+
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMax));
             RaisePropertyChanged(nameof(JukeboxSimilarityThresholdMaxText));
             RaisePropertyChanged(nameof(JukeboxMinBeatsBetweenJumps));
@@ -3804,7 +4158,27 @@ namespace SpotifyWPF.ViewModel.Page
                 LyricFlowPhraseCuts = source.LyricFlowPhraseCuts,
                 LyricFlowSameSection = source.LyricFlowSameSection,
                 LyricFlowBlockClean = source.LyricFlowBlockClean,
-                ShowLyrics = source.ShowLyrics
+                ShowLyrics = source.ShowLyrics,
+                EnergyControlEnabled = source.EnergyControlEnabled,
+                EnergyTargetMode = source.EnergyTargetMode,
+                EnergyFlatSetpoint = source.EnergyFlatSetpoint,
+                EnergyArcBars = source.EnergyArcBars,
+                EnergyKp = source.EnergyKp,
+                EnergyKi = source.EnergyKi,
+                EnergyKd = source.EnergyKd,
+                EnergyIntegralClamp = source.EnergyIntegralClamp,
+                EnergyMeasureSmoothBeats = source.EnergyMeasureSmoothBeats,
+                EnergyHoldSmoothBeats = source.EnergyHoldSmoothBeats,
+                EnergyHopChanceGain = source.EnergyHopChanceGain,
+                EnergyHopWeight = source.EnergyHopWeight,
+                BuildupGateEnabled = source.BuildupGateEnabled,
+                BuildupGateStrength = source.BuildupGateStrength,
+                BuildupGateLookaheadBeats = source.BuildupGateLookaheadBeats,
+                EnergyReplanHysteresis = source.EnergyReplanHysteresis,
+                SeekLeadAutoCalibrate = source.SeekLeadAutoCalibrate,
+                SeekLeadAutoTrimMs = source.SeekLeadAutoTrimMs,
+                SeekLeadAutoMaxMs = source.SeekLeadAutoMaxMs,
+                HopCrossfadeEnabled = source.HopCrossfadeEnabled
             };
         }
 

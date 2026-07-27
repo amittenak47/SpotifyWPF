@@ -531,6 +531,109 @@
                                                   IsChecked="{Binding LyricFlowBlockClean}"
                                                   Margin="0,0,0,4"
                                                   ToolTip="Prefer landing on lyric-block starts and exiting near line ends so skips/loops feel like clean lyric blocks."/>
+                                        <Expander Header="Energy control (PID)" IsExpanded="False" Margin="0,4,0,8"
+                                                  Foreground="{DynamicResource AppForegroundBrush}">
+                                            <StackPanel Margin="0,6,0,0">
+                                                <TextBlock FontSize="11" TextWrapping="Wrap"
+                                                           Margin="0,0,0,8"
+                                                           Foreground="{DynamicResource AppMutedForegroundBrush}"
+                                                           Text="Steers hops by the track's own energy curve. The buildup gate does most of the audible work — it stops hops landing mid-riser. Kp is the gain that matters; Ki is small on purpose and Kd defaults to 0 (it damps a drop-out exactly as hard as a build-up). Tier 1 works on any analysis; tier 2 needs band detail from a local re-analyze."/>
+                                                <CheckBox Content="Enable energy control (PID)"
+                                                          Foreground="{DynamicResource AppForegroundBrush}"
+                                                          IsChecked="{Binding EnergyControlEnabled}"
+                                                          Margin="0,0,0,6"
+                                                          ToolTip="Master switch. Off = branch behavior identical to before this feature existed."/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                    <TextBlock Text="Energy target"
+                                                               Width="160"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"
+                                                               ToolTip="Hold current = track the level this section has been sitting at (match the segment). Flat = a fixed setpoint. Arc = ramp toward the setpoint over N bars, then back."/>
+                                                    <ComboBox MinWidth="120"
+                                                              MinHeight="28"
+                                                              VerticalAlignment="Center"
+                                                              ItemsSource="{Binding EnergyTargetModeOptions}"
+                                                              SelectedItem="{Binding SelectedEnergyTargetMode}"
+                                                              ToolTip="Hold current is the default and the one that means 'match the energy of what is playing'."/>
+                                                </StackPanel>
+                                                <local:TuningSliderRow Label="Kp — proportional gain"
+                                                                       ValueText="{Binding EnergyKpText}"
+                                                                       Minimum="0"
+                                                                       Maximum="3"
+                                                                       Value="{Binding EnergyKp}"
+                                                                       InfoTip="How hard the controller reacts to being above/below the target energy right now. The term that actually earns its keep.&#x0a;&#x0a;Example: 0.9 gives a firm nudge toward matching landings; 2+ makes the walk chase energy at the expense of smooth splices."/>
+                                                <local:TuningSliderRow Label="Ki — integral gain"
+                                                                       ValueText="{Binding EnergyKiText}"
+                                                                       Minimum="0"
+                                                                       Maximum="0.5"
+                                                                       Value="{Binding EnergyKi}"
+                                                                       InfoTip="Accumulates persistent error. Small on purpose: the graph often cannot reach a given setpoint at all, and the integral just winds up against it (it is clamped and bled on every hop).&#x0a;&#x0a;Example: 0.05 nudges out of a section that keeps missing the target; 0.3 will hunt."/>
+                                                <local:TuningSliderRow Label="Kd — derivative gain"
+                                                                       ValueText="{Binding EnergyKdText}"
+                                                                       Minimum="0"
+                                                                       Maximum="2"
+                                                                       Value="{Binding EnergyKd}"
+                                                                       InfoTip="Default 0, and that is not an oversight. D is symmetric — it damps a drop-out exactly as hard as a build-up — and it differentiates a curve we can already read ahead in. Use the buildup gate for 'do not interrupt the riser'.&#x0a;&#x0a;Example: leave at 0 unless you are experimenting."/>
+                                                <local:TuningSliderRow Label="Energy setpoint (Flat / Arc top)"
+                                                                       ValueText="{Binding EnergySetpointText}"
+                                                                       Minimum="0"
+                                                                       Maximum="100"
+                                                                       Value="{Binding EnergySetpointPercent}"
+                                                                       InfoTip="Target level for Flat mode, and the destination for Arc. Ignored in Hold current mode.&#x0a;&#x0a;Example: 70% parks the remix in the loud half of the track."/>
+                                                <local:TuningSliderRow Label="Energy hop weight w (destination bias)"
+                                                                       ValueText="{Binding EnergyHopWeightText}"
+                                                                       Minimum="0"
+                                                                       Maximum="3"
+                                                                       Value="{Binding EnergyHopWeight}"
+                                                                       InfoTip="How strongly energy steers WHERE to land. Added to the Softmax score and normalized by τ, so changing temperature does not require re-tuning this. Never removes branches.&#x0a;&#x0a;Example: 0.5 breaks ties between comparable landings; 2+ will start overriding similarity."/>
+                                                <local:TuningSliderRow Label="Energy chance gain (when to hop)"
+                                                                       ValueText="{Binding EnergyHopChanceGainText}"
+                                                                       Minimum="0"
+                                                                       Maximum="2"
+                                                                       Value="{Binding EnergyHopChanceGain}"
+                                                                       InfoTip="Scales branch chance by (1 + gain·u), then re-clamps to your min/max — so no gain can hop faster than the ceiling you set.&#x0a;&#x0a;Example: 0.8 hops sooner when energy is below target. If hop rate moves a lot, lower this first."/>
+                                                <CheckBox Content="Buildup gate (don't hop through risers)"
+                                                          Foreground="{DynamicResource AppForegroundBrush}"
+                                                          IsChecked="{Binding BuildupGateEnabled}"
+                                                          Margin="0,4,0,6"
+                                                          ToolTip="Looks ahead for rising transients + rising highs with the kick absent — a filtered riser or snare roll — and holds the hop so the build lands. On tier 1 (no band detail) this degrades to plain rising-loudness and will also fire on a chorus arriving."/>
+                                                <local:TuningSliderRow Label="Buildup gate strength"
+                                                                       ValueText="{Binding BuildupGateStrengthText}"
+                                                                       Minimum="0"
+                                                                       Maximum="100"
+                                                                       Value="{Binding BuildupGateStrengthPercent}"
+                                                                       InfoTip="Odds the gate actually vetoes a hop while a build is detected. 100% = never hop through a detected build.&#x0a;&#x0a;Example: 90% leaves the occasional surprise cut in."/>
+                                                <local:TuningSliderRow Label="Buildup gate lookahead"
+                                                                       ValueText="{Binding BuildupGateLookaheadBeatsText}"
+                                                                       Minimum="2"
+                                                                       Maximum="32"
+                                                                       Value="{Binding BuildupGateLookaheadBeats}"
+                                                                       InfoTip="How many beats ahead the detector inspects. Longer catches slow filter sweeps; shorter reacts to snare rolls only.&#x0a;&#x0a;Example: 8 ≈ two bars."/>
+                                                <local:TuningSliderRow Label="Replan hysteresis (Δu before rethinking a hop)"
+                                                                       ValueText="{Binding EnergyReplanHysteresisText}"
+                                                                       Minimum="0"
+                                                                       Maximum="1"
+                                                                       Value="{Binding EnergyReplanHysteresis}"
+                                                                       InfoTip="Hops are planned ahead and armed, so this is how live energy revisits a committed hop. Unlike Liveliness this is deliberate, not a coin flip — consider setting Liveliness to 0 when energy control is on.&#x0a;&#x0a;Example: 0.25 rethinks only on a real swing in the error; 0 disables drift replans (the gate can still override)."/>
+                                                <CheckBox Content="Auto-calibrate seek lead from measured latency"
+                                                          Foreground="{DynamicResource AppForegroundBrush}"
+                                                          IsChecked="{Binding SeekLeadAutoCalibrate}"
+                                                          Margin="0,4,0,4"
+                                                          ToolTip="Slow PI loop on how late the transport actually fires an armed jump. Writes a separate auto trim shown next to the Seek lead slider — it never moves the slider itself. No effect on Local WAV, where seeks are in-process."/>
+                                                <CheckBox Content="Micro-crossfade hops (Local WAV only)"
+                                                          Foreground="{DynamicResource AppForegroundBrush}"
+                                                          IsChecked="{Binding HopCrossfadeEnabled}"
+                                                          Margin="0,0,0,6"
+                                                          ToolTip="8–30 ms equal-power fade at the splice, sized by how far the energy jumps. Capped deliberately: past ~40 ms you smear the downbeat transient. Impossible on Spotify playback, which can only seek."/>
+                                                <TextBlock Text="{Binding EnergyControlStatusText}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="11"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,4,0,0"
+                                                           Foreground="{DynamicResource AppMutedForegroundBrush}"/>
+                                            </StackPanel>
+                                        </Expander>
+
                                         <CheckBox Content="Show synced lyrics on stage"
                                                   Foreground="{DynamicResource AppForegroundBrush}"
                                                   IsChecked="{Binding ShowLyricsPanel}"
