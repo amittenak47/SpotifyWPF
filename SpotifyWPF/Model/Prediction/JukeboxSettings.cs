@@ -79,7 +79,7 @@ namespace SpotifyWPF.Model.Prediction
         /// (continuation phase — matches Enhanced stack[i+1]≈stack[j] scoring).
         /// Independent of <see cref="PhasePenaltyMode"/> (graph-build IndexInBar soft/hard).
         /// On floating grooves (e.g. Dreams) or gap-split beat grids, N=4/8/16 can wipe almost all
-        /// candidates — unrelated to lyric Softmax. See docs/lyric-flow.md.
+        /// candidates — unrelated to lyric Softmax. See docs/infinite-jukebox-lyric-flow.md.
         /// </summary>
         [JsonPropertyName("phraseAlignBeats")]
         public int PhraseAlignBeats { get; set; } = 0;
@@ -152,7 +152,7 @@ namespace SpotifyWPF.Model.Prediction
 
         /// <summary>
         /// Shared Softmax scale for lyric-flow layers (0 = all lyric steering off).
-        /// See docs/lyric-flow.md (AutoMashUpper / Foote / LyricAlly lineage).
+        /// See docs/infinite-jukebox-lyric-flow.md (AutoMashUpper / Foote / LyricAlly lineage).
         /// </summary>
         [JsonPropertyName("lyricPhraseWeight")]
         public double LyricPhraseWeight { get; set; } = 0.0144;

@@ -288,7 +288,7 @@ namespace SpotifyWPF.Service.Lyrics
 
     /// <summary>
     /// Beat-mapped lyric context for Softmax steering (phrase / section / block layers).
-    /// See docs/lyric-flow.md.
+    /// See docs/infinite-jukebox-lyric-flow.md.
     /// </summary>
     public sealed class LyricFlowContext
     {

@@ -1,45 +1,43 @@
-# Loop Lab forward plan
+# Infinite Jukebox forward plan
 
-**Branch:** `cursor/lyrics-branch-modifiers-e82b`  
-**Scope:** Infinite Jukebox (Loop Lab) — lyrics, Softmax steering, Local-WAV modifiers, waveform-aware splicing, section momentum, and generative vocal/instrument overlays.
+**Branch:** `cursor/lyrics-branch-modifiers-e82b` (merged to `master`)  
+**Scope:** Infinite Jukebox — **instrumental** DJ behavior: waveform-aware splicing, section momentum, stem-aware Local-WAV remix, and personal audio enhancement on branches. Lyrics support exists for navigation steering; see [Appendix — Lyrics](#appendix--lyrics).
 
-This document is the **forward** plan only (no strikethrough history). Earlier shipping notes live in git history and the prior Cursor plan snapshot.
+This document is the **forward** plan only (no strikethrough history). Shipping notes live in [CHANGELOG.md](../CHANGELOG.md).
 
 ---
 
-## Foundation (already on the feature branch)
+## Foundation (shipped)
 
-These are assumed as given for later phases:
+Assumed for later phases:
 
-- **Lyrics:** LRCLIB timed LRC + AppData cache; karaoke column; Softmax layers (phrase cuts / same section / block-clean). No lyrics ⇒ empty lyric context ⇒ pure audio Softmax.
-- **Local-WAV modifiers:** EQ/drive stacks on locked branches (Ctrl-stretch / Alt-cycle); ignored on Spotify stream.
-- **Continuation phase:** Phrase align `(from+1)%N`, region gate on `embeds[i+1]`, Hard bar-phase at nav, seek on next-beat `StartMs`.
-- **Exclusions:** Shift+drag ring ranges for dialogue outros; persist on `LoopProfile`.
-- **Chrome:** Terminal-black stage, per-track hashed EQ/ring palette, responsive compact lyrics/details/SSM.
+- **Enhanced beat graph + Softmax navigation** — continuation edges, dwell, locks, preference learning, liveliness.
+- **Local-WAV modifiers** — EQ/drive stacks on locked branches (Ctrl-stretch / Alt-cycle); ignored on Spotify stream.
+- **Continuation phase** — Phrase align `(from+1)%N`, region gate on `embeds[i+1]`, Hard bar-phase at nav, seek on next-beat `StartMs`.
+- **Exclusions** — Shift+drag ring ranges for dialogue outros; persist on `LoopProfile`.
+- **Chrome** — Terminal-black stage, per-track hashed EQ/ring palette, SSM heatmap, mini player.
 
-**Hard constraint:** Spotify Web Playback = seek/volume only (no PCM). Generative audio and waveform DSP are **Local WAV only**.
+**Hard constraint:** Spotify Web Playback = seek/volume only (no PCM). Waveform DSP, stem separation, and branch overlays are **Local WAV only**.
 
 ```mermaid
 flowchart TB
   subgraph shipped [Shipped]
-    lyrics[LRCLIB + Softmax lyric layers]
     graph[Enhanced beat graph]
     nav[BeatNavigator Softmax]
     mod[Local WAV BranchModifier]
     excl[Shift exclude ranges]
   end
-  subgraph next [Next]
+  subgraph next [Next — instrumental focus]
     wave[Phase 4 waveform envelope]
     mom[Phase 5 section momentum]
-    gen[Phase 6 stems + voice + remix]
+    stems[Phase 6 stems + overlays + mix]
   end
-  lyrics --> nav
   graph --> nav
   nav -->|seek| transport[Transport]
   wave --> nav
   mom --> nav
-  gen --> mod
-  wave --> gen
+  wave --> stems
+  stems --> mod
 ```
 
 ---
@@ -50,12 +48,12 @@ flowchart TB
 
 | Capability | Approach | Why |
 |------------|----------|-----|
-| Envelope continuity Softmax | Penalize `\|RMS(j) − RMS(i+1)\|` (and optional loudness slope) at candidate landings | Reduces “volume jumps” at seeks |
+| Envelope continuity Softmax | Penalize `\|RMS(j) − RMS(i+1)\|` (and optional loudness slope) at candidate landings | Reduces volume jumps at seeks |
 | Auto quiet-outro exclude | Detect trailing low-energy / low-onset tails; propose or auto-write `ExcludedRange` | Same store as Shift+paint |
-| Novelty as phrase proxy | Foote-style novelty peaks when lyrics missing | Instrumentals still get phrase-ish cuts |
+| Novelty as phrase proxy | Foote-style novelty peaks on instrumentals | Phrase-ish cuts without lyrics |
 | Local seek polish | Snap seeks near envelope troughs / zero-crossings; optional short equal-power crossfade | Fewer clicks; DJ-grade transitions |
 
-**Integration with later phases:** Phase 6 remix overlays must be **time-aligned to the same beat/waveform grid** (loudness + F0 envelopes) so generated vocals sit in the mix instead of floating on top.
+**Integration with Phase 6:** Stem overlays and remixed regions must be **time-aligned to the same beat/waveform grid** (loudness envelopes, onset grid) so instrumental layers sit in the mix instead of floating on top.
 
 ---
 
@@ -78,104 +76,87 @@ score = −dist/τ − λ·visits + w_pref·pref + lyricBias + m·MomentumBias(i
 
 ---
 
-## Phase 6 — Song voice, song sounds, lyrics, and waveform (reworked)
+## Phase 6 — Instrumental stems, overlays, and personal audio
 
-### What “a few lines” actually buys you
+**Goal:** Make the automated DJ feel like a real mix engine — isolate and rebalance **drums, bass, and other**, layer one-shots and generated percussion, and cache remixed regions on `BranchModifier`. This phase is about **the backing track**, not synthetic vocals.
 
-Recent **few-shot / zero-shot** local models can clone a **speaking** timbre from seconds of audio (e.g. ~6 s reference for XTTS-v2; OpenVoice zero-shot tone-color conversion). That is **not** the same as “sing these new lyrics in time, in key, over this mix.”
-
-For Loop Lab, Phase 6 splits into three products that share one Local-WAV pipeline:
+### What Phase 6 delivers
 
 | Layer | Job | Typical local stack |
 |-------|-----|---------------------|
-| **A. Song sounds (instrumental)** | Isolate / remix drums, bass, other; layer SFX or generated percussion on a branch | Demucs / Hybrid Transformer Demucs stems; existing `BranchModifier` overlays |
-| **B. Song voice (timbre)** | Make new audio sound like *this* singer | Few-shot **TTS clone** (speech) *or* **singing voice conversion** (SVC) on a dry vocal |
-| **C. Lyrics (content + timing)** | What is said/sung and **when** it hits the beat grid | LRCLIB/Whisper text; beat/F0/loudness alignment from Phase 4 waveform |
+| **Stem separation** | Split cached WAV into drums / bass / other (+ vocal stem for ducking only) | Demucs / HTDemucs |
+| **Stem-aware branches** | On a supercharged hop: duck original bed, boost drums/bass, mute noisy stems | Existing `BranchModifier` + stem busses |
+| **Overlays** | One-shots, loops, generated percussion on beat grid | Equal-power fades; optional lightweight sample libs |
+| **Personal audio** | Per-track EQ/drive presets, enhancement hooks on locked hops | Extend current modifier chain |
 
 ```mermaid
 flowchart LR
   wav[Local_WAV] --> demucs[Demucs_stems]
-  demucs --> vocals[vocals]
-  demucs --> inst[drums_bass_other]
-  vocals --> ref[Few_sec_reference_clips]
-  ref --> clone[Voice_clone_or_SVC]
-  userLyric[Custom_or_LRCLIB_lines] --> synth[TTS_or_SVS]
-  synth --> clone
-  clone --> align[Waveform_beat_F0_align]
-  inst --> mix[Stem_aware_mix]
-  align --> mix
-  mix --> mod[BranchModifier_region]
+  demucs --> drums[drums]
+  demucs --> bass[bass]
+  demucs --> other[other]
+  demucs --> vocals[vocals_duck_only]
+  drums --> mix[Stem_aware_mix]
+  bass --> mix
+  other --> mix
+  vocals -->|optional_duck| mix
+  overlays[One_shots_percussion] --> mix
+  mix --> align[Waveform_beat_grid_align]
+  align --> mod[BranchModifier_region]
   mod --> play[LocalWavPlaybackHost]
 ```
 
-### A — Song sounds (non-vocal)
+### 6a — Stems
 
-1. Offline (or first-play) **stem separation** of the cached WAV into vocals / drums / bass / other.  
-2. On a supercharged branch: duck or mute original vocals; boost drums/bass; overlay one-shots.  
-3. Use **stem-aware crossfades** at hop boundaries (drums/bass enter earlier than vocals) — same idea as modern DJ engines that mix stems independently.
+1. Offline (or first-play) **stem separation** of the cached WAV.  
+2. Expose stem mute/solo/gain in BranchModifier UI.  
+3. On supercharged branches: duck or mute the vocal stem; rebalance drums/bass/other independently.
 
-This is the highest-leverage “song sounds” path and does **not** require a voice model.
+Highest-leverage path for “song sounds” — **no generative voice model required**.
 
-### B — Song voice (few-shot local models)
+### 6b — Waveform-aligned overlays
 
-**Speech-like overlays (spoken ad-libs, whispered tags):**
+1. Place one-shots and short loops on the **beat grid** (same `StartMs` quantum as jukebox seeks).  
+2. **Stem-aware crossfades** at hop boundaries (drums/bass enter earlier than pads) — beat-locked stem mixing like modern DJ engines.  
+3. Match overlay gain to local RMS envelope (Phase 4 signals).
 
-- **Coqui XTTS-v2** — clone from ~6 s of reference audio; multilingual; strong quality; CPML restricts commercial use. Community fork continues post-Coqui shutdown.  
-- **OpenVoice V2** — zero-shot tone-color conversion; MIT; lighter/faster for personal apps.
+### 6c — Personal audio enhancement
 
-**Sung lines (melody + lyrics):**
+1. Per-track enhancement presets (EQ curves, drive, bus compression) saved with lock presets.  
+2. Pre-render a **region WAV** (or stem mix) for `fromBeat…toBeat` into the modifier cache.  
+3. At hop time Local WAV plays the remixed region mixed with (or instead of) the raw capture — seek-based at edges, DSP-rich in the middle.
 
-- Spoken TTS alone will sound wrong on melodic material. Prefer:
-  - **Singing voice conversion (SVC):** generate or record a guide vocal → convert timbre with **RVC** / **So-VITS-SVC** (often fine with ~10+ minutes of dry vocal; community reports usable results with less for some voices).  
-  - **Singing voice synthesis (SVS):** score/lyrics → mel → vocoder (**DiffSinger**, **VISinger**, data-efficient variants like **MakeSinger**). Heavier; needs pitch/note guidance.
+### Waveform integration (Phase 4 + 6)
 
-**Practical Loop Lab v1 recommendation:**  
-Demucs vocals → short reference clips for **OpenVoice/XTTS** ad-libs **or** RVC on a hummed/MIDI-timed guide for true singing; keep instrumental stems from Demucs.
-
-### C — Lyrics
-
-- **Display / Softmax:** already shipped (LRCLIB).  
-- **Authoring:** user-typed lines or AI-suggested alternate lines; map start times to beat indices (existing `LyricBeatMapper`).  
-- **Synthesis input:** phonemes/text + target startMs + optional F0 contour extracted from the original vocal stem in that beat span (so the clone follows the song’s melody envelope even when SVC is used).
-
-### Waveform integration (how Phase 4 and 6 meet)
-
-| Waveform signal | Use in Phase 6 |
-|-----------------|----------------|
-| Beat grid + `StartMs` | Place generated clip starts on the same quantum as jukebox seeks |
-| RMS / loudness envelope | Match overlay gain to local mix; Softmax continuity if the remixed region is also a hop landing |
-| F0 / pitch track on vocal stem | Guide SVS/SVC so custom lyrics follow the original contour |
-| Onset / novelty peaks | Prefer phrase-clean insert points (and auto-exclude speech outros) |
-| Zero-crossing + equal-power stem fades | Click-free insert/replace of vocal stem under `BranchModifier` |
-
-**Playback model:** pre-render a **region WAV** (or stem mix) for `fromBeat…toBeat` into the modifier cache; at hop time Local WAV plays the remixed region instead of (or mixed with) the raw capture — still seek-based at the edges, DSP-rich in the middle.
+| Waveform signal | Use |
+|-----------------|-----|
+| Beat grid + `StartMs` | Quantize overlay starts and stem crossfades |
+| RMS / loudness envelope | Match stem/overlay gain; Softmax continuity at landings |
+| Onset / novelty peaks | Phrase-clean insert points; auto-exclude speech outros |
+| Zero-crossing + equal-power fades | Click-free stem swaps under BranchModifier |
 
 ### Ethics / product gates
 
-- Personal/experimental use first; respect model licenses (XTTS CPML vs OpenVoice MIT).  
-- No cloud upload of tracks by default — run Python sidecar locally (same pattern as `analyze_track.py`).  
-- Clear UI that generated vocals are synthetic.
+- Personal/experimental use first; respect model licenses for bundled separation models.  
+- No cloud upload of tracks by default — run Python sidecar locally (same pattern as `analyze_track.py`).
 
 ### Suggested Phase 6 slices
 
-1. **6a — Stems:** Demucs on cached WAV; expose stem mute/solo in BranchModifier.  
-2. **6b — Waveform-aligned overlays:** one-shots + equal-power fades on beat grid (no ML voice yet).  
-3. **6c — Few-shot speech clone:** OpenVoice/XTTS from Demucs vocal refs → timed ad-lib on branch.  
-4. **6d — Singing path:** RVC/So-VITS or DiffSinger-class SVS with F0 from original stem.  
+1. **6a** — Demucs on cached WAV; stem mute/solo in BranchModifier.  
+2. **6b** — Waveform-aligned one-shots + equal-power stem fades on beat grid.  
+3. **6c** — Personal enhancement presets + pre-rendered remixed regions per lock.
 
 ---
 
 ## References
 
-### Infinite Jukebox / structure / lyrics (Phases 1–5)
+### Infinite Jukebox / structure (Phases 4–5)
 
 - Paul Lamere, *The Infinite Jukebox* (2012). https://musicmachinery.com/2012/11/12/the-infinite-jukebox/  
 - Remixatron. https://github.com/drensin/Remixatron  
 - Davies et al., *AutoMashUpper* — IEEE/ACM TASLP 2014. https://doi.org/10.1109/TASLP.2014.2347135  
 - Foote, *Automatic audio segmentation using a measure of audio novelty* — ICME 2000. https://doi.org/10.1109/ICME.2000.869637  
 - Paulus, Müller, Klapuri, *Audio-based Music Structure Analysis* — ISMIR 2010 survey. https://www.audiolabs-erlangen.de/content/05_fau/professor/00_mueller/03_publications/2010_PaulusMuellerKlapuri_STAR-MusicStructure_ISMIR.pdf  
-- Wang / Kan et al., *LyricAlly*. https://www.comp.nus.edu.sg/~kanmy/papers/04432643.pdf  
-- *Multimodal Lyrics-Rhythm Matching* — arXiv:2301.02732. https://doi.org/10.48550/arXiv.2301.02732  
 - Kim et al., DJ mix subsequence alignment — arXiv:2008.10267. https://ar5iv.labs.arxiv.org/html/2008.10267  
 
 ### Waveform / stems / transitions (Phases 4 & 6)
@@ -183,26 +164,12 @@ Demucs vocals → short reference clips for **OpenVoice/XTTS** ad-libs **or** RV
 - Défossez et al., *Music Source Separation in the Waveform Domain* (Demucs) — arXiv:1911.13254. https://arxiv.org/pdf/1911.13254  
 - Défossez, *Hybrid Spectrogram and Waveform Source Separation* — ISMIR 2021 MSS workshop.  
 - Rouard, Massa, Défossez, *Hybrid Transformers for Music Source Separation* (HTDemucs) — ICASSP 2023. https://github.com/facebookresearch/demucs  
-- Practical stem-aware / equal-power / beat-aligned transition patterns in open DJ engines (e.g. beat-locked stem crossfades).  
-
-### Few-shot / local voice (Phase 6)
-
-- Casanova et al. / Coqui, **XTTS-v2** — few-second cloning, 17 languages; model card. https://huggingface.co/coqui/XTTS-v2  
-- Qin et al., **OpenVoice** — zero-shot cross-lingual voice cloning — arXiv:2312.01479. https://arxiv.org/abs/2312.01479 · https://github.com/myshell-ai/OpenVoice  
-
-### Singing synthesis & conversion (Phase 6)
-
-- Liu et al., **DiffSinger**: Singing Voice Synthesis via Shallow Diffusion Mechanism — AAAI 2022 / arXiv:2105.02446. https://arxiv.org/abs/2105.02446  
-- Zhang et al., **VISinger**: Variational Inference with Adversarial Learning for End-to-End Singing Voice Synthesis — ICASSP 2022. https://doi.org/10.1109/ICASSP43922.2022.9747664  
-- **MakeSinger** — data-efficient semi-supervised SVS — arXiv:2406.05965. https://arxiv.org/html/2406.05965  
-- **So-VITS-SVC** — SoftVC + VITS singing voice conversion (community). https://github.com/svc-develop-team/so-vits-svc  
-- **RVC** — Retrieval-based Voice Conversion WebUI (few-minute training claims; FAISS retrieval to reduce timbre leak). https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI  
-- Dong, *Study and Practice of Singing Voice Conversion Based on E-SVS and R-SVC* — JCC 2025 (UVR5 + retrieval SVC pipeline). https://doi.org/10.4236/jcc.2025.139003  
+- Beat-locked stem crossfades in open DJ engines (equal-power / stem-aware transition patterns).
 
 ### Softmax / interactive policy (Phase 5)
 
-- Existing Loop Lab Slice 4–6: Softmax(−dist/τ − λ·visits + w_pref·pref); pairwise preference labels + scrub negatives (in-repo).  
-- Explore–exploit framing for interactive remix: treat scrub/success EMA as a restless bandit signal over preserve vs cut.
+- In-repo Slice 4–6: Softmax(−dist/τ − λ·visits + w_pref·pref); pairwise preference labels + scrub negatives.  
+- Explore–exploit framing: scrub/success EMA as restless bandit signal over preserve vs cut.
 
 ---
 
@@ -210,5 +177,33 @@ Demucs vocals → short reference clips for **OpenVoice/XTTS** ad-libs **or** RV
 
 1. **Phase 4** — envelope Softmax + auto-exclude + Local crossfade hooks (unblocks Phase 6 alignment).  
 2. **Phase 5** — momentum slider + Auto from prefs (pure navigator; no ML sidecar).  
-3. **Phase 6a–b** — Demucs stems + waveform-aligned non-vocal overlays on BranchModifier.  
-4. **Phase 6c–d** — local few-shot speech clone, then singing SVC/SVS with F0 from vocal stem.
+3. **Phase 6a–c** — Demucs stems, waveform-aligned instrumental overlays, personal enhancement presets on BranchModifier.
+
+---
+
+## Appendix — Lyrics
+
+Lyrics are **not** the focus of this forward plan, but they are already shipped and will likely stay useful for navigation and timing.
+
+### Shipped (steering only)
+
+- LRCLIB timed LRC + AppData cache; karaoke column on stage.  
+- Softmax **lyric-flow** layers (phrase cuts / same section / block-clean) — bonuses only; they do not remove graph edges. See [`docs/infinite-jukebox-lyric-flow.md`](infinite-jukebox-lyric-flow.md).  
+- No lyrics ⇒ empty lyric context ⇒ pure audio Softmax.
+
+### Future support role (not synthesis)
+
+| Use | Notes |
+|-----|--------|
+| Hop steering | Phrase boundaries, same-section preference, block-clean landings |
+| Beat mapping | `LyricBeatMapper` — align line starts to beat indices for UI and diagnostics |
+| Timing hints for instrumental work | Phrase boundaries can inform Phase 4 novelty / Phase 5 momentum when waveform alone is ambiguous |
+
+### Out of scope for this plan
+
+- **Lyric synthesis**, **voice cloning**, **SVC/SVS**, and **custom sung lines** are not planned milestones. If explored later, they would be a separate experimental track — instrumental stem remix remains the product goal.
+
+### Lyrics references
+
+- Wang / Kan et al., *LyricAlly*. https://www.comp.nus.edu.sg/~kanmy/papers/04432643.pdf  
+- *Multimodal Lyrics-Rhythm Matching* — arXiv:2301.02732. https://doi.org/10.48550/arXiv.2301.02732  

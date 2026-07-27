@@ -1,6 +1,6 @@
 # Lyric-aware Infinite Jukebox branching
 
-How Loop Lab steers beat-graph hops using timed lyrics, how that differs from
+How Infinite Jukebox steers beat-graph hops using timed lyrics, how that differs from
 **Phrase align** / **Bar phase penalty**, and the research this design draws on.
 
 ## Phrase align vs bar phase (not lyrics)

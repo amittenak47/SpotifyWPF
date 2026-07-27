@@ -672,7 +672,7 @@ namespace SpotifyWPF.Service.Prediction
 
         /// <summary>
         /// Layered Softmax lyric steering (phrase cuts / same section / block-clean).
-        /// Does not remove edges — see docs/lyric-flow.md (AutoMashUpper, Foote, LyricAlly).
+        /// Does not remove edges — see docs/infinite-jukebox-lyric-flow.md (AutoMashUpper, Foote, LyricAlly).
         /// Independent of PhraseAlignBeats hard filter and PhasePenaltyMode graph build.
         /// </summary>
         private double LyricFlowBias(int fromBeatIndex, int toBeatIndex)
